@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* XTERM GLOBALE FIXES - Hier stürzt Vite garantiert nicht ab! */
+.terminal-wrapper {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.terminal-wrapper .xterm {
+    width: 100%;
+    height: 100%;
+}
+
+.terminal-wrapper .xterm-viewport {
+    overflow-y: auto !important;
+    width: 100% !important;
+}
+
+.terminal-wrapper .xterm-screen {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* DIE ULTIMATIVE WAFFE GEGEN DIE KLEINE BOX */
+textarea.xterm-helper-textarea {
+    position: absolute !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    resize: none !important;
+    outline: none !important;
+    z-index: -9999 !important;
+}

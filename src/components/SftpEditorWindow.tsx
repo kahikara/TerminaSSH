@@ -1,0 +1,954 @@
+import React, { useEffect, useMemo, useRef, useState } from "react"
+import { invoke } from "@tauri-apps/api/core"
+import { RotateCcw, Save, X, Search, Replace, List } from "lucide-react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { t } from "../lib/i18n"
+
+function qp(name: string) {
+  return new URLSearchParams(window.location.search).get(name) || ""
+}
+
+type EditorStatus = "idle" | "saved" | "modified"
+type PendingAction = null | "reload" | "close"
+
+type CursorInfo = {
+  line: number
+  column: number
+  lines: number
+  chars: number
+}
+
+function getCursorInfo(text: string, cursor: number): CursorInfo {
+  const safeCursor = Math.max(0, Math.min(cursor, text.length))
+  const before = text.slice(0, safeCursor)
+  const line = before.split("\n").length
+  const lastBreak = before.lastIndexOf("\n")
+  const column = safeCursor - lastBreak
+
+  return {
+    line,
+    column,
+    lines: text ? text.split("\n").length : 1,
+    chars: text.length
+  }
+}
+
+function countOccurrences(text: string, query: string) {
+  if (!query) return 0
+  const haystack = text.toLowerCase()
+  const needle = query.toLowerCase()
+  let idx = 0
+  let count = 0
+
+  while (true) {
+    idx = haystack.indexOf(needle, idx)
+    if (idx === -1) break
+    count++
+    idx += needle.length
+  }
+
+  return count
+}
+
+function getLineColAtIndex(text: string, index: number) {
+  const safeIndex = Math.max(0, Math.min(index, text.length))
+  const before = text.slice(0, safeIndex)
+  const line = before.split("\n").length
+  const lastBreak = before.lastIndexOf("\n")
+  const col = safeIndex - lastBreak
+  return { line, col }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+export default function SftpEditorWindow() {
+  const serverId = useMemo(() => Number(qp("serverId")), [])
+  const remotePath = useMemo(() => qp("path"), [])
+  const fileName = useMemo(() => qp("file"), [])
+  const windowLabel = useMemo(() => getCurrentWindow().label, [])
+
+  const initialSettings = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("termina_settings")
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  }, [])
+
+  const lang = initialSettings?.lang || "de"
+
+  const [content, setContent] = useState("")
+  const [original, setOriginal] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<EditorStatus>("idle")
+  const [errorText, setErrorText] = useState("")
+  const [largeFileNotice, setLargeFileNotice] = useState("")
+  const [showLineNumbers, setShowLineNumbers] = useState(true)
+  const [cursorInfo, setCursorInfo] = useState<CursorInfo>({
+    line: 1,
+    column: 1,
+    lines: 1,
+    chars: 0
+  })
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [searchText, setSearchText] = useState("")
+  const [replaceText, setReplaceText] = useState("")
+  const [searchInfo, setSearchInfo] = useState("")
+
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmText, setConfirmText] = useState("")
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+
+  const dirtyRef = useRef(false)
+  const closingRef = useRef(false)
+  const confirmOpenRef = useRef(false)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const gutterRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef("")
+  const originalRef = useRef("")
+  const channelRef = useRef<BroadcastChannel | null>(null)
+
+  async function applyTheme() {
+    try {
+      const saved = localStorage.getItem("termina_settings")
+      if (!saved) return
+      const settings = JSON.parse(saved)
+      if (settings?.theme) {
+        document.documentElement.setAttribute("data-theme", settings.theme)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  function updateCursor() {
+    const ta = textareaRef.current
+    if (!ta) {
+      setCursorInfo(getCursorInfo(contentRef.current, 0))
+      return
+    }
+    setCursorInfo(getCursorInfo(contentRef.current, ta.selectionStart || 0))
+  }
+
+  function syncGutterScroll() {
+    const ta = textareaRef.current
+    const gutter = gutterRef.current
+    if (!ta || !gutter) return
+    gutter.scrollTop = ta.scrollTop
+  }
+
+  function setEditorContent(next: string) {
+    contentRef.current = next
+    setContent(next)
+    dirtyRef.current = next !== originalRef.current
+  }
+
+  function setEditorOriginal(next: string) {
+    originalRef.current = next
+    setOriginal(next)
+    dirtyRef.current = contentRef.current !== next
+  }
+
+  function showError(message: string, error: unknown) {
+    console.error(message, error)
+    const detail = error instanceof Error ? error.message : String(error)
+    setErrorText(`${message}${detail ? ` ${detail}` : ""}`)
+  }
+
+  function publishEditorState() {
+    channelRef.current?.postMessage({
+      type: "editor-state",
+      label: windowLabel,
+      fileName,
+      remotePath,
+      dirty: dirtyRef.current
+    })
+  }
+
+  function publishEditorClosed() {
+    channelRef.current?.postMessage({
+      type: "editor-closed",
+      label: windowLabel
+    })
+  }
+
+  function evaluateLargeFileNotice(text: string) {
+    const chars = text.length
+    const lines = text ? text.split("\n").length : 1
+
+    if (chars >= 500000 || lines >= 12000) {
+      setLargeFileNotice(t("largeFileDetected", lang))
+      return
+    }
+
+    if (chars >= 200000 || lines >= 5000) {
+      setLargeFileNotice(t("largeFileHint", lang))
+      return
+    }
+
+    setLargeFileNotice("")
+  }
+
+  async function loadFile(force = false) {
+    try {
+      if (!force && dirtyRef.current) {
+        openConfirm("reload", t("unsavedChangesLostReload", lang))
+        return
+      }
+
+      setErrorText("")
+      setLoading(true)
+
+      const text = await invoke("sftp_read_file", {
+        id: serverId,
+        path: remotePath
+      }) as string
+
+      setEditorContent(text)
+      setEditorOriginal(text)
+      setStatus("idle")
+      setSearchInfo("")
+      setCursorInfo(getCursorInfo(text, 0))
+      evaluateLargeFileNotice(text)
+    } catch (e) {
+      showError(t("failedToLoadFile", lang), e)
+    } finally {
+      setLoading(false)
+      setTimeout(() => {
+        updateCursor()
+        syncGutterScroll()
+      }, 0)
+    }
+  }
+
+  async function saveFile() {
+    try {
+      const nextContent = contentRef.current
+
+      setErrorText("")
+      setSaving(true)
+
+      await invoke("sftp_write_file", {
+        id: serverId,
+        path: remotePath,
+        content: nextContent
+      })
+
+      setEditorOriginal(nextContent)
+      setStatus("saved")
+      publishEditorState()
+    } catch (e) {
+      showError(t("failedToSaveFile", lang), e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function openSearchOnly() {
+    if (searchOpen && !replaceOpen) {
+      closeSearchAndReplace()
+      return
+    }
+
+    setSearchOpen(true)
+    setReplaceOpen(false)
+    setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+    }, 0)
+  }
+
+  function toggleReplace() {
+    if (replaceOpen) {
+      setReplaceOpen(false)
+      setSearchOpen(true)
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+      }, 0)
+      return
+    }
+
+    setSearchOpen(true)
+    setReplaceOpen(true)
+    setTimeout(() => {
+      replaceInputRef.current?.focus()
+      replaceInputRef.current?.select()
+    }, 0)
+  }
+
+  function closeSearchAndReplace() {
+    setSearchOpen(false)
+    setReplaceOpen(false)
+    setSearchInfo("")
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }
+
+  function findNext(backwards = false) {
+    const ta = textareaRef.current
+    if (!ta) return
+    const query = searchText
+    if (!query) {
+      setSearchInfo("")
+      return
+    }
+
+    const text = ta.value
+    const haystack = text.toLowerCase()
+    const needle = query.toLowerCase()
+
+    let start = backwards ? ta.selectionStart - 1 : ta.selectionEnd
+    if (start < 0) start = 0
+
+    let idx = -1
+
+    if (backwards) {
+      idx = haystack.lastIndexOf(needle, start)
+      if (idx === -1) idx = haystack.lastIndexOf(needle)
+    } else {
+      idx = haystack.indexOf(needle, start)
+      if (idx === -1) idx = haystack.indexOf(needle)
+    }
+
+    if (idx === -1) {
+      setSearchInfo(t("noMatch", lang))
+      return
+    }
+
+    ta.focus()
+    ta.setSelectionRange(idx, idx + query.length)
+    const pos = getLineColAtIndex(text, idx)
+    setSearchInfo(
+      t("matchAtLineCol", lang)
+        .replace("{line}", String(pos.line))
+        .replace("{col}", String(pos.col))
+    )
+    setTimeout(updateCursor, 0)
+  }
+
+  function replaceCurrent() {
+    const ta = textareaRef.current
+    const query = searchText
+    if (!ta || !query) return
+
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const selected = contentRef.current.slice(start, end)
+
+    if (selected.toLowerCase() !== query.toLowerCase()) {
+      findNext(false)
+      return
+    }
+
+    const next =
+      contentRef.current.slice(0, start) +
+      replaceText +
+      contentRef.current.slice(end)
+
+    setEditorContent(next)
+    setSearchInfo(t("replacedOneMatch", lang))
+
+    setTimeout(() => {
+      const newPos = start + replaceText.length
+      ta.focus()
+      ta.setSelectionRange(start, newPos)
+      updateCursor()
+      syncGutterScroll()
+      evaluateLargeFileNotice(next)
+    }, 0)
+  }
+
+  function replaceAll() {
+    const query = searchText
+    if (!query) return
+
+    const source = contentRef.current
+    const count = countOccurrences(source, query)
+    if (count === 0) {
+      setSearchInfo(t("noMatch", lang))
+      return
+    }
+
+    const next = source.replace(new RegExp(escapeRegExp(query), "gi"), replaceText)
+
+    setEditorContent(next)
+    setSearchInfo(t("replacedManyMatches", lang).replace("{count}", String(count)))
+    evaluateLargeFileNotice(next)
+
+    setTimeout(() => {
+      textareaRef.current?.focus()
+      updateCursor()
+      syncGutterScroll()
+    }, 0)
+  }
+
+  function openConfirm(action: PendingAction, text: string) {
+    if (confirmOpenRef.current) return
+    setPendingAction(action)
+    setConfirmText(text)
+    setConfirmOpen(true)
+    confirmOpenRef.current = true
+  }
+
+  function closeConfirm() {
+    setConfirmOpen(false)
+    setConfirmText("")
+    setPendingAction(null)
+    confirmOpenRef.current = false
+  }
+
+  async function reallyClose() {
+    if (closingRef.current) return
+    closingRef.current = true
+    try {
+      publishEditorClosed()
+      const win = getCurrentWindow()
+      await win.close()
+    } catch (e) {
+      showError(t("failedToCloseEditor", lang), e)
+      closingRef.current = false
+    }
+  }
+
+  function requestClose() {
+    if (closingRef.current) return
+    if (dirtyRef.current) {
+      openConfirm("close", t("discardUnsavedChanges", lang))
+      return
+    }
+    void reallyClose()
+  }
+
+  async function confirmYes() {
+    const action = pendingAction
+    closeConfirm()
+
+    if (action === "reload") {
+      await loadFile(true)
+      return
+    }
+
+    if (action === "close") {
+      await reallyClose()
+    }
+  }
+
+  useEffect(() => {
+    applyTheme()
+    void loadFile(true)
+  }, [])
+
+  useEffect(() => {
+    const channel = new BroadcastChannel("termina-editor-sync")
+    channelRef.current = channel
+
+    channel.onmessage = (event) => {
+      const msg = event.data || {}
+      if (msg.type !== "main-request-close-editors") return
+
+      if (msg.force) {
+        void reallyClose()
+        return
+      }
+
+      requestClose()
+    }
+
+    publishEditorState()
+
+    return () => {
+      publishEditorClosed()
+      channel.close()
+      channelRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    contentRef.current = content
+    originalRef.current = original
+    dirtyRef.current = content !== original
+
+    if (!loading) {
+      if (content !== original) {
+        setStatus("modified")
+      } else if (status === "modified") {
+        setStatus("idle")
+      }
+    }
+
+    publishEditorState()
+  }, [content, original, loading, status])
+
+  useEffect(() => {
+    const win = getCurrentWindow()
+    let unlisten: (() => void) | undefined
+
+    win.onCloseRequested(async (event) => {
+      if (closingRef.current) return
+
+      event.preventDefault()
+
+      if (confirmOpenRef.current) return
+
+      if (dirtyRef.current) {
+        openConfirm("close", t("discardUnsavedChanges", lang))
+        return
+      }
+
+      await reallyClose()
+    }).then((fn) => {
+      unlisten = fn
+    }).catch(console.error)
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+
+      if (mod && key === "f") {
+        e.preventDefault()
+        e.stopPropagation()
+        openSearchOnly()
+        return
+      }
+
+      if (mod && key === "h") {
+        e.preventDefault()
+        e.stopPropagation()
+        toggleReplace()
+        return
+      }
+
+      if (mod && key === "l") {
+        e.preventDefault()
+        e.stopPropagation()
+        setShowLineNumbers((prev) => !prev)
+        return
+      }
+
+      if (mod && key === "s") {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!loading && !saving) {
+          void saveFile()
+        }
+        return
+      }
+
+      if (mod && key === "w") {
+        e.preventDefault()
+        e.stopPropagation()
+        requestClose()
+        return
+      }
+
+      if (e.key === "Escape") {
+        if (confirmOpen) {
+          e.preventDefault()
+          e.stopPropagation()
+          closeConfirm()
+          return
+        }
+        if (searchOpen || replaceOpen) {
+          e.preventDefault()
+          e.stopPropagation()
+          closeSearchAndReplace()
+          return
+        }
+      }
+
+      if (searchOpen && e.key === "Enter") {
+        e.preventDefault()
+        e.stopPropagation()
+        findNext(e.shiftKey)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [searchOpen, replaceOpen, searchText, confirmOpen, loading, saving])
+
+  const lineNumbers = useMemo(() => {
+    return Array.from({ length: Math.max(cursorInfo.lines, 1) }, (_, i) => i + 1)
+  }, [cursorInfo.lines])
+
+  const gutterWidth = useMemo(() => {
+    const digits = String(Math.max(cursorInfo.lines, 1)).length
+    return Math.max(36, 20 + digits * 8)
+  }, [cursorInfo.lines])
+
+  return (
+    <div
+      style={{
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--bg-app, #020617)",
+        color: "var(--text-main, #e5e7eb)",
+        position: "relative"
+      }}
+    >
+      <div
+        style={{
+          minHeight: 52,
+          padding: "0 14px",
+          borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))"
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.25,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            {fileName}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted, #94a3b8)" }}>
+            {loading
+              ? t("loading", lang)
+              : status === "saved"
+                ? t("savedState", lang)
+                : status === "modified"
+                  ? t("unsavedChanges", lang)
+                  : t("ready", lang)}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button style={btn} onClick={openSearchOnly}>
+            <Search size={14} />
+            <span>{t("search", lang)}</span>
+          </button>
+          <button style={btn} onClick={toggleReplace}>
+            <Replace size={14} />
+            <span>{replaceOpen ? t("hideReplace", lang) : t("replace", lang)}</span>
+          </button>
+          <button style={btn} onClick={() => setShowLineNumbers((prev) => !prev)}>
+            <List size={14} />
+            <span>{showLineNumbers ? t("hideLines", lang) : t("showLines", lang)}</span>
+          </button>
+          <button style={btn} onClick={() => void loadFile(false)} disabled={loading || saving}>
+            <RotateCcw size={14} />
+            <span>{t("refresh", lang)}</span>
+          </button>
+          <button style={btn} onClick={() => void saveFile()} disabled={loading || saving}>
+            <Save size={14} />
+            <span>{saving ? t("save", lang) + "..." : t("save", lang)}</span>
+          </button>
+          <button style={btn} onClick={requestClose}>
+            <X size={14} />
+            <span>{t("close", lang)}</span>
+          </button>
+        </div>
+      </div>
+
+      {errorText && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(239,68,68,0.25)",
+            background: "rgba(127,29,29,0.22)",
+            color: "#fecaca",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 12,
+            lineHeight: 1.4
+          }}
+        >
+          <span style={{ flex: 1 }}>{errorText}</span>
+          <button style={btn} onClick={() => setErrorText("")}>{t("dismiss", lang)}</button>
+        </div>
+      )}
+
+      {largeFileNotice && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(245,158,11,0.25)",
+            background: "rgba(120,53,15,0.18)",
+            color: "#fde68a",
+            fontSize: 12,
+            lineHeight: 1.4
+          }}
+        >
+          {largeFileNotice}
+        </div>
+      )}
+
+      {searchOpen && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+            background: "color-mix(in srgb, var(--bg-app) 92%, var(--bg-sidebar))",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: replaceOpen
+                ? "minmax(160px,1fr) minmax(160px,1fr) auto auto auto auto auto"
+                : "minmax(220px,1fr) auto auto auto",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <input
+              ref={searchInputRef}
+              value={searchText}
+              onChange={(e) => {
+                setSearchText(e.target.value)
+                setSearchInfo("")
+              }}
+              placeholder={t("search", lang)}
+              style={inputStyle}
+            />
+
+            {replaceOpen && (
+              <input
+                ref={replaceInputRef}
+                value={replaceText}
+                onChange={(e) => setReplaceText(e.target.value)}
+                placeholder={t("replace", lang)}
+                style={inputStyle}
+              />
+            )}
+
+            <button style={compactBtn} onClick={() => findNext(true)}>{t("prev", lang)}</button>
+            <button style={compactBtn} onClick={() => findNext(false)}>{t("next", lang)}</button>
+
+            {replaceOpen && (
+              <>
+                <button style={compactBtn} onClick={replaceCurrent}>{t("replaceOne", lang)}</button>
+                <button style={compactBtn} onClick={replaceAll}>{t("replaceAll", lang)}</button>
+              </>
+            )}
+
+            <button style={compactBtn} onClick={closeSearchAndReplace}>{t("close", lang)}</button>
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--text-muted, #94a3b8)",
+              minHeight: 16,
+              lineHeight: 1.35
+            }}
+          >
+            {searchInfo}
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        {loading ? (
+          <div style={{ padding: 16, fontSize: 12, color: "var(--text-muted, #94a3b8)" }}>
+            {t("loading", lang)}
+          </div>
+        ) : (
+          <>
+            {showLineNumbers && (
+              <div
+                ref={gutterRef}
+                style={{
+                  width: gutterWidth,
+                  overflow: "hidden",
+                  borderRight: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+                  background: "color-mix(in srgb, var(--bg-sidebar, #0f172a) 90%, var(--bg-app))",
+                  color: "var(--text-muted, #94a3b8)",
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                  padding: "14px 6px 14px 0",
+                  textAlign: "right",
+                  userSelect: "none",
+                  whiteSpace: "pre"
+                }}
+              >
+                {lineNumbers.map((line) => (
+                  <div
+                    key={line}
+                    style={{
+                      color: line === cursorInfo.line ? "var(--text-main, #e5e7eb)" : "var(--text-muted, #94a3b8)"
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={(e) => {
+                setEditorContent(e.target.value)
+                setTimeout(() => {
+                  updateCursor()
+                  syncGutterScroll()
+                }, 0)
+              }}
+              onClick={() => setTimeout(updateCursor, 0)}
+              onKeyUp={() => setTimeout(updateCursor, 0)}
+              onSelect={() => setTimeout(updateCursor, 0)}
+              onScroll={syncGutterScroll}
+              spellCheck={false}
+              style={{
+                width: "100%",
+                height: "100%",
+                resize: "none",
+                boxSizing: "border-box",
+                border: "none",
+                outline: "none",
+                background: "color-mix(in srgb, var(--bg-app) 96%, black)",
+                color: "var(--text-main, #e5e7eb)",
+                padding: 16,
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 13,
+                lineHeight: 1.45
+              }}
+            />
+          </>
+        )}
+      </div>
+
+      <div
+        style={{
+          padding: "8px 12px",
+          borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          fontSize: 11,
+          color: "var(--text-muted, #94a3b8)",
+          flexWrap: "wrap"
+        }}
+      >
+        <div style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+          {remotePath}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, whiteSpace: "nowrap", flexWrap: "wrap" }}>
+          <span>{status === "modified" ? t("dirty", lang) : status === "saved" ? t("savedState", lang) : t("ready", lang)}</span>
+          <span>{t("utf8", lang)}</span>
+          <span>Ln {cursorInfo.line}, Col {cursorInfo.column}</span>
+          <span>{cursorInfo.lines} {t("lines", lang)}</span>
+          <span>{cursorInfo.chars} {t("chars", lang)}</span>
+          <span>{showLineNumbers ? t("linesOn", lang) : t("linesOff", lang)}</span>
+        </div>
+      </div>
+
+      {confirmOpen && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 18
+          }}
+        >
+          <div
+            style={{
+              width: 360,
+              maxWidth: "100%",
+              borderRadius: 16,
+              border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+              background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+              color: "var(--text-main, #e5e7eb)",
+              boxShadow: "0 18px 60px rgba(0,0,0,0.38)",
+              padding: 16
+            }}
+          >
+            <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, marginBottom: 8 }}>
+              {t("confirm", lang)}
+            </div>
+
+            <div style={{ fontSize: 12, lineHeight: 1.4, color: "var(--text-muted, #94a3b8)", marginBottom: 14 }}>
+              {confirmText}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button style={btn} onClick={closeConfirm}>
+                {t("cancel", lang)}
+              </button>
+              <button style={{ ...btn, background: "var(--accent)", color: "black", border: "1px solid transparent" }} onClick={() => void confirmYes()}>
+                {t("ok", lang)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const btn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  minHeight: 34,
+  padding: "0 11px",
+  borderRadius: 10,
+  border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 78%, transparent)",
+  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
+  color: "var(--text-muted, #94a3b8)",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+  boxShadow: "0 1px 0 rgba(255,255,255,0.02) inset",
+  transition: "background 140ms ease, border-color 140ms ease, color 140ms ease, transform 120ms ease"
+}
+
+const compactBtn: React.CSSProperties = {
+  ...btn,
+  minHeight: 34,
+  padding: "0 10px"
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  height: 36,
+  padding: "0 12px",
+  borderRadius: 10,
+  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
+  color: "var(--text-main, #e5e7eb)",
+  outline: "none",
+  fontSize: 13
+}
