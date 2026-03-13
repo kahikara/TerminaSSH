@@ -32,9 +32,6 @@ jobs:
           cache: npm
           cache-dependency-path: homepage/package-lock.json
 
-      - name: Show npm version
-        run: npm --version
-
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 

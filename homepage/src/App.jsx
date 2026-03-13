@@ -211,7 +211,7 @@ function ScreenshotSlide({ slide }) {
 
   return (
     <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.08),transparent_30%),radial-gradient(circle_at_bottom,rgba(132,204,22,0.06),transparent_28%)] px-1 py-1 sm:px-2 sm:py-2 lg:px-3 lg:py-3">
-      <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] border border-white/10 bg-black/10 p-0.5 sm:p-1 lg:p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] border border-white/8 bg-black/10 p-0.5 sm:p-1 lg:p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
         <img
           src={slide.image}
           alt={slide.title}
@@ -434,7 +434,7 @@ export default function TerminaSSHHomepage() {
               </div>
 
               <Card
-                className="overflow-hidden rounded-[24px] border border-white/10 bg-zinc-900/70 shadow-2xl shadow-black/40"
+                className="overflow-hidden rounded-[24px] border-white/10 bg-zinc-900/70 shadow-2xl shadow-black/40"
                 onMouseEnter={() => setIsPaused(true)}
                 onMouseLeave={() => setIsPaused(false)}
               >
@@ -514,7 +514,7 @@ export default function TerminaSSHHomepage() {
             </div>
 
             <Card
-              className="overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/20"
+              className="overflow-hidden rounded-[24px] border-white/10 bg-white/[0.04] shadow-2xl shadow-black/20"
               onMouseEnter={() => setIsFeaturePaused(true)}
               onMouseLeave={() => setIsFeaturePaused(false)}
             >
@@ -543,11 +543,11 @@ export default function TerminaSSHHomepage() {
                           return (
                             <Card
                               key={feature.title}
-                              className="min-h-[184px] rounded-[20px] border border-white/10 bg-zinc-950/70 shadow-lg shadow-black/20"
+                              className="min-h-[184px] rounded-[20px] border-white/10 bg-zinc-950/70 shadow-lg shadow-black/20"
                             >
                               <CardContent className="p-5">
                                 <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-                                  <Icon className="h-[18px] w-[18px] text-white" />
+                                  <Icon className="h-4.5 w-4.5 text-white" />
                                 </div>
                                 <h3 className="mb-1.5 text-base font-semibold text-white">{feature.title}</h3>
                                 <p className="text-[13px] leading-5 text-zinc-400">{feature.text}</p>
@@ -604,7 +604,7 @@ export default function TerminaSSHHomepage() {
           </section>
 
           <section id="download" className="py-6">
-            <Card className="overflow-hidden rounded-[24px] border border-white/10 bg-gradient-to-br from-white/10 to-white/[0.04]">
+            <Card className="overflow-hidden rounded-[24px] border-white/10 bg-gradient-to-br from-white/10 to-white/[0.04]">
               <CardContent className="grid gap-5 p-5 lg:grid-cols-[1fr_auto] lg:items-center lg:p-6">
                 <div>
                   <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">Download</p>
@@ -671,7 +671,7 @@ export default function TerminaSSHHomepage() {
                   a: "Developers, homelab users, sysadmins, and anyone who juggles multiple SSH connections and wants a cleaner workflow.",
                 },
               ].map((item) => (
-                <Card key={item.q} className="rounded-[20px] border border-white/10 bg-white/[0.04]">
+                <Card key={item.q} className="rounded-[20px] border-white/10 bg-white/[0.04]">
                   <CardContent className="p-5">
                     <h3 className="mb-1.5 text-base font-semibold text-white">{item.q}</h3>
                     <p className="text-[13px] leading-5 text-zinc-400">{item.a}</p>
@@ -683,7 +683,7 @@ export default function TerminaSSHHomepage() {
 
           <section id="support" className="py-6">
             <div className="mx-auto max-w-2xl">
-              <Card className="rounded-[20px] border border-white/10 bg-white/[0.04]">
+              <Card className="rounded-[20px] border-white/10 bg-white/[0.04]">
                 <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">Support</p>
@@ -713,7 +713,7 @@ export default function TerminaSSHHomepage() {
 
         <footer className="flex flex-col gap-3 border-t border-white/10 py-6 text-xs text-zinc-500 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
-            <BrandIcon className="h-[18px] w-[18px] rounded-md" />
+            <BrandIcon className="h-4.5 w-4.5 rounded-md" />
             <span>Termina SSH</span>
           </div>
           <div className="flex items-center gap-4">
