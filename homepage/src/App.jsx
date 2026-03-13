@@ -24,8 +24,8 @@ const SCREENSHOT_INTERVAL_MS = 3500;
 const FEATURE_INTERVAL_MS = 4200;
 const SWIPE_CONFIDENCE_THRESHOLD = 12000;
 const SWIPE_OFFSET_THRESHOLD = 120;
-const SCREENSHOT_STAGE_HEIGHT = 540;
 const FEATURE_STAGE_MIN_HEIGHT = 468;
+const SCREENSHOT_STAGE_CLASS = "showcase-stage";
 
 function getBaseUrl() {
   try {
@@ -379,23 +379,11 @@ export default function App() {
               </div>
 
               <section
-                className="panel"
+                className="panel showcase-panel"
                 onMouseEnter={() => setIsPaused(true)}
                 onMouseLeave={() => setIsPaused(false)}
               >
-                <div className="panel-topbar">
-                  <div className="traffic-lights">
-                    <span className="light red" />
-                    <span className="light yellow" />
-                    <span className="light green" />
-                  </div>
-                  <div className="panel-title">
-                    <InlineBrandGlyph className="brand-logo small" />
-                    <span>{screenshotSlides[currentSlide].title}</span>
-                  </div>
-                </div>
-
-                <div className="carousel-stage" style={{ height: SCREENSHOT_STAGE_HEIGHT }}>
+                <div className={SCREENSHOT_STAGE_CLASS}>
                   <AnimatePresence initial={false} custom={slideDirection} mode="wait">
                     <motion.div
                       key={screenshotSlides[currentSlide].key}
