@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="termina-ring-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#84cc16"></stop>
+      <stop offset="55%" stop-color="#22d3ee"></stop>
+      <stop offset="100%" stop-color="#67e8f9"></stop>
+    </linearGradient>
+  </defs>
+
+  <circle cx="64" cy="64" r="41" fill="rgba(10,10,10,0.92)" stroke="url(#termina-ring-gradient)" stroke-width="4"></circle>
+
+  <circle cx="64" cy="64" r="49" fill="none" stroke="url(#termina-ring-gradient)" stroke-width="3.5" stroke-dasharray="44 10 18 12 30 14" stroke-linecap="round"></circle>
+
+  <circle cx="64" cy="64" r="56" fill="none" stroke="url(#termina-ring-gradient)" stroke-width="2.5" stroke-dasharray="18 12 34 16 14 10" stroke-linecap="round" opacity="0.95"></circle>
+
+  <path d="M49 48 L64 63 L49 78" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path>
+
+  <path d="M70 78 H88" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round"></path>
+</svg>

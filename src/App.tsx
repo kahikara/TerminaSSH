@@ -576,11 +576,11 @@ export default function App() {
 
       <div style={{ width: sidebarWidth }} className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl">
         <div className="h-[80px] flex items-center pl-1 pr-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
-          <img src="/app-icon.png" alt="logo" className="w-[70px] h-[70px] object-contain mr-0.5 shrink-0" onError={(e) => e.currentTarget.style.display = 'none'} />
-          <div className="flex-1 flex items-center self-stretch">
-            <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none">Termina SSH</span>
+          <img src="/app-icon.svg" alt="logo" className="w-[58px] h-[58px] object-contain mr-1 shrink-0" onError={(e) => e.currentTarget.style.display = 'none'} />
+          <div className="flex-1 flex items-center justify-center self-stretch min-w-0">
+            <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none text-center">Termina SSH</span>
           </div>
-          <button onClick={() => setActiveTabId(null)} className="ui-icon-btn"><Home size={18}/></button>
+          <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0"><Home size={18}/></button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-3 min-h-0">
