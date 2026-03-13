@@ -1,470 +1,1132 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Termina SSH</title>
-  <meta name="description" content="Modern desktop SSH manager with tabs, split view, SFTP, editor, notes, snippets, and tunnels." />
-  <style>
-    :root {
-      --bg: #09090b;
-      --card: rgba(255,255,255,0.04);
-      --card-strong: rgba(255,255,255,0.06);
-      --border: rgba(255,255,255,0.10);
-      --text: #f4f4f5;
-      --muted: #a1a1aa;
-      --muted-2: #71717a;
-      --cyan: #22d3ee;
-      --lime: #84cc16;
-      --white: #ffffff;
-      --shadow: 0 24px 80px rgba(0,0,0,0.38);
-      --radius: 24px;
-      --radius-sm: 16px;
-      --container: 1120px;
-    }
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top, rgba(34,211,238,0.18), transparent 35%),
-        radial-gradient(circle at 80% 20%, rgba(132,204,22,0.14), transparent 25%),
-        var(--bg);
-      color: var(--text);
-    }
-    a { color: inherit; text-decoration: none; }
-    .wrap { max-width: var(--container); margin: 0 auto; padding: 20px; }
-    .nav {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px; border: 1px solid var(--border); border-radius: 16px;
-      background: rgba(255,255,255,0.04); backdrop-filter: blur(12px);
-    }
-    .brand { display: flex; align-items: center; gap: 10px; }
-    .brand-copy strong { display: block; font-size: 13px; font-weight: 600; color: #d4d4d8; }
-    .brand-copy span { display: block; font-size: 11px; color: var(--muted-2); margin-top: 2px; }
-    .nav-links { display: flex; align-items: center; gap: 20px; font-size: 13px; color: #d4d4d8; }
-    .nav-links .support-link {
-      padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.05);
-    }
-    .hero { text-align: center; padding: 40px 0 32px; }
-    .hero h1 { margin: 0; font-size: clamp(2.2rem, 6vw, 4rem); line-height: 1.02; letter-spacing: -0.03em; }
-    .hero p {
-      max-width: 760px; margin: 16px auto 0; color: #d4d4d8; font-size: 15px; line-height: 1.65;
-    }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 22px; }
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      height: 42px; padding: 0 16px; border-radius: 14px; border: 1px solid transparent;
-      font-size: 14px; font-weight: 600; transition: 160ms ease;
-    }
-    .btn.primary { background: var(--white); color: #09090b; }
-    .btn.secondary { border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: var(--white); }
-    .btn:hover { transform: translateY(-1px); }
-    .section-head { text-align: center; margin-bottom: 12px; }
-    .section-head h2 { margin: 0; font-size: clamp(1.45rem, 3vw, 2.2rem); }
-    .card {
-      border: 1px solid var(--border); border-radius: var(--radius); background: rgba(24,24,27,0.74); box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-    .showcase-wrap { max-width: 1080px; margin: 0 auto 40px; }
-    .showcase-stage {
-      position: relative; width: 100%; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 28px;
-    }
-    .slide-shell {
-      width: 100%; height: 100%; padding: 12px;
-      background: radial-gradient(circle at top, rgba(34,211,238,0.08), transparent 30%), radial-gradient(circle at bottom, rgba(132,204,22,0.06), transparent 28%);
-    }
-    .slide-frame {
-      width: 100%; height: 100%; border-radius: 24px; border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(0,0,0,0.10); overflow: hidden; padding: 6px;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-    }
-    .slide-frame img {
-      width: 100%; height: 100%; object-fit: cover; object-position: center; border-radius: 18px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
-      transform: scale(var(--scale, 1.08));
-    }
-    .arrow {
-      position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
-      width: 38px; height: 38px; border-radius: 999px; border: 1px solid var(--border);
-      background: rgba(0,0,0,0.40); color: var(--white); display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-    }
-    .arrow.left { left: 12px; }
-    .arrow.right { right: 12px; }
-    .showcase-meta {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      border-top: 1px solid var(--border); background: rgba(9,9,11,0.72); padding: 12px 16px;
-    }
-    .showcase-meta strong { display: block; font-size: 13px; }
-    .showcase-meta span { color: var(--muted-2); font-size: 11px; }
-    .dots { display: flex; gap: 8px; align-items: center; }
-    .dot { width: 10px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.25); border: 0; cursor: pointer; }
-    .dot.active { width: 32px; background: var(--white); }
-    .section { padding: 26px 0; }
-    .section-copy { max-width: 520px; margin-bottom: 18px; }
-    .eyebrow { color: var(--muted-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 8px; }
-    .section-copy h3 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.1rem); }
-    .features-card { padding: 14px; }
-    .features-stage { position: relative; min-height: 404px; overflow: hidden; }
-    .features-page {
-      position: absolute; inset: 0; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px;
-    }
-    .feature-item {
-      min-height: 184px; border-radius: 20px; border: 1px solid var(--border); background: rgba(9,9,11,0.72); padding: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.24);
-    }
-    .feature-icon {
-      width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-      border-radius: 12px; background: rgba(255,255,255,0.10); margin-bottom: 12px;
-    }
-    .feature-item h4 { margin: 0 0 8px; font-size: 16px; }
-    .feature-item p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-    .features-footer { border-top: 1px solid var(--border); background: rgba(9,9,11,0.60); padding: 12px 16px; display: flex; justify-content: center; }
-    .download-grid {
-      display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; padding: 20px 24px;
-      border-radius: 24px;
-    }
-    .download-grid p, .support-card p, .faq-item p { color: #d4d4d8; font-size: 13px; line-height: 1.55; }
-    .faq-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-    .faq-item, .support-card { border-radius: 20px; border: 1px solid var(--border); background: var(--card); }
-    .faq-item { padding: 20px; }
-    .faq-item h4 { margin: 0 0 8px; font-size: 16px; }
-    .support-card { max-width: 720px; margin: 0 auto; padding: 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-    .support-card h3 { margin: 0; font-size: clamp(1.2rem, 2vw, 1.6rem); }
-    footer {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
-      border-top: 1px solid var(--border); padding: 24px 0 6px; color: var(--muted-2); font-size: 12px;
-    }
-    .footer-brand, .footer-copy { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    @media (max-width: 900px) {
-      .nav-links { display: none; }
-      .download-grid, .support-card { grid-template-columns: 1fr; display: grid; justify-items: start; }
-      .faq-grid, .features-page { grid-template-columns: 1fr; }
-      .features-stage { min-height: 780px; }
-      .showcase-meta { flex-direction: column; align-items: flex-start; }
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header class="nav">
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
-          <svg viewBox="0 0 128 128" style="width:100%;height:100%;filter:drop-shadow(0 0 18px rgba(34,211,238,0.18));">
-            <defs>
-              <linearGradient id="termina-ring-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#84cc16"></stop>
-                <stop offset="55%" stop-color="#22d3ee"></stop>
-                <stop offset="100%" stop-color="#67e8f9"></stop>
-              </linearGradient>
-            </defs>
-            <circle cx="64" cy="64" r="41" fill="rgba(10,10,10,0.92)" stroke="url(#termina-ring-gradient)" stroke-width="4"></circle>
-            <circle cx="64" cy="64" r="49" fill="none" stroke="url(#termina-ring-gradient)" stroke-width="3.5" stroke-dasharray="44 10 18 12 30 14" stroke-linecap="round"></circle>
-            <circle cx="64" cy="64" r="56" fill="none" stroke="url(#termina-ring-gradient)" stroke-width="2.5" stroke-dasharray="18 12 34 16 14 10" stroke-linecap="round" opacity="0.95"></circle>
-            <path d="M49 48 L64 63 L49 78" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="M70 78 H88" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round"></path>
-          </svg>
-        </div>
-        <div class="brand-copy">
-          <strong>Termina SSH</strong>
-          <span>Desktop SSH manager</span>
-        </div>
-      </div>
-      <nav class="nav-links">
-        <a href="#features">Features</a>
-        <a href="#download">Download</a>
-        <a href="#faq">FAQ</a>
-        <a href="#support" class="support-link">Support</a>
-      </nav>
-    </header>
-
-    <main>
-      <section class="hero">
-        <h1>A modern desktop home for your SSH workflow</h1>
-        <p>Termina SSH brings tabs, split view, local terminals, SFTP, a built in editor, notes, snippets, and tunnels into one focused desktop workflow.</p>
-        <div class="hero-actions">
-          <a class="btn primary" href="https://github.com/kahikara/TerminaSSH/releases" target="_blank" rel="noreferrer">Download soon</a>
-          <a class="btn secondary" href="https://github.com/kahikara/TerminaSSH" target="_blank" rel="noreferrer">View on GitHub</a>
-        </div>
-      </section>
-
-      <section class="showcase-wrap">
-        <div class="section-head">
-          <h2>A closer look at the interface</h2>
-        </div>
-        <div class="card">
-          <div class="showcase-stage" id="showcase-stage">
-            <button class="arrow left" id="prev-shot" aria-label="Previous screenshot">‹</button>
-            <button class="arrow right" id="next-shot" aria-label="Next screenshot">›</button>
-          </div>
-          <div class="showcase-meta">
-            <div>
-              <strong id="shot-title">Main window</strong>
-              <span id="shot-subtitle">Connections, quick connect, and recent activity</span>
-            </div>
-            <div class="dots" id="shot-dots"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" class="section">
-        <div class="section-copy">
-          <div class="eyebrow">Features</div>
-          <h3>Focused features that actually matter</h3>
-        </div>
-        <div class="card">
-          <div class="features-card">
-            <div class="features-stage" id="features-stage"></div>
-          </div>
-          <div class="features-footer">
-            <div class="dots" id="feature-dots"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="download" class="section">
-        <div class="card download-grid">
-          <div>
-            <div class="eyebrow">Download</div>
-            <h3 style="margin:0;font-size:clamp(1.5rem,3vw,2.1rem);">Ready to keep your SSH setup in one place?</h3>
-            <p style="max-width:560px;margin:10px 0 0;">Download builds, share backups, and follow development on GitHub.</p>
-          </div>
-          <div class="hero-actions" style="margin-top:0;justify-content:flex-end;">
-            <a class="btn primary" href="https://github.com/kahikara/TerminaSSH/releases" target="_blank" rel="noreferrer">Get builds</a>
-            <a class="btn secondary" href="https://github.com/kahikara/TerminaSSH" target="_blank" rel="noreferrer">Star the project</a>
-          </div>
-        </div>
-      </section>
-
-      <section id="faq" class="section">
-        <div class="section-copy">
-          <div class="eyebrow">FAQ</div>
-          <h3>A few practical answers</h3>
-        </div>
-        <div class="faq-grid">
-          <article class="faq-item">
-            <h4>Is Termina SSH a web app?</h4>
-            <p>No. It is designed as a desktop first experience for people who want a dedicated SSH manager without browser overhead.</p>
-          </article>
-          <article class="faq-item">
-            <h4>Can I use existing key files?</h4>
-            <p>Yes. PEM key support is part of the workflow so existing environments are easier to adopt.</p>
-          </article>
-          <article class="faq-item">
-            <h4>Can backups move across systems?</h4>
-            <p>That is the goal. A clean shared backup format makes Linux and macOS portability realistic and keeps future expansion easier.</p>
-          </article>
-          <article class="faq-item">
-            <h4>Who is it for?</h4>
-            <p>Developers, homelab users, sysadmins, and anyone who juggles multiple SSH connections and wants a cleaner workflow.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="support" class="section">
-        <div class="support-card">
-          <div>
-            <div class="eyebrow">Support</div>
-            <h3>If you like my work, you can support the project on Ko fi.</h3>
-            <p>Every coffee helps support development and future updates for Termina SSH.</p>
-          </div>
-          <a class="btn primary" href="https://ko-fi.com/ming83" target="_blank" rel="noreferrer">Buy me a coffee</a>
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <div class="footer-brand">
-        <div style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;">
-          <svg viewBox="0 0 128 128" style="width:100%;height:100%;">
-            <defs>
-              <linearGradient id="termina-ring-gradient-footer" x1="0%" y1="100%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#84cc16"></stop>
-                <stop offset="55%" stop-color="#22d3ee"></stop>
-                <stop offset="100%" stop-color="#67e8f9"></stop>
-              </linearGradient>
-            </defs>
-            <circle cx="64" cy="64" r="41" fill="rgba(10,10,10,0.92)" stroke="url(#termina-ring-gradient-footer)" stroke-width="4"></circle>
-            <path d="M49 48 L64 63 L49 78" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path>
-            <path d="M70 78 H88" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round"></path>
-          </svg>
-        </div>
-        <span>Termina SSH</span>
-      </div>
-      <div class="footer-copy">
-        <span>Desktop SSH manager</span>
-        <span>•</span>
-        <span>Made for focused terminal work</span>
-        <span>•</span>
-        <span>Linux and macOS first</span>
-      </div>
-    </footer>
-  </div>
-
-  <script>
-    const shots = [
-      {
-        title: 'Main window',
-        subtitle: 'Connections, quick connect, and recent activity',
-        image: 'screenshots/termina-main-blurred.png',
-        scale: '1.14'
-      },
-      {
-        title: 'Editor',
-        subtitle: 'Remote editing with search, replace, and save controls',
-        image: 'screenshots/termina-editor-blurred.png',
-        scale: '1.06'
-      },
-      {
-        title: 'Terminal and SFTP',
-        subtitle: 'Terminal work and file browsing side by side',
-        image: 'screenshots/termina-terminal-sftp-blurred.png',
-        scale: '1.12'
-      },
-      {
-        title: 'Settings',
-        subtitle: 'Theme, tools, and behavior in one clean settings panel',
-        image: 'screenshots/termina-settings-blurred.png',
-        scale: '1.10'
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Termina SSH</title>
+    <style>
+      :root {
+        --bg: #09090b;
+        --panel: rgba(255, 255, 255, 0.04);
+        --panel-strong: rgba(255, 255, 255, 0.06);
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #f4f4f5;
+        --muted: #a1a1aa;
+        --muted-2: #71717a;
+        --white: #ffffff;
+        --black: #000000;
+        --cyan: #22d3ee;
+        --lime: #84cc16;
+        --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        --radius-xl: 24px;
+        --radius-lg: 20px;
+        --radius-md: 14px;
+        --container: 1120px;
       }
-    ];
 
-    const featurePages = [
-      [
-        { title: 'Multiple SSH sessions with tabs', text: 'Keep several SSH connections open at once and switch between them quickly with a clean tab based workflow.' },
-        { title: 'Local terminal sessions', text: 'Launch local terminals right inside the app when you want quick shell access without leaving your workspace.' },
-        { title: 'Quick Connect', text: 'Open temporary connections fast without saving every host first, perfect for one off access and rapid admin work.' },
-        { title: 'Split view', text: 'Work side by side in multiple terminals and keep related sessions visible together while you troubleshoot or deploy.' }
-      ],
-      [
-        { title: 'Integrated SFTP browser', text: 'Browse remote files in the same workflow and move between terminal work and file operations more naturally.' },
-        { title: 'Built in remote editor', text: 'Edit files remotely with search, replace, and unsaved change protection built right into the app.' },
-        { title: 'Server specific notes', text: 'Keep important reminders, credentials context, and setup details attached to the servers they belong to.' },
-        { title: 'Reusable command snippets', text: 'Save common commands and reuse them quickly instead of typing the same admin tasks again and again.' }
-      ],
-      [
-        { title: 'SSH tunnel management', text: 'Manage tunnels in a cleaner desktop workflow and keep complex connection setups easier to understand.' },
-        { title: 'Terminal search', text: 'Find output inside your terminal sessions faster when you need to track logs, commands, or error messages.' },
-        { title: 'Themed desktop style UI', text: 'Enjoy a polished desktop experience with a themed interface that feels focused, modern, and built for daily use.' },
-        { title: 'Built for daily workflows', text: 'A focused desktop layout that keeps your SSH work, files, editing, and notes in one place.' }
-      ]
-    ];
+      * {
+        box-sizing: border-box;
+      }
 
-    let shotIndex = 0;
-    let featureIndex = 0;
-    let shotTimer = null;
-    let featureTimer = null;
-    let startX = null;
+      html {
+        scroll-behavior: smooth;
+      }
 
-    const stage = document.getElementById('showcase-stage');
-    const shotTitle = document.getElementById('shot-title');
-    const shotSubtitle = document.getElementById('shot-subtitle');
-    const shotDots = document.getElementById('shot-dots');
-    const prevShot = document.getElementById('prev-shot');
-    const nextShot = document.getElementById('next-shot');
-    const featuresStage = document.getElementById('features-stage');
-    const featureDots = document.getElementById('feature-dots');
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.18), transparent 35%),
+          radial-gradient(circle at 80% 20%, rgba(132, 204, 22, 0.14), transparent 25%),
+          var(--bg);
+        color: var(--text);
+      }
 
-    function renderShot(index) {
-      const shot = shots[index];
-      stage.querySelectorAll('.slide-shell').forEach((node) => node.remove());
-      const shell = document.createElement('div');
-      shell.className = 'slide-shell';
-      shell.innerHTML = `
-        <div class="slide-frame">
-          <img src="${shot.image}" alt="${shot.title}" style="--scale:${shot.scale};" />
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .container {
+        width: min(calc(100% - 32px), 1120px);
+        margin: 0 auto;
+      }
+
+      .topbar {
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 16px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 16px;
+        background: rgba(12, 12, 14, 0.84);
+        backdrop-filter: blur(16px);
+        box-shadow:
+          0 14px 32px rgba(0, 0, 0, 0.28),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .brand-meta {
+        line-height: 1.2;
+      }
+
+      .brand-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #f4f4f5;
+      }
+
+      .brand-subtitle {
+        margin-top: 2px;
+        font-size: 13px;
+        color: #a1a1aa;
+      }
+
+      .brand-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        overflow: hidden;
+        flex: 0 0 auto;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        font-size: 15px;
+        font-weight: 500;
+        color: #e4e4e7;
+      }
+
+      .nav a {
+        opacity: 0.9;
+        transition: color 0.2s ease, opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      }
+
+      .nav a:hover {
+        opacity: 1;
+        color: var(--white);
+      }
+
+      .nav .support-link {
+        padding: 8px 15px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.07);
+        color: #ffffff;
+      }
+
+      .nav .support-link:hover {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .hero {
+        padding: 34px 0 26px;
+        text-align: center;
+      }
+
+      .hero-inner {
+        width: min(100%, 760px);
+        margin: 0 auto;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(34px, 6vw, 72px);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .hero p {
+        width: min(100%, 720px);
+        margin: 16px auto 0;
+        font-size: 16px;
+        line-height: 1.7;
+        color: #d4d4d8;
+      }
+
+      .button-row {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        font-size: 14px;
+        font-weight: 600;
+        transition: 0.2s ease;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: var(--white);
+        color: #09090b;
+      }
+
+      .btn-primary:hover {
+        background: #e4e4e7;
+      }
+
+      .btn-outline {
+        border-color: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--white);
+      }
+
+      .btn-outline:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .support-button {
+        height: 38px;
+        padding: 0 14px;
+        border-color: rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        box-shadow: none;
+        white-space: nowrap;
+      }
+
+      .support-button:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.22);
+      }
+
+      .section {
+        padding: 24px 0;
+      }
+
+      .section-head {
+        margin-bottom: 14px;
+        text-align: center;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        font-size: clamp(24px, 3vw, 34px);
+        letter-spacing: -0.03em;
+      }
+
+      .section-head p,
+      .copy {
+        margin: 10px auto 0;
+        max-width: 720px;
+        font-size: 15px;
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted-2);
+      }
+
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        background: rgba(255, 255, 255, 0.04);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+      }
+
+      .carousel-card {
+        overflow: hidden;
+        background: rgba(24, 24, 27, 0.7);
+      }
+
+      .carousel-stage {
+        position: relative;
+        width: min(100%, 1120px);
+        aspect-ratio: 16 / 10;
+        margin: 0 auto;
+        border-radius: 28px;
+        overflow: hidden;
+        touch-action: pan-y;
+      }
+
+      .slides {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transform: translateX(40px);
+        transition: opacity 0.32s ease, transform 0.32s ease;
+        pointer-events: none;
+      }
+
+      .slide.active {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+
+      .screenshot-shell {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 30%),
+          radial-gradient(circle at bottom, rgba(132, 204, 22, 0.06), transparent 28%);
+      }
+
+      .screenshot-inner {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 24px;
+        background: rgba(0, 0, 0, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+
+      .screenshot-inner img {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 18px;
+        object-fit: contain;
+        box-shadow: var(--shadow);
+      }
+
+      .carousel-arrow {
+        position: absolute;
+        top: 50%;
+        width: 36px;
+        height: 36px;
+        margin-top: -18px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.4);
+        color: var(--white);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: 0.2s ease;
+        z-index: 5;
+      }
+
+      .carousel-arrow:hover {
+        background: rgba(0, 0, 0, 0.6);
+      }
+
+      .carousel-arrow.left {
+        left: 12px;
+      }
+
+      .carousel-arrow.right {
+        right: 12px;
+      }
+
+      .carousel-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-top: 1px solid var(--border);
+        background: rgba(9, 9, 11, 0.7);
+      }
+
+      .carousel-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .carousel-subtitle {
+        margin-top: 2px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .dots {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 8px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.25);
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+
+      .dot.active {
+        width: 32px;
+        background: var(--white);
+      }
+
+      .features-head {
+        max-width: 640px;
+        margin-bottom: 16px;
+      }
+
+      .features-stage {
+        position: relative;
+        min-height: 404px;
+        overflow: hidden;
+        touch-action: pan-y;
+      }
+
+      .feature-page {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        opacity: 0;
+        transform: translateX(40px);
+        transition: opacity 0.32s ease, transform 0.32s ease;
+        pointer-events: none;
+      }
+
+      .feature-page.active {
+        opacity: 1;
+        transform: translateX(0);
+        pointer-events: auto;
+      }
+
+      .feature-card {
+        min-height: 176px;
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: rgba(9, 9, 11, 0.7);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+      }
+
+      .feature-icon {
+        display: inline-flex;
+        width: 38px;
+        height: 38px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.1);
+        margin-bottom: 10px;
+      }
+
+      .feature-title {
+        margin: 0 0 6px;
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .feature-text {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .features-card {
+        overflow: hidden;
+      }
+
+      .features-card-body {
+        position: relative;
+        padding: 14px 16px 18px;
+      }
+
+      .features-footer {
+        display: flex;
+        justify-content: center;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border);
+        background: rgba(9, 9, 11, 0.6);
+      }
+
+      .cta-card {
+        padding: 18px;
+      }
+
+      .cta-grid {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+      }
+
+      .faq-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .faq-card {
+        padding: 18px;
+      }
+
+      .faq-title {
+        margin: 0 0 8px;
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .faq-text {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .support-wrap {
+        width: min(100%, 760px);
+        margin: 0 auto;
+      }
+
+      .support-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 24px 0;
+        margin-top: 12px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .footer-left,
+      .footer-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .bullet {
+        opacity: 0.65;
+      }
+
+      .hidden-mobile {
+        display: inline;
+      }
+
+      @media (max-width: 900px) {
+        .topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .nav {
+          flex-wrap: wrap;
+        }
+
+        .feature-page,
+        .faq-grid,
+        .cta-grid,
+        .support-card {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .support-card {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .support-button {
+          align-self: flex-start;
+        }
+
+        .footer {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .nav {
+          display: none;
+        }
+
+        .container {
+          width: min(calc(100% - 20px), 1120px);
+        }
+
+        .carousel-meta {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .feature-page,
+        .faq-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hidden-mobile {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg viewBox="0 0 128 128" width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <linearGradient id="termina-ring-gradient-html" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#84cc16" />
+                  <stop offset="55%" stop-color="#22d3ee" />
+                  <stop offset="100%" stop-color="#67e8f9" />
+                </linearGradient>
+              </defs>
+              <circle cx="64" cy="64" r="41" fill="rgba(10,10,10,0.92)" stroke="url(#termina-ring-gradient-html)" stroke-width="4" />
+              <circle cx="64" cy="64" r="49" fill="none" stroke="url(#termina-ring-gradient-html)" stroke-width="3.5" stroke-dasharray="44 10 18 12 30 14" stroke-linecap="round" />
+              <circle cx="64" cy="64" r="56" fill="none" stroke="url(#termina-ring-gradient-html)" stroke-width="2.5" stroke-dasharray="18 12 34 16 14 10" stroke-linecap="round" opacity="0.95" />
+              <path d="M49 48 L64 63 L49 78" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M70 78 H88" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" />
+            </svg>
+          </div>
+          <div class="brand-meta">
+            <div class="brand-title">Termina SSH</div>
+            <div class="brand-subtitle">Desktop SSH manager</div>
+          </div>
         </div>
-      `;
-      stage.appendChild(shell);
-      shotTitle.textContent = shot.title;
-      shotSubtitle.textContent = shot.subtitle;
-      [...shotDots.children].forEach((dot, i) => dot.className = i === index ? 'dot active' : 'dot');
-    }
 
-    function renderShotDots() {
-      shots.forEach((_, i) => {
-        const dot = document.createElement('button');
-        dot.className = i === 0 ? 'dot active' : 'dot';
-        dot.addEventListener('click', () => {
-          shotIndex = i;
-          renderShot(shotIndex);
-          resetShotTimer();
+        <nav class="nav">
+          <a href="#features">Features</a>
+          <a href="#download">Download</a>
+          <a href="#faq">FAQ</a>
+          <a class="support-link" href="#support">Support</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-inner">
+            <h1>A modern desktop home for your SSH workflow</h1>
+            <p>Termina SSH brings tabs, split view, local terminals, SFTP, a built in editor, notes, snippets, and tunnels into one focused desktop workflow.</p>
+            <div class="button-row">
+              <a class="btn btn-primary" href="https://github.com/kahikara/TerminaSSH/releases" target="_blank" rel="noreferrer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                Download soon
+              </a>
+              <a class="btn btn-outline" href="https://github.com/kahikara/TerminaSSH" target="_blank" rel="noreferrer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.66.5 12.02c0 5.08 3.29 9.37 7.86 10.89.57.1.78-.25.78-.56 0-.27-.01-1.01-.02-1.99-3.2.7-3.88-1.55-3.88-1.55-.52-1.34-1.28-1.69-1.28-1.69-1.04-.71.08-.69.08-.69 1.15.08 1.75 1.19 1.75 1.19 1.02 1.77 2.68 1.26 3.33.96.1-.75.4-1.26.72-1.55-2.55-.29-5.23-1.29-5.23-5.72 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.73 0c2.19-1.49 3.15-1.18 3.15-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.1 0 4.44-2.68 5.43-5.24 5.72.41.35.78 1.05.78 2.11 0 1.52-.01 2.75-.01 3.12 0 .31.2.67.79.56A11.53 11.53 0 0 0 23.5 12C23.5 5.66 18.34.5 12 .5Z"/></svg>
+                View on GitHub
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <h2>A closer look at the interface</h2>
+          </div>
+
+          <div class="card carousel-card">
+            <div class="carousel-stage" id="screenshots-carousel">
+              <div class="slides" id="screenshot-slides"></div>
+              <button class="carousel-arrow left" id="screens-prev" aria-label="Previous screenshot">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button class="carousel-arrow right" id="screens-next" aria-label="Next screenshot">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div class="carousel-meta">
+              <div>
+                <div class="carousel-title" id="screenshot-title"></div>
+                <div class="carousel-subtitle" id="screenshot-subtitle"></div>
+              </div>
+              <div class="dots" id="screenshot-dots"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="features">
+          <div class="features-head">
+            <p class="eyebrow">Features</p>
+            <h2>Focused features that actually matter</h2>
+          </div>
+
+          <div class="card features-card">
+            <div class="features-card-body">
+              <div class="features-stage" id="features-stage"></div>
+              <button class="carousel-arrow left" id="features-prev" aria-label="Previous feature page">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <button class="carousel-arrow right" id="features-next" aria-label="Next feature page">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+            <div class="features-footer">
+              <div class="dots" id="feature-dots"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="download">
+          <div class="card cta-card">
+            <div class="cta-grid">
+              <div>
+                <p class="eyebrow">Download</p>
+                <h2>Ready to keep your SSH setup in one place?</h2>
+                <p class="copy">Start with Linux and macOS builds, share compatible backups, and grow the project in public on GitHub.</p>
+              </div>
+              <div class="button-row" style="margin-top: 0; justify-content: flex-end;">
+                <a class="btn btn-primary" href="https://github.com/kahikara/TerminaSSH/releases" target="_blank" rel="noreferrer">Get builds</a>
+                <a class="btn btn-outline" href="https://github.com/kahikara/TerminaSSH" target="_blank" rel="noreferrer">Star the project</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="faq">
+          <div class="features-head">
+            <p class="eyebrow">FAQ</p>
+            <h2>A few practical answers</h2>
+          </div>
+          <div class="faq-grid" id="faq-grid"></div>
+        </section>
+
+        <section class="section" id="support">
+          <div class="support-wrap">
+            <div class="card support-card">
+              <div>
+                <p class="eyebrow">Support</p>
+                <h2 style="margin:0; font-size: clamp(20px, 1.7vw, 24px); letter-spacing: -0.03em;">If you like my work, support the project on Ko fi.</h2>
+                <p class="copy" style="margin:8px 0 0; max-width:none; font-size:15px; line-height:1.6;">Every coffee helps support development and future updates for Termina SSH.</p>
+              </div>
+              <a class="btn btn-outline support-button" href="https://ko-fi.com/ming83" target="_blank" rel="noreferrer">Buy me a coffee</a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="footer-left">
+          <div class="brand-icon" style="width:18px;height:18px;border-radius:6px;">
+            <svg viewBox="0 0 128 128" width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <linearGradient id="termina-ring-gradient-footer" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#84cc16" />
+                  <stop offset="55%" stop-color="#22d3ee" />
+                  <stop offset="100%" stop-color="#67e8f9" />
+                </linearGradient>
+              </defs>
+              <circle cx="64" cy="64" r="41" fill="rgba(10,10,10,0.92)" stroke="url(#termina-ring-gradient-footer)" stroke-width="4" />
+              <circle cx="64" cy="64" r="49" fill="none" stroke="url(#termina-ring-gradient-footer)" stroke-width="3.5" stroke-dasharray="44 10 18 12 30 14" stroke-linecap="round" />
+              <circle cx="64" cy="64" r="56" fill="none" stroke="url(#termina-ring-gradient-footer)" stroke-width="2.5" stroke-dasharray="18 12 34 16 14 10" stroke-linecap="round" opacity="0.95" />
+              <path d="M49 48 L64 63 L49 78" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M70 78 H88" fill="none" stroke="#f4fff7" stroke-width="8" stroke-linecap="round" />
+            </svg>
+          </div>
+          <span>Termina SSH</span>
+        </div>
+        <div class="footer-right">
+          <span>Desktop SSH manager</span>
+          <span class="bullet hidden-mobile">•</span>
+          <span>Made for focused terminal work</span>
+          <span class="bullet hidden-mobile">•</span>
+          <span>Linux and macOS first</span>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      const SWIPE_OFFSET_THRESHOLD = 120;
+      const SWIPE_CONFIDENCE_THRESHOLD = 12000;
+      const SCREENSHOT_INTERVAL_MS = 3500;
+      const FEATURE_INTERVAL_MS = 4200;
+
+      const getBaseUrl = () => {
+        const path = window.location.pathname || "/";
+        return path.startsWith("/TerminaSSH/") ? "/TerminaSSH/" : "/";
+      };
+
+      const withBase = (path) => {
+        const clean = String(path || "").replace(/^\/+/, "");
+        const base = getBaseUrl().replace(/\/?$/, "/");
+        return `${base}${clean}`;
+      };
+
+      const screenshotSlides = [
+        {
+          key: "main",
+          title: "Main window",
+          subtitle: "Connections, quick connect, and recent activity",
+          image: withBase("screenshots/termina-main-blurred.png"),
+        },
+        {
+          key: "editor",
+          title: "Editor",
+          subtitle: "Remote editing with search, replace, and save controls",
+          image: withBase("screenshots/termina-editor-blurred.png"),
+        },
+        {
+          key: "sftp",
+          title: "Terminal and SFTP",
+          subtitle: "Terminal work and file browsing side by side",
+          image: withBase("screenshots/termina-terminal-sftp-blurred.png"),
+        },
+        {
+          key: "settings",
+          title: "Settings",
+          subtitle: "Theme, tools, and behavior in one clean settings panel",
+          image: withBase("screenshots/termina-settings-blurred.png"),
+        },
+      ];
+
+      const features = [
+        {
+          title: "Multiple SSH sessions with tabs",
+          text: "Keep several SSH connections open at once and switch between them quickly with a clean tab based workflow.",
+          icon: "layers",
+        },
+        {
+          title: "Local terminal sessions",
+          text: "Launch local terminals right inside the app when you want quick shell access without leaving your workspace.",
+          icon: "terminal",
+        },
+        {
+          title: "Quick Connect",
+          text: "Open temporary connections fast without saving every host first, perfect for one off access and rapid admin work.",
+          icon: "zap",
+        },
+        {
+          title: "Split view",
+          text: "Work side by side in multiple terminals and keep related sessions visible together while you troubleshoot or deploy.",
+          icon: "split",
+        },
+        {
+          title: "Integrated SFTP browser",
+          text: "Browse remote files in the same workflow and move between terminal work and file operations more naturally.",
+          icon: "folder",
+        },
+        {
+          title: "Built in remote editor",
+          text: "Edit files remotely with search, replace, and unsaved change protection built right into the app.",
+          icon: "edit",
+        },
+        {
+          title: "Server specific notes",
+          text: "Keep important reminders, credentials context, and setup details attached to the servers they belong to.",
+          icon: "note",
+        },
+        {
+          title: "Reusable command snippets",
+          text: "Save common commands and reuse them quickly instead of typing the same admin tasks again and again.",
+          icon: "command",
+        },
+        {
+          title: "SSH tunnel management",
+          text: "Manage tunnels in a cleaner desktop workflow and keep complex connection setups easier to understand.",
+          icon: "cable",
+        },
+        {
+          title: "Terminal search",
+          text: "Find output inside your terminal sessions faster when you need to track logs, commands, or error messages.",
+          icon: "search",
+        },
+        {
+          title: "Themed desktop style UI",
+          text: "Enjoy a polished desktop experience with a themed interface that feels focused, modern, and built for daily use.",
+          icon: "screen",
+        },
+      ];
+
+      const faqs = [
+        {
+          q: "Is Termina SSH a web app?",
+          a: "No. It is designed as a desktop first experience for people who want a dedicated SSH manager without browser overhead.",
+        },
+        {
+          q: "Can I use existing key files?",
+          a: "Yes. PEM key support is part of the workflow so existing environments are easier to adopt.",
+        },
+        {
+          q: "Can backups move across systems?",
+          a: "That is the goal. A clean shared backup format makes Linux and macOS portability realistic and keeps future expansion easier.",
+        },
+        {
+          q: "Who is it for?",
+          a: "Developers, homelab users, sysadmins, and anyone who juggles multiple SSH connections and wants a cleaner workflow.",
+        },
+      ];
+
+      const iconMap = {
+        layers: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 9 4.5-9 4.5L3 7.5 12 3Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg>',
+        terminal: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>',
+        zap: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>',
+        split: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>',
+        folder: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z"/></svg>',
+        edit: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="m16.5 3.5 4 4L7 21H3v-4L16.5 3.5Z"/></svg>',
+        note: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3H5a2 2 0 0 0-2 2v14l4-4h9a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z"/></svg>',
+        command: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 3a3 3 0 1 0 0 6h1a2 2 0 1 1 0 4h-1a3 3 0 1 0 0 6"/><path d="M6 3a3 3 0 1 1 0 6H5a2 2 0 1 0 0 4h1a3 3 0 1 1 0 6"/></svg>',
+        cable: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 13V7a2 2 0 1 1 4 0v6"/><path d="M8 13V7a2 2 0 1 1 4 0v6"/><path d="M8 13h8"/><path d="M12 13v8"/></svg>',
+        search: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+        screen: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>',
+      };
+
+      const screenshotSlidesEl = document.getElementById("screenshot-slides");
+      const screenshotTitleEl = document.getElementById("screenshot-title");
+      const screenshotSubtitleEl = document.getElementById("screenshot-subtitle");
+      const screenshotDotsEl = document.getElementById("screenshot-dots");
+      const screensPrevBtn = document.getElementById("screens-prev");
+      const screensNextBtn = document.getElementById("screens-next");
+
+      const featureStageEl = document.getElementById("features-stage");
+      const featureDotsEl = document.getElementById("feature-dots");
+      const featuresPrevBtn = document.getElementById("features-prev");
+      const featuresNextBtn = document.getElementById("features-next");
+      const faqGridEl = document.getElementById("faq-grid");
+
+      let currentScreenshot = 0;
+      let currentFeaturePage = 0;
+      let screenshotTimer = null;
+      let featureTimer = null;
+
+      const featurePages = [];
+      for (let i = 0; i < features.length; i += 4) {
+        featurePages.push(features.slice(i, i + 4));
+      }
+
+      function renderScreenshotSlides() {
+        screenshotSlidesEl.innerHTML = screenshotSlides
+          .map(
+            (slide, index) => `
+              <div class="slide ${index === currentScreenshot ? "active" : ""}" data-index="${index}">
+                <div class="screenshot-shell">
+                  <div class="screenshot-inner">
+                    <img src="${slide.image}" alt="${slide.title}" />
+                  </div>
+                </div>
+              </div>
+            `,
+          )
+          .join("");
+
+        screenshotTitleEl.textContent = screenshotSlides[currentScreenshot].title;
+        screenshotSubtitleEl.textContent = screenshotSlides[currentScreenshot].subtitle;
+
+        screenshotDotsEl.innerHTML = screenshotSlides
+          .map(
+            (slide, index) => `
+              <button class="dot ${index === currentScreenshot ? "active" : ""}" data-index="${index}" aria-label="Go to ${slide.title}"></button>
+            `,
+          )
+          .join("");
+
+        screenshotDotsEl.querySelectorAll(".dot").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            currentScreenshot = Number(btn.dataset.index || 0);
+            renderScreenshotSlides();
+            restartScreenshotTimer();
+          });
         });
-        shotDots.appendChild(dot);
-      });
-    }
+      }
 
-    function renderFeaturePage(index) {
-      const page = featurePages[index];
-      featuresStage.innerHTML = '';
-      const grid = document.createElement('div');
-      grid.className = 'features-page';
-      grid.innerHTML = page.map(item => `
-        <article class="feature-item">
-          <div class="feature-icon">•</div>
-          <h4>${item.title}</h4>
-          <p>${item.text}</p>
-        </article>
-      `).join('');
-      featuresStage.appendChild(grid);
-      [...featureDots.children].forEach((dot, i) => dot.className = i === index ? 'dot active' : 'dot');
-    }
+      function goNextScreenshot() {
+        currentScreenshot = (currentScreenshot + 1) % screenshotSlides.length;
+        renderScreenshotSlides();
+      }
 
-    function renderFeatureDots() {
-      featurePages.forEach((_, i) => {
-        const dot = document.createElement('button');
-        dot.className = i === 0 ? 'dot active' : 'dot';
-        dot.addEventListener('click', () => {
-          featureIndex = i;
-          renderFeaturePage(featureIndex);
-          resetFeatureTimer();
+      function goPrevScreenshot() {
+        currentScreenshot = (currentScreenshot - 1 + screenshotSlides.length) % screenshotSlides.length;
+        renderScreenshotSlides();
+      }
+
+      function restartScreenshotTimer() {
+        window.clearInterval(screenshotTimer);
+        screenshotTimer = window.setInterval(goNextScreenshot, SCREENSHOT_INTERVAL_MS);
+      }
+
+      function renderFeaturePages() {
+        featureStageEl.innerHTML = featurePages
+          .map(
+            (page, pageIndex) => `
+              <div class="feature-page ${pageIndex === currentFeaturePage ? "active" : ""}">
+                ${page
+                  .map(
+                    (feature) => `
+                      <div class="feature-card">
+                        <div class="feature-icon">${iconMap[feature.icon] || ""}</div>
+                        <h3 class="feature-title">${feature.title}</h3>
+                        <p class="feature-text">${feature.text}</p>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+            `,
+          )
+          .join("");
+
+        featureDotsEl.innerHTML = featurePages
+          .map(
+            (_, index) => `
+              <button class="dot ${index === currentFeaturePage ? "active" : ""}" data-index="${index}" aria-label="Go to feature page ${index + 1}"></button>
+            `,
+          )
+          .join("");
+
+        featureDotsEl.querySelectorAll(".dot").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            currentFeaturePage = Number(btn.dataset.index || 0);
+            renderFeaturePages();
+            restartFeatureTimer();
+          });
         });
-        featureDots.appendChild(dot);
+      }
+
+      function goNextFeaturePage() {
+        currentFeaturePage = (currentFeaturePage + 1) % featurePages.length;
+        renderFeaturePages();
+      }
+
+      function goPrevFeaturePage() {
+        currentFeaturePage = (currentFeaturePage - 1 + featurePages.length) % featurePages.length;
+        renderFeaturePages();
+      }
+
+      function restartFeatureTimer() {
+        window.clearInterval(featureTimer);
+        featureTimer = window.setInterval(goNextFeaturePage, FEATURE_INTERVAL_MS);
+      }
+
+      function renderFaqs() {
+        faqGridEl.innerHTML = faqs
+          .map(
+            (item) => `
+              <div class="card faq-card">
+                <h3 class="faq-title">${item.q}</h3>
+                <p class="faq-text">${item.a}</p>
+              </div>
+            `,
+          )
+          .join("");
+      }
+
+      function attachSwipe(el, onPrev, onNext, restartTimer) {
+        let startX = 0;
+        let startTime = 0;
+        let isDragging = false;
+
+        const onStart = (x) => {
+          isDragging = true;
+          startX = x;
+          startTime = Date.now();
+        };
+
+        const onEnd = (x) => {
+          if (!isDragging) return;
+          isDragging = false;
+          const deltaX = x - startX;
+          const elapsed = Math.max(Date.now() - startTime, 1);
+          const velocity = Math.abs(deltaX) / elapsed;
+          const swipePower = Math.abs(deltaX) * velocity;
+          const swipeVelocityThreshold = SWIPE_CONFIDENCE_THRESHOLD / 100;
+
+          if (deltaX <= -SWIPE_OFFSET_THRESHOLD || swipePower >= swipeVelocityThreshold) {
+            onNext();
+            restartTimer();
+            return;
+          }
+
+          if (deltaX >= SWIPE_OFFSET_THRESHOLD || swipePower >= swipeVelocityThreshold) {
+            onPrev();
+            restartTimer();
+          }
+        };
+
+        el.addEventListener("pointerdown", (event) => onStart(event.clientX));
+        el.addEventListener("pointerup", (event) => onEnd(event.clientX));
+        el.addEventListener("pointercancel", () => {
+          isDragging = false;
+        });
+        el.addEventListener(
+          "touchstart",
+          (event) => {
+            if (event.touches[0]) onStart(event.touches[0].clientX);
+          },
+          { passive: true },
+        );
+        el.addEventListener(
+          "touchend",
+          (event) => {
+            if (event.changedTouches[0]) onEnd(event.changedTouches[0].clientX);
+          },
+          { passive: true },
+        );
+      }
+
+      screensPrevBtn.addEventListener("click", () => {
+        goPrevScreenshot();
+        restartScreenshotTimer();
       });
-    }
+      screensNextBtn.addEventListener("click", () => {
+        goNextScreenshot();
+        restartScreenshotTimer();
+      });
+      featuresPrevBtn.addEventListener("click", () => {
+        goPrevFeaturePage();
+        restartFeatureTimer();
+      });
+      featuresNextBtn.addEventListener("click", () => {
+        goNextFeaturePage();
+        restartFeatureTimer();
+      });
 
-    function nextScreenshot() {
-      shotIndex = (shotIndex + 1) % shots.length;
-      renderShot(shotIndex);
-    }
-    function prevScreenshot() {
-      shotIndex = (shotIndex - 1 + shots.length) % shots.length;
-      renderShot(shotIndex);
-    }
-    function nextFeaturePage() {
-      featureIndex = (featureIndex + 1) % featurePages.length;
-      renderFeaturePage(featureIndex);
-    }
-    function resetShotTimer() {
-      clearInterval(shotTimer);
-      shotTimer = setInterval(nextScreenshot, 3500);
-    }
-    function resetFeatureTimer() {
-      clearInterval(featureTimer);
-      featureTimer = setInterval(nextFeaturePage, 4200);
-    }
-
-    prevShot.addEventListener('click', () => { prevScreenshot(); resetShotTimer(); });
-    nextShot.addEventListener('click', () => { nextScreenshot(); resetShotTimer(); });
-
-    stage.addEventListener('pointerdown', (e) => { startX = e.clientX; });
-    stage.addEventListener('pointerup', (e) => {
-      if (startX === null) return;
-      const delta = e.clientX - startX;
-      if (delta <= -70) nextScreenshot();
-      if (delta >= 70) prevScreenshot();
-      startX = null;
-      resetShotTimer();
-    });
-
-    renderShotDots();
-    renderShot(0);
-    renderFeatureDots();
-    renderFeaturePage(0);
-    resetShotTimer();
-    resetFeatureTimer();
-  </script>
-</body>
+      renderScreenshotSlides();
+      renderFeaturePages();
+      renderFaqs();
+      restartScreenshotTimer();
+      restartFeatureTimer();
+      attachSwipe(document.getElementById("screenshots-carousel"), goPrevScreenshot, goNextScreenshot, restartScreenshotTimer);
+      attachSwipe(document.getElementById("features-stage"), goPrevFeaturePage, goNextFeaturePage, restartFeatureTimer);
+    </script>
+  </body>
 </html>
