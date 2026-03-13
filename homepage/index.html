@@ -294,7 +294,7 @@
         height: 100%;
         align-items: center;
         justify-content: center;
-        padding: 12px;
+        padding: 8px;
         background:
           radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 30%),
           radial-gradient(circle at bottom, rgba(132, 204, 22, 0.06), transparent 28%);
@@ -306,7 +306,7 @@
         height: 100%;
         align-items: center;
         justify-content: center;
-        padding: 10px;
+        padding: 6px;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 24px;
@@ -320,7 +320,25 @@
         max-height: 100%;
         border-radius: 18px;
         object-fit: contain;
+        object-position: center;
         box-shadow: var(--shadow);
+        transform-origin: center center;
+      }
+
+      .shot-main {
+        transform: scale(1.08);
+      }
+
+      .shot-editor {
+        transform: scale(1);
+      }
+
+      .shot-sftp {
+        transform: scale(1.06);
+      }
+
+      .shot-settings {
+        transform: scale(1.045);
       }
 
       .carousel-arrow {
@@ -799,24 +817,28 @@
           title: "Main window",
           subtitle: "Connections, quick connect, and recent activity",
           image: withBase("screenshots/termina-main-blurred.png"),
+          imageClass: "shot-main",
         },
         {
           key: "editor",
           title: "Editor",
           subtitle: "Remote editing with search, replace, and save controls",
           image: withBase("screenshots/termina-editor-blurred.png"),
+          imageClass: "shot-editor",
         },
         {
           key: "sftp",
           title: "Terminal and SFTP",
           subtitle: "Terminal work and file browsing side by side",
           image: withBase("screenshots/termina-terminal-sftp-blurred.png"),
+          imageClass: "shot-sftp",
         },
         {
           key: "settings",
           title: "Settings",
           subtitle: "Theme, tools, and behavior in one clean settings panel",
           image: withBase("screenshots/termina-settings-blurred.png"),
+          imageClass: "shot-settings",
         },
       ];
 
@@ -941,7 +963,7 @@
               <div class="slide ${index === currentScreenshot ? "active" : ""}" data-index="${index}">
                 <div class="screenshot-shell">
                   <div class="screenshot-inner">
-                    <img src="${slide.image}" alt="${slide.title}" />
+                    <img class="${slide.imageClass || ""}" src="${slide.image}" alt="${slide.title}" />
                   </div>
                 </div>
               </div>
