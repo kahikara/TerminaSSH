@@ -18,8 +18,35 @@ import {
   Command,
   Cable,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+
+function Card({ className = "", children, ...props }) {
+  return (
+    <div className={className} {...props}>
+    {children}
+    </div>
+  );
+}
+
+function CardContent({ className = "", children, ...props }) {
+  return (
+    <div className={className} {...props}>
+    {children}
+    </div>
+  );
+}
+
+function Button({ className = "", variant = "default", children, ...props }) {
+  const baseClass =
+  variant === "outline"
+  ? "inline-flex items-center justify-center border"
+  : "inline-flex items-center justify-center";
+
+  return (
+    <button className={`${baseClass} ${className}`.trim()} {...props}>
+    {children}
+    </button>
+  );
+}
 
 const SCREENSHOT_INTERVAL_MS = 3500;
 const FEATURE_INTERVAL_MS = 4200;
