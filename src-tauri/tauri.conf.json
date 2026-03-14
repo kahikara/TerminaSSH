@@ -1,6 +1,6 @@
 {
   "productName": "Termina SSH",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.terminassh.dev",
   "build": {
     "beforeDevCommand": "npm run dev",
