@@ -70,6 +70,10 @@ pub struct ActiveTunnelItem {
     id: i32,
 }
 
+
+#[derive(Debug, Serialize)]
+pub struct StatusBarInfo { load: Option<String>, ram: Option<String> }
+
 pub enum SshMessage { Input(String), Resize(u32, u32) }
 
 pub struct SshState { 
@@ -859,6 +863,51 @@ fn download_recursive(sftp: &ssh2::Sftp, remote: &Path, local: &Path, cancel: &A
 #[tauri::command] fn close_session(session_id: String, state: State<'_, SshState>) { state.txs.lock().unwrap().remove(&session_id); }
 #[tauri::command] fn ping_host(host: String, port: u16) -> Result<u128, String> { let start = std::time::Instant::now(); let addr_str = format!("{}:{}", host, port); if let Ok(mut addrs) = addr_str.to_socket_addrs() { if let Some(addr) = addrs.next() { if let Ok(_) = TcpStream::connect_timeout(&addr, Duration::from_millis(1500)) { return Ok(start.elapsed().as_millis()); } } } Err("Timeout".to_string()) }
 
+
+fn parse_meminfo_value_kib(source: &str, key: &str) -> Option<u64> {
+    source.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let label = parts.next()?;
+        if label.trim_end_matches(':') != key {
+            return None;
+        }
+        parts.next()?.parse::<u64>().ok()
+    })
+}
+
+#[tauri::command]
+fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
+    let sess = connect_ssh_session(server_id)?;
+    let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
+    channel
+        .exec("sh -lc 'cat /proc/loadavg && printf \"\\n--TERMSSH--\\n\" && cat /proc/meminfo'")
+        .map_err(|e| e.to_string())?;
+
+    let mut output = String::new();
+    channel.read_to_string(&mut output).map_err(|e| e.to_string())?;
+    let _ = channel.wait_close();
+
+    let mut parts = output.split("\n--TERMSSH--\n");
+    let load_part = parts.next().unwrap_or_default();
+    let mem_part = parts.next().unwrap_or_default();
+
+    let load = load_part.split_whitespace().next().map(|s| s.to_string());
+
+    let mem_total_kib = parse_meminfo_value_kib(mem_part, "MemTotal");
+    let mem_available_kib = parse_meminfo_value_kib(mem_part, "MemAvailable");
+
+    let ram = match (mem_total_kib, mem_available_kib) {
+        (Some(total), Some(available)) => {
+            let used = total.saturating_sub(available) as f64 / 1024.0 / 1024.0;
+            let total_gb = total as f64 / 1024.0 / 1024.0;
+            Some(format!("{used:.1} / {total_gb:.1} GB"))
+        }
+        _ => None,
+    };
+
+    Ok(StatusBarInfo { load, ram })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // FIX: X11 wieder erzwungen!
@@ -875,7 +924,7 @@ pub fn run() {
         .manage(SshState { txs: Mutex::new(HashMap::new()), transfers: Mutex::new(HashMap::new()), tunnel_runtime: Mutex::new(HashMap::new()) })
         .invoke_handler(tauri::generate_handler![ 
             save_connection, get_connections, update_connection, delete_connection, start_ssh, start_quick_ssh, start_local_pty, write_to_pty, resize_pty, 
-            sftp_list_dir, sftp_mkdir, sftp_rename, sftp_delete, sftp_read_file, sftp_write_file, sftp_upload, sftp_download, close_session, ping_host, cancel_transfer, write_clipboard, read_clipboard,
+            sftp_list_dir, sftp_mkdir, sftp_rename, sftp_delete, sftp_read_file, sftp_write_file, sftp_upload, sftp_download, close_session, ping_host, get_status_bar_info, cancel_transfer, write_clipboard, read_clipboard,
             get_snippets, add_snippet, update_snippet, delete_snippet,
             get_ssh_keys, save_ssh_key, delete_ssh_key, generate_ssh_key,
             get_tunnels, save_tunnel, update_tunnel, delete_tunnel,

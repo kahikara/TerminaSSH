@@ -5,7 +5,7 @@ import { SearchAddon } from "xterm-addon-search"
 import { invoke } from "@tauri-apps/api/core"
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager"
 import { listen, UnlistenFn } from "@tauri-apps/api/event"
-import { Columns, Folder, SplitSquareVertical, SplitSquareHorizontal, Cable, ScrollText, Search as SearchIcon, ChevronUp, ChevronDown, X, FileText } from "lucide-react"
+import { Columns, Folder, SplitSquareVertical, SplitSquareHorizontal, Cable, ScrollText, Search as SearchIcon, ChevronUp, ChevronDown, X, FileText, Cpu, MemoryStick } from "lucide-react"
 import SftpPanel from "./SftpPanel"
 import TunnelPanel from "./TunnelPanel"
 import SnippetsPanel from "./SnippetsPanel"
@@ -72,6 +72,16 @@ function keepBottom(term: Terminal) {
   requestAnimationFrame(() => {
     try { term.scrollToBottom() } catch {}
   })
+}
+
+function formatSessionDuration(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":")
 }
 
 function createTerminalOptions(settings: any) {
@@ -464,6 +474,9 @@ export default function TerminalPane(props: any) {
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [pingMs, setPingMs] = useState<string>("...")
+  const [sessionSeconds, setSessionSeconds] = useState(0)
+  const [activeTunnelLabel, setActiveTunnelLabel] = useState("")
+  const [statusMetrics, setStatusMetrics] = useState<{ load?: string; ram?: string }>({})
   const [splitDirection, setSplitDirection] = useState<"vertical" | "horizontal">("vertical")
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [paneIds, setPaneIds] = useState<string[]>([sessionId])
@@ -481,6 +494,12 @@ export default function TerminalPane(props: any) {
   const showSnippetsBtn = settings.showSnippets !== false && !isLocalServer(server)
   const showNotesBtn = settings.showNotes !== false && !isLocalServer(server)
   const showSearchBtn = settings.showSearch !== false
+  const showStatusBar = settings.showStatusBar !== false
+  const showStatusBarSession = settings.showStatusBarSession !== false
+  const showStatusBarTunnel = settings.showStatusBarTunnel !== false
+  const showStatusBarLoad = settings.showStatusBarLoad !== false
+  const showStatusBarRam = settings.showStatusBarRam !== false
+  const statusLang = settings?.lang || "de"
 
   useEffect(() => {
     paneIdsRef.current = paneIds
@@ -522,6 +541,94 @@ export default function TerminalPane(props: any) {
   }, [server])
 
   useEffect(() => {
+    setSessionSeconds(0)
+
+    const id = window.setInterval(() => {
+      setSessionSeconds((prev) => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(id)
+  }, [sessionId])
+
+  useEffect(() => {
+    if (isLocalServer(server) || (!showStatusBarLoad && !showStatusBarRam) || !server?.id) {
+      setStatusMetrics({})
+      return
+    }
+
+    let alive = true
+
+    const updateStatusMetrics = async () => {
+      try {
+        const info = await invoke("get_status_bar_info", { serverId: server.id }) as { load?: string; ram?: string }
+
+        if (!alive) return
+
+        setStatusMetrics({
+          load: info?.load != null && String(info.load).trim() ? String(info.load) : undefined,
+          ram: info?.ram != null && String(info.ram).trim() ? String(info.ram) : undefined
+        })
+      } catch {
+        if (alive) setStatusMetrics({})
+      }
+    }
+
+    updateStatusMetrics()
+    const id = window.setInterval(updateStatusMetrics, 5000)
+
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [server?.id, showStatusBarLoad, showStatusBarRam])
+
+  useEffect(() => {
+    if (isLocalServer(server) || !showStatusBarTunnel || !server?.id) {
+      setActiveTunnelLabel("")
+      return
+    }
+
+    let alive = true
+
+    const updateTunnelStatus = async () => {
+      try {
+        const [allTunnels, activeTunnels] = await Promise.all([
+          invoke("get_tunnels", { serverId: server.id }) as Promise<any[]>,
+          invoke("get_active_tunnels") as Promise<{ id: number }[]>
+        ])
+
+        if (!alive) return
+
+        const activeIds = new Set((activeTunnels || []).map((item) => item.id))
+        const activeForServer = (allTunnels || []).filter((item) => activeIds.has(item.id))
+
+        if (activeForServer.length === 0) {
+          setActiveTunnelLabel("")
+          return
+        }
+
+        if (activeForServer.length === 1) {
+          const tunnelName = activeForServer[0]?.name || "Tunnel"
+          setActiveTunnelLabel(`(${tunnelName})`)
+          return
+        }
+
+        setActiveTunnelLabel(String(activeForServer.length))
+      } catch {
+        if (alive) setActiveTunnelLabel("")
+      }
+    }
+
+    updateTunnelStatus()
+    const id = window.setInterval(updateTunnelStatus, 3000)
+
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [server?.id, showStatusBarTunnel, statusLang])
+
+  useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragRef.current) return
 
@@ -561,6 +668,11 @@ export default function TerminalPane(props: any) {
       }
     }
   }, [])
+
+  const statusBarRightItems = [
+    showStatusBarLoad && statusMetrics.load ? { kind: "load", value: statusMetrics.load } : null,
+    showStatusBarRam && statusMetrics.ram ? { kind: "ram", value: statusMetrics.ram } : null
+  ].filter(Boolean) as { kind: "load" | "ram"; value: string }[]
 
   const closePane = useCallback((targetSessionId: string) => {
     setPaneIds((prev) => {
@@ -1026,6 +1138,90 @@ export default function TerminalPane(props: any) {
           </>
         )}
       </div>
+
+      {showStatusBar && (
+        <div
+          style={{
+            minHeight: 28,
+            display: "flex",
+            alignItems: "center",
+            padding: "0 12px",
+            borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+            background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
+            fontSize: 11,
+            color: "var(--text-muted, #94a3b8)"
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            {showStatusBarSession && (
+              <span>{formatSessionDuration(sessionSeconds)}</span>
+            )}
+          </div>
+
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            {showStatusBarTunnel && activeTunnelLabel ? (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis"
+                }}
+              >
+                <Cable size={12} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{activeTunnelLabel}</span>
+              </span>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 14,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            {statusBarRightItems.map((item) => (
+              <span
+                key={`${item.kind}:${item.value}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {item.kind === "load" ? <Cpu size={12} /> : <MemoryStick size={12} />}
+                <span>{item.value}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!isLocalServer(server) && (
         <SftpPanel

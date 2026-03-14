@@ -302,7 +302,19 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
         generalDesc: "Sprache, Theme und grundlegende App Optionen.",
         interface: "Oberfläche",
         interfaceDesc: "Steuere die aktuell verfügbaren Werkzeuge in der Terminal Leiste.",
+        statusBar: "Status Bar",
+        statusBarDesc: "Lege fest, welche Infos unten im Terminal sichtbar sind.",
         terminalDesc: "Darstellung und Verhalten des Terminals.",
+        showStatusBarLabel: "Status Bar anzeigen",
+        showStatusBarLabelDesc: "Blendet die Leiste am unteren Rand des Terminals ein oder aus.",
+        showStatusBarSessionLabel: "Session Zeit anzeigen",
+        showStatusBarSessionLabelDesc: "Zeigt links die Laufzeit der aktuellen Session.",
+        showStatusBarTunnelLabel: "Tunnel Status anzeigen",
+        showStatusBarTunnelLabelDesc: "Zeigt mittig aktive Tunnel nur dann, wenn wirklich einer läuft.",
+        showStatusBarLoadLabel: "Load anzeigen",
+        showStatusBarLoadLabelDesc: "Zeigt rechts die Systemlast, sobald diese Info verfügbar ist.",
+        showStatusBarRamLabel: "RAM anzeigen",
+        showStatusBarRamLabelDesc: "Zeigt rechts die RAM Nutzung, sobald diese Info verfügbar ist.",
         sftpDesc: "Standardverhalten für den SFTP Browser.",
         keysDesc: "Verwalte deine gespeicherten SSH Schlüssel.",
         backupDescTitle: "Sichert Einstellungen, Verbindungen, Snippets und SSH Schlüssel.",
@@ -346,7 +358,19 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       generalDesc: "Language, theme and core app options.",
       interface: "Interface",
       interfaceDesc: "Control the tools that are currently available in the terminal header.",
+      statusBar: "Status Bar",
+      statusBarDesc: "Choose which details are visible at the bottom of the terminal.",
       terminalDesc: "Appearance and behavior of the terminal.",
+      showStatusBarLabel: "Show status bar",
+      showStatusBarLabelDesc: "Shows or hides the bar at the bottom of the terminal.",
+      showStatusBarSessionLabel: "Show session timer",
+      showStatusBarSessionLabelDesc: "Shows the current session duration on the left.",
+      showStatusBarTunnelLabel: "Show tunnel status",
+      showStatusBarTunnelLabelDesc: "Shows active tunnel info in the center only when a tunnel is really active.",
+      showStatusBarLoadLabel: "Show load",
+      showStatusBarLoadLabelDesc: "Shows system load on the right as soon as that info is available.",
+      showStatusBarRamLabel: "Show RAM",
+      showStatusBarRamLabelDesc: "Shows RAM usage on the right as soon as that info is available.",
       sftpDesc: "Default behavior for the SFTP browser.",
       keysDesc: "Manage your stored SSH keys.",
       backupDescTitle: "Backs up settings, connections, snippets and SSH keys.",
@@ -499,6 +523,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
 
   const navItems = [
     { id: "general", icon: Globe, label: ui.general },
+    { id: "statusbar", icon: MonitorCog, label: ui.statusBar },
     { id: "terminal", icon: TermIcon, label: t("terminal", lang) },
     { id: "sftp", icon: Folder, label: t("sftp", lang) },
     { id: "keys", icon: Key, label: t("keyManager", lang) },
@@ -682,6 +707,47 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                       {ui.terminalToolsDesc}
                     </div>
                   </div>
+                </SettingCard>
+              </>
+            )}
+
+            {activeTab === "statusbar" && (
+              <>
+                <SettingCard title={ui.statusBar} desc={ui.statusBarDesc}>
+                  <FieldRow label={ui.showStatusBarLabel} desc={ui.showStatusBarLabelDesc} first>
+                    <Toggle
+                      checked={settings.showStatusBar !== false}
+                      onChange={(next) => setSettings({ ...settings, showStatusBar: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showStatusBarSessionLabel} desc={ui.showStatusBarSessionLabelDesc}>
+                    <Toggle
+                      checked={settings.showStatusBarSession !== false}
+                      onChange={(next) => setSettings({ ...settings, showStatusBarSession: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showStatusBarTunnelLabel} desc={ui.showStatusBarTunnelLabelDesc}>
+                    <Toggle
+                      checked={settings.showStatusBarTunnel !== false}
+                      onChange={(next) => setSettings({ ...settings, showStatusBarTunnel: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showStatusBarLoadLabel} desc={ui.showStatusBarLoadLabelDesc}>
+                    <Toggle
+                      checked={settings.showStatusBarLoad !== false}
+                      onChange={(next) => setSettings({ ...settings, showStatusBarLoad: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showStatusBarRamLabel} desc={ui.showStatusBarRamLabelDesc}>
+                    <Toggle
+                      checked={settings.showStatusBarRam !== false}
+                      onChange={(next) => setSettings({ ...settings, showStatusBarRam: next })}
+                    />
+                  </FieldRow>
                 </SettingCard>
               </>
             )}
