@@ -3,6 +3,9 @@ name: Deploy homepage to GitHub Pages
 on:
   push:
     branches: ["main"]
+    paths:
+      - "homepage/**"
+      - ".github/workflows/deploy-homepage.yml"
   workflow_dispatch:
 
 permissions:

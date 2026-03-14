@@ -1,7 +1,7 @@
 import React from "react";
 const TERMINA_SAFE_RENDER = true;
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen } from 'lucide-react';
+import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -27,6 +27,7 @@ export default function App() {
   }
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [settings, setSettings] = useState(() => {
     const defaults = {
       lang: 'de',
@@ -75,6 +76,12 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings]);
   
+  useEffect(() => {
+    if (!isSidebarCollapsed) {
+      expandedSidebarWidthRef.current = sidebarWidth;
+    }
+  }, [sidebarWidth, isSidebarCollapsed]);
+
   const [openTabs, setOpenTabs] = useState<any[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [tabDragId, setTabDragId] = useState<string | null>(null);
@@ -116,6 +123,7 @@ export default function App() {
   const [sessionCloseDialogOpen, setSessionCloseDialogOpen] = useState(false);
 
   const isDragging = useRef(false);
+  const expandedSidebarWidthRef = useRef(260);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const mainClosingRef = useRef(false);
   const mainWaitingForEditorsRef = useRef(false);
@@ -375,6 +383,19 @@ export default function App() {
     return { groups: grps, rootServers: root };
   }, [connections, settings.customFolders]);
 
+  const collapsedConnections = useMemo(() => {
+    const items: any[] = [
+      { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }
+    ];
+
+    rootServers.forEach((conn: any) => items.push(conn));
+    Object.keys(groups).sort().forEach((group) => {
+      groups[group].forEach((conn: any) => items.push(conn));
+    });
+
+    return items;
+  }, [rootServers, groups]);
+
   const activeTab = useMemo(
     () => openTabs.find((tab: any) => tab.tabId === activeTabId) || null,
     [openTabs, activeTabId]
@@ -394,6 +415,17 @@ export default function App() {
     window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp);
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, []);
+
+  const toggleSidebarCollapse = () => {
+    if (isSidebarCollapsed) {
+      setIsSidebarCollapsed(false);
+      setSidebarWidth(expandedSidebarWidthRef.current || 260);
+      return;
+    }
+
+    expandedSidebarWidthRef.current = sidebarWidth;
+    setIsSidebarCollapsed(true);
+  };
 
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -574,182 +606,273 @@ export default function App() {
     <div className="flex h-screen w-full font-sans overflow-hidden relative">
       <GlobalDialog dialog={dialog} onClose={() => setDialog({...dialog, isOpen: false})} />
 
-      <div style={{ width: sidebarWidth }} className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl">
-        <div className="h-[80px] flex items-center pl-1 pr-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
-          <img src="/app-icon.svg" alt="logo" className="w-[58px] h-[58px] object-contain mr-1 shrink-0" onError={(e) => e.currentTarget.style.display = 'none'} />
-          <div className="flex-1 flex items-center justify-center self-stretch min-w-0">
-            <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none text-center">Termina SSH</span>
-          </div>
-          <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0"><Home size={18}/></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-3 min-h-0">
-          <div>
-            <div className="flex items-center justify-between px-2 py-1 mb-2 rounded-xl hover:bg-[var(--bg-hover)] transition-colors">
-              <h3 className="text-[11px] uppercase tracking-[0.08em] font-bold text-[var(--text-muted)] w-full py-1">{t('connections', settings.lang)}</h3>
-              <div className="flex gap-1">
-                <button onClick={() => { setServerToEdit(null); setConnModalOpen(true); }} className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]" title={t('newConn', settings.lang)}><Plus size={16} /></button>
-              </div>
-            </div>
-            
-            <div className="flex flex-col gap-0.5 rounded-xl">
-              <div
-                className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
-                  isLocalActive
-                    ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
-                    : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
-                }`}
+      <div style={{ width: isSidebarCollapsed ? 76 : sidebarWidth }} className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl">
+        {isSidebarCollapsed ? (
+          <div className="px-3 pt-3 pb-2 shrink-0">
+            <div className="flex justify-center">
+              <button
+                onClick={() => setActiveTabId(null)}
+                className="ui-icon-btn shrink-0"
+                title="Home"
               >
+                <Home size={18} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="h-[80px] flex items-center pl-1 pr-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
+            <img
+              src="/app-icon.svg"
+              alt="logo"
+              className="w-[58px] h-[58px] object-contain mr-1 shrink-0"
+              onError={(e) => e.currentTarget.style.display = 'none'}
+            />
+            <div className="flex-1 flex items-center justify-center self-stretch min-w-0">
+              <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none text-center">
+                Termina SSH
+              </span>
+            </div>
+            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0" title="Home">
+              <Home size={18} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto py-2 px-3 flex flex-col gap-3 min-h-0">
+          <div>
+            <div className={`flex items-center px-2 py-1 mb-2 rounded-xl hover:bg-[var(--bg-hover)] transition-colors ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+              {!isSidebarCollapsed && (
+                <h3 className="text-[11px] uppercase tracking-[0.08em] font-bold text-[var(--text-muted)] w-full py-1">
+                  {t('connections', settings.lang)}
+                </h3>
+              )}
+              <div className="flex gap-1">
                 <button
-                  onClick={() => openTerminal({ id: 'local', isLocal: true, name: 'Local Session', username: 'local', host: 'localhost' })}
-                  className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
-                    isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                  }`}
+                  onClick={() => { setServerToEdit(null); setConnModalOpen(true); }}
+                  className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+                  title={t('newConn', settings.lang)}
                 >
-                  <div
-                    className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
-                      isLocalActive
-                        ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
-                        : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
-                  </div>
-                  <span className="truncate font-medium min-w-0">Local Session</span>
+                  <Plus size={16} />
                 </button>
               </div>
+            </div>
 
-              {rootServers.length === 0 && Object.keys(groups).length === 0 && (
-                <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-4 py-5 text-center">
-                  <div className="text-sm font-semibold text-[var(--text-main)]">
-                    {t('noConnectionsYet', settings.lang)}
-                  </div>
-                  <div className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">
-                    {t('noConnectionsHint', settings.lang)}
-                  </div>
-                </div>
-              )}
+            {isSidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-1.5 rounded-xl">
+                {collapsedConnections.map((conn: any, idx: number) => {
+                  const localItem = !!conn?.isLocal || conn?.id === 'local'
+                  const active = localItem ? isLocalActive : isServerActive(conn)
 
-              {rootServers.map((conn: any) => {
-                const active = isServerActive(conn);
-
-                return (
-                  <div
-                    key={conn.id}
-                    className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
-                      active
-                        ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
-                        : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
-                    }`}
-                  >
+                  return (
                     <button
-                      onClick={() => openTerminal(conn)}
-                      className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
-                        active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                      key={`${conn.id || conn.name || 'item'}_${idx}`}
+                      onClick={() => openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
+                      title={conn.name}
+                      className={`group/item flex items-center justify-center w-full h-9 rounded-xl border transition-all ${
+                        active
+                          ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
+                          : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
                       }`}
                     >
                       <div
-                        className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
+                        className={`flex items-center justify-center w-6 h-6 rounded-md border shrink-0 ${
                           active
                             ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
                             : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
                         }`}
                       >
-                        <Server size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                        {localItem ? (
+                          <TermIcon size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                        ) : (
+                          <Server size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                        )}
                       </div>
-                      <span className="truncate font-medium min-w-0">{conn.name}</span>
                     </button>
-                    <button
-                      onClick={() => { setServerToEdit(conn); setConnModalOpen(true); }}
-                      className={`${active ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} ui-icon-btn shrink-0 transition-all focus-visible:opacity-100`}
-                      title={t('settings', settings.lang)}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-0.5 rounded-xl">
+                <div
+                  className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
+                    isLocalActive
+                      ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
+                      : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
+                  }`}
+                >
+                  <button
+                    onClick={() => openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
+                    className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
+                      isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                    }`}
+                  >
+                    <div
+                      className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
+                        isLocalActive
+                          ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
+                          : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
+                      }`}
                     >
-                      <SquarePen size={13} />
-                    </button>
+                      <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                    </div>
+                    <span className="truncate font-medium min-w-0">Local Terminal</span>
+                  </button>
+                </div>
+
+                {rootServers.length === 0 && Object.keys(groups).length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-4 py-5 text-center">
+                    <div className="text-sm font-semibold text-[var(--text-main)]">
+                      {t('noConnectionsYet', settings.lang)}
+                    </div>
+                    <div className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">
+                      {t('noConnectionsHint', settings.lang)}
+                    </div>
                   </div>
-                );
-              })}
+                )}
 
-              {Object.keys(groups).sort().map(group => {
-                const isCollapsed = collapsedFolders[group];
-                return (
-                  <div key={group}>
-                    <button
-                      onClick={() => setCollapsedFolders({...collapsedFolders, [group]: !isCollapsed})}
-                      className="flex items-center justify-between px-2.5 py-0.5 w-full rounded-xl border border-transparent transition-all group/folder mt-1 hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+                {rootServers.map((conn: any) => {
+                  const active = isServerActive(conn);
+
+                  return (
+                    <div
+                      key={conn.id}
+                      className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
+                        active
+                          ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
+                          : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
+                      }`}
                     >
-                      <div className="flex items-center gap-1.5 min-w-0 text-[var(--text-muted)]">
-                        {isCollapsed ? <ChevronRight size={12} className="text-[var(--accent)] shrink-0" /> : <ChevronDown size={12} className="text-[var(--accent)] shrink-0" />}
-                        <Folder size={12} className="text-[var(--accent)] shrink-0" />
-                        <span className="truncate text-[10px] font-semibold min-w-0 text-[var(--text-muted)]">{group}</span>
-                      </div>
-                      {groups[group].length === 0 && (
-                         <span
-                           onClick={(e) => { e.stopPropagation(); setSettings({...settings, customFolders: settings.customFolders.filter((f:string)=>f!==group)}); }}
-                           className="opacity-0 group-hover/folder:opacity-100 text-[var(--danger)] transition-all focus-visible:opacity-100 flex items-center justify-center shrink-0"
-                           style={{ width: 18, height: 18, borderRadius: 6 }}
-                         >
-                           <X size={10}/>
-                         </span>
-                      )}
-                    </button>
-                    {!isCollapsed && (
-                      <div className="flex flex-col gap-0 ml-3 border-l border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] pl-2 mt-0.5">
-                        {groups[group].map((conn: any) => {
-                          const active = isServerActive(conn);
+                      <button
+                        onClick={() => openTerminal(conn)}
+                        className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
+                          active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                        }`}
+                      >
+                        <div
+                          className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
+                            active
+                              ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
+                              : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
+                          }`}
+                        >
+                          <Server size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                        </div>
+                        <span className="truncate font-medium min-w-0">{conn.name}</span>
+                      </button>
+                      <button
+                        onClick={() => { setServerToEdit(conn); setConnModalOpen(true); }}
+                        className={`${active ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} ui-icon-btn shrink-0 transition-all focus-visible:opacity-100`}
+                        title={t('settings', settings.lang)}
+                      >
+                        <SquarePen size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
 
-                          return (
-                            <div
-                              key={conn.id}
-                              className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-1.5 py-0 ${
-                                active
-                                  ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
-                                  : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
-                              }`}
-                            >
-                              <button
-                                onClick={() => openTerminal(conn)}
-                                className={`flex items-center flex-1 min-w-0 text-left px-1 py-1 rounded-xl ${
-                                  active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                {Object.keys(groups).sort().map(group => {
+                  const isCollapsed = collapsedFolders[group];
+                  return (
+                    <div key={group}>
+                      <button
+                        onClick={() => setCollapsedFolders({...collapsedFolders, [group]: !isCollapsed})}
+                        className="flex items-center justify-between px-2.5 py-0.5 w-full rounded-xl border border-transparent transition-all group/folder mt-1 hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 text-[var(--text-muted)]">
+                          {isCollapsed ? <ChevronRight size={12} className="text-[var(--accent)] shrink-0" /> : <ChevronDown size={12} className="text-[var(--accent)] shrink-0" />}
+                          <Folder size={12} className="text-[var(--accent)] shrink-0" />
+                          <span className="truncate text-[10px] font-semibold min-w-0 text-[var(--text-muted)]">{group}</span>
+                        </div>
+                        {groups[group].length === 0 && (
+                           <span
+                             onClick={(e) => { e.stopPropagation(); setSettings({...settings, customFolders: settings.customFolders.filter((f:string)=>f!==group)}); }}
+                             className="opacity-0 group-hover/folder:opacity-100 text-[var(--danger)] transition-all focus-visible:opacity-100 flex items-center justify-center shrink-0"
+                             style={{ width: 18, height: 18, borderRadius: 6 }}
+                           >
+                             <X size={10}/>
+                           </span>
+                        )}
+                      </button>
+                      {!isCollapsed && (
+                        <div className="flex flex-col gap-0 ml-3 border-l border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] pl-2 mt-0.5">
+                          {groups[group].map((conn: any) => {
+                            const active = isServerActive(conn);
+
+                            return (
+                              <div
+                                key={conn.id}
+                                className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-1.5 py-0 ${
+                                  active
+                                    ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
+                                    : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
                                 }`}
                               >
-                                <div
-                                  className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
-                                    active
-                                      ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
-                                      : 'bg-[var(--bg-app)] border-[var(--border-subtle)]'
+                                <button
+                                  onClick={() => openTerminal(conn)}
+                                  className={`flex items-center flex-1 min-w-0 text-left px-1 py-1 rounded-xl ${
+                                    active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                                   }`}
                                 >
-                                  <Server size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
-                                </div>
-                                <span className="truncate font-medium min-w-0">{conn.name}</span>
-                              </button>
-                              <button
-                                onClick={() => { setServerToEdit(conn); setConnModalOpen(true); }}
-                                className={`${active ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} ui-icon-btn shrink-0 transition-all`}
-                                title={t('settings', settings.lang)}
-                              >
-                                <SquarePen size={13} />
-                              </button>
-                            </div>
-                          );
-                        })}
-
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                                  <div
+                                    className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
+                                      active
+                                        ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
+                                        : 'bg-[var(--bg-app)] border-[var(--border-subtle)]'
+                                    }`}
+                                  >
+                                    <Server size={12} className={active ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                                  </div>
+                                  <span className="truncate font-medium min-w-0">{conn.name}</span>
+                                </button>
+                                <button
+                                  onClick={() => { setServerToEdit(conn); setConnModalOpen(true); }}
+                                  className={`${active ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} ui-icon-btn shrink-0 transition-all`}
+                                  title={t('settings', settings.lang)}
+                                >
+                                  <SquarePen size={13} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-        
-        <div className="p-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0 flex justify-center">
-           <button onClick={() => setIsSettingsOpen(true)} className="flex items-center justify-center gap-2.5 w-full min-h-9 px-3 rounded-xl bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]">
-             <Settings size={16} /> {t('settings', settings.lang)}
-           </button>
+
+        <div className="p-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
+          <div className={`flex ${isSidebarCollapsed ? 'flex-col items-center gap-2' : 'items-center gap-2'}`}>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={isSidebarCollapsed
+                ? "ui-icon-btn shrink-0"
+                : "flex items-center justify-center gap-2.5 flex-1 min-h-9 px-3 rounded-xl bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+              }
+              title={t('settings', settings.lang)}
+            >
+              <Settings size={16} />
+              {!isSidebarCollapsed && <span>{t('settings', settings.lang)}</span>}
+            </button>
+
+            <button
+              onClick={toggleSidebarCollapse}
+              className="ui-icon-btn shrink-0"
+              title={isSidebarCollapsed
+                ? (settings.lang === 'de' ? 'Sidebar ausklappen' : 'Expand sidebar')
+                : (settings.lang === 'de' ? 'Sidebar einklappen' : 'Collapse sidebar')}
+            >
+              {isSidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            </button>
+          </div>
         </div>
-        <div className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10" onMouseDown={() => { isDragging.current = true; document.body.style.cursor = 'col-resize'; }} />
+
+        {!isSidebarCollapsed && (
+          <div className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10" onMouseDown={() => { isDragging.current = true; document.body.style.cursor = 'col-resize'; }} />
+        )}
         <div className="absolute top-0 right-0 w-[1px] h-full bg-[var(--border-subtle)] pointer-events-none" />
       </div>
 
