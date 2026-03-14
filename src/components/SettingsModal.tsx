@@ -292,7 +292,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
   const [activeTab, setActiveTab] = useState("general");
   const [keys, setKeys] = useState<any[]>([]);
 
-  const lang = settings?.lang || "de";
+  const lang = settings?.lang || "en";
 
   const ui = useMemo(() => {
     if (lang === "de") {
@@ -302,6 +302,16 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
         generalDesc: "Sprache, Theme und grundlegende App Optionen.",
         interface: "Oberfläche",
         interfaceDesc: "Steuere die aktuell verfügbaren Werkzeuge in der Terminal Leiste.",
+        dashboardTitle: "Dashboard",
+        dashboardDesc: "Lege fest, welche Bereiche auf der Startseite sichtbar sind.",
+        showDashboardQuickConnectLabel: "Quick Connect anzeigen",
+        showDashboardQuickConnectDesc: "Blendet die Quick Connect Box auf der Startseite ein oder aus.",
+        showDashboardWorkflowLabel: "Workflow Übersicht anzeigen",
+        showDashboardWorkflowDesc: "Zeigt die große Workflow Box mit Local Terminal und den Kennzahlen.",
+        showDashboardActiveSessionsLabel: "Active Sessions anzeigen",
+        showDashboardActiveSessionsDesc: "Blendet die Box mit den aktuell offenen Sessions ein oder aus.",
+        showDashboardRecentConnectionsLabel: "Recent Connections anzeigen",
+        showDashboardRecentConnectionsDesc: "Blendet die Box mit den zuletzt verwendeten Verbindungen ein oder aus.",
         statusBar: "Status Bar",
         statusBarDesc: "Lege fest, welche Infos unten im Terminal sichtbar sind.",
         terminalDesc: "Darstellung und Verhalten des Terminals.",
@@ -322,6 +332,8 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
         aboutDesc: "Projektinfo, kurzer Überblick und Support Link.",
         appLanguageDesc: "Sprache der Oberfläche.",
         themeDesc: "Aktuelles Farbschema der App.",
+        closeToTrayLabel: "In Tray schließen",
+        closeToTrayDesc: "Fenster beim Schließen ausblenden. Beenden über den Tray.",
         terminalToolsDesc: "Aktuell werden nur wirklich funktionierende Werkzeuge angezeigt.",
         fontSizeDesc: "Schriftgröße im Terminal.",
         scrollbackDesc: "Wie viele Zeilen im Verlauf gehalten werden.",
@@ -358,6 +370,16 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       generalDesc: "Language, theme and core app options.",
       interface: "Interface",
       interfaceDesc: "Control the tools that are currently available in the terminal header.",
+      dashboardTitle: "Dashboard",
+      dashboardDesc: "Choose which sections are visible on the start page.",
+      showDashboardQuickConnectLabel: "Show Quick Connect",
+      showDashboardQuickConnectDesc: "Shows or hides the Quick Connect box on the start page.",
+      showDashboardWorkflowLabel: "Show workflow overview",
+      showDashboardWorkflowDesc: "Shows the large workflow box with Local Terminal and the quick counters.",
+      showDashboardActiveSessionsLabel: "Show Active Sessions",
+      showDashboardActiveSessionsDesc: "Shows or hides the card with the currently open sessions.",
+      showDashboardRecentConnectionsLabel: "Show Recent Connections",
+      showDashboardRecentConnectionsDesc: "Shows or hides the card with the recently used connections.",
       statusBar: "Status Bar",
       statusBarDesc: "Choose which details are visible at the bottom of the terminal.",
       terminalDesc: "Appearance and behavior of the terminal.",
@@ -378,6 +400,8 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       aboutDesc: "Project info, short overview and support link.",
       appLanguageDesc: "Language of the interface.",
       themeDesc: "Current color theme of the app.",
+      closeToTrayLabel: "Close to tray",
+      closeToTrayDesc: "Hide window on close. Quit from tray.",
       terminalToolsDesc: "Only tools that are already fully working are shown here right now.",
       fontSizeDesc: "Terminal font size.",
       scrollbackDesc: "How many lines are kept in history.",
@@ -575,18 +599,6 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
               flexShrink: 0
             }}
           >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--text-muted)",
-                padding: "4px 8px 7px 8px"
-              }}
-            >
-              Navigation
-            </div>
 
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -662,6 +674,13 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                       <option value="pitch-black">Pitch Black</option>
                     </select>
                   </FieldRow>
+
+                  <FieldRow label={ui.closeToTrayLabel} desc={ui.closeToTrayDesc}>
+                    <Toggle
+                      checked={Boolean(settings.closeToTray)}
+                      onChange={(next) => setSettings({ ...settings, closeToTray: next })}
+                    />
+                  </FieldRow>
                 </SettingCard>
 
                 <SettingCard title={ui.interface} desc={ui.interfaceDesc}>
@@ -707,6 +726,36 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                       {ui.terminalToolsDesc}
                     </div>
                   </div>
+                </SettingCard>
+
+                <SettingCard title={ui.dashboardTitle} desc={ui.dashboardDesc}>
+                  <FieldRow label={ui.showDashboardQuickConnectLabel} desc={ui.showDashboardQuickConnectDesc} first>
+                    <Toggle
+                      checked={settings.showDashboardQuickConnect !== false}
+                      onChange={(next) => setSettings({ ...settings, showDashboardQuickConnect: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showDashboardWorkflowLabel} desc={ui.showDashboardWorkflowDesc}>
+                    <Toggle
+                      checked={settings.showDashboardWorkflow !== false}
+                      onChange={(next) => setSettings({ ...settings, showDashboardWorkflow: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showDashboardActiveSessionsLabel} desc={ui.showDashboardActiveSessionsDesc}>
+                    <Toggle
+                      checked={settings.showDashboardActiveSessions !== false}
+                      onChange={(next) => setSettings({ ...settings, showDashboardActiveSessions: next })}
+                    />
+                  </FieldRow>
+
+                  <FieldRow label={ui.showDashboardRecentConnectionsLabel} desc={ui.showDashboardRecentConnectionsDesc}>
+                    <Toggle
+                      checked={settings.showDashboardRecentConnections !== false}
+                      onChange={(next) => setSettings({ ...settings, showDashboardRecentConnections: next })}
+                    />
+                  </FieldRow>
                 </SettingCard>
               </>
             )}

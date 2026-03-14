@@ -5,6 +5,7 @@ import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronR
 import { invoke } from '@tauri-apps/api/core';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import { t } from './lib/i18n';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -30,7 +31,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [settings, setSettings] = useState(() => {
     const defaults = {
-      lang: 'de',
+      lang: 'en',
       theme: 'catppuccin',
       fontSize: 14,
       cursorStyle: 'bar',
@@ -42,6 +43,11 @@ export default function App() {
       showSftp: true,
       showTunnels: true,
       showSearch: true,
+      showDashboardQuickConnect: true,
+      showDashboardWorkflow: true,
+      showDashboardActiveSessions: true,
+      showDashboardRecentConnections: true,
+      closeToTray: false,
       customFolders: []
     };
 
@@ -64,6 +70,11 @@ export default function App() {
         showSftp: parsed.showSftp !== false,
         showTunnels: parsed.showTunnels !== false,
         showSearch: parsed.showSearch !== false,
+        showDashboardQuickConnect: parsed.showDashboardQuickConnect !== false,
+        showDashboardWorkflow: parsed.showDashboardWorkflow !== false,
+        showDashboardActiveSessions: parsed.showDashboardActiveSessions !== false,
+        showDashboardRecentConnections: parsed.showDashboardRecentConnections !== false,
+        closeToTray: parsed.closeToTray === true,
         customFolders: Array.isArray(parsed.customFolders) ? parsed.customFolders : []
       };
     } catch {
@@ -75,6 +86,10 @@ export default function App() {
     localStorage.setItem('termina_settings', JSON.stringify(settings));
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings]);
+
+  useEffect(() => {
+    invoke("set_tray_visible", { visible: Boolean(settings.closeToTray) }).catch(() => {});
+  }, [settings.closeToTray]);
   
   useEffect(() => {
     if (!isSidebarCollapsed) {
@@ -84,6 +99,7 @@ export default function App() {
 
   const [openTabs, setOpenTabs] = useState<any[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [lastActiveConnectionId, setLastActiveConnectionId] = useState<string | null>(null);
   const [tabDragId, setTabDragId] = useState<string | null>(null);
   const [tabDropId, setTabDropId] = useState<string | null>(null);
   const [tabPointerDragging, setTabPointerDragging] = useState(false);
@@ -124,6 +140,7 @@ export default function App() {
 
   const isDragging = useRef(false);
   const expandedSidebarWidthRef = useRef(260);
+  const settingsRef = useRef(settings);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const mainClosingRef = useRef(false);
   const mainWaitingForEditorsRef = useRef(false);
@@ -143,6 +160,10 @@ export default function App() {
   useEffect(() => {
     mainCloseDialogBusyRef.current = mainCloseDialogBusy;
   }, [mainCloseDialogBusy]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const closeInputMenu = () => {
     setInputMenu({ open: false, x: 0, y: 0, target: null });
@@ -349,6 +370,11 @@ export default function App() {
 
       if (mainCloseDialogBusyRef.current) return
 
+      if (settingsRef.current?.closeToTray) {
+        await win.hide()
+        return
+      }
+
       const currentTabs = openTabsRef.current
 
       if (currentTabs.length > 0) {
@@ -363,6 +389,30 @@ export default function App() {
 
     return () => {
       if (unlisten) unlisten()
+    }
+  }, [])
+
+  useEffect(() => {
+    let unlistenTrayQuit: (() => void) | undefined
+
+    listen("tray-quit-requested", async () => {
+      if (mainClosingRef.current) return
+      if (mainCloseDialogBusyRef.current) return
+
+      const currentTabs = openTabsRef.current
+
+      if (currentTabs.length > 0) {
+        setSessionCloseDialogOpen(true)
+        return
+      }
+
+      await continueMainCloseFlow()
+    }).then((fn) => {
+      unlistenTrayQuit = fn
+    }).catch(console.error)
+
+    return () => {
+      if (unlistenTrayQuit) unlistenTrayQuit()
     }
   }, [])
 
@@ -401,9 +451,23 @@ export default function App() {
     [openTabs, activeTabId]
   );
 
-  const activeConnectionId = activeTab?.isLocal ? "__local__" : activeTab?.id ?? null;
-  const isLocalActive = activeConnectionId === "__local__";
-  const isServerActive = (conn: any) => activeConnectionId != null && String(activeConnectionId) === String(conn.id);
+  useEffect(() => {
+    if (!activeTab) return;
+
+    if (activeTab.isLocal) {
+      setLastActiveConnectionId("__local__");
+      return;
+    }
+
+    if (activeTab.id != null) {
+      setLastActiveConnectionId(String(activeTab.id));
+    }
+  }, [activeTab]);
+
+  const activeConnectionId = activeTab?.isLocal ? "__local__" : activeTab?.id != null ? String(activeTab.id) : null;
+  const sidebarActiveConnectionId = activeConnectionId ?? lastActiveConnectionId;
+  const isLocalActive = sidebarActiveConnectionId === "__local__";
+  const isServerActive = (conn: any) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
   const draggedTabGhost = useMemo(
     () => openTabs.find((tab: any) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
@@ -486,6 +550,34 @@ export default function App() {
   }, [settings.lang, inputMenu.target]);
 
   const openTerminal = (server: any) => {
+    const findExistingTabId = () => {
+      if (server?.isQuickConnect) return null;
+
+      const wantsLocal =
+        !!server?.isLocal ||
+        server?.id === 'local' ||
+        server?.name === 'Local Terminal' ||
+        server?.host === 'localhost';
+
+      if (wantsLocal) {
+        const existingLocal = openTabs.find((tab: any) => tab?.isLocal);
+        return existingLocal?.tabId || null;
+      }
+
+      if (server?.id != null) {
+        const existingServer = openTabs.find((tab: any) => String(tab?.id) === String(server.id));
+        return existingServer?.tabId || null;
+      }
+
+      return null;
+    };
+
+    const existingTabId = findExistingTabId();
+    if (existingTabId) {
+      setActiveTabId(existingTabId);
+      return;
+    }
+
     if (server?.isQuickConnect && server?.quickConnectNeedsPassword) {
       showDialog({
         type: "prompt",
@@ -620,19 +712,19 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div className="h-[80px] flex items-center pl-1 pr-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
+          <div className="h-[80px] grid grid-cols-[52px_minmax(0,1fr)_36px] items-center px-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
             <img
               src="/app-icon.svg"
               alt="logo"
-              className="w-[58px] h-[58px] object-contain mr-1 shrink-0"
+              className="w-[52px] h-[52px] object-contain justify-self-start"
               onError={(e) => e.currentTarget.style.display = 'none'}
             />
-            <div className="flex-1 flex items-center justify-center self-stretch min-w-0">
+            <div className="flex items-center justify-center min-w-0">
               <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none text-center">
                 Termina SSH
               </span>
             </div>
-            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0" title="Home">
+            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0 justify-self-end" title="Home">
               <Home size={18} />
             </button>
           </div>
@@ -933,6 +1025,7 @@ export default function App() {
            <div className={`absolute inset-0 ${!activeTabId ? 'block' : 'hidden'}`}>
               <Dashboard
                 lang={settings.lang}
+                settings={settings}
                 openTerminal={openTerminal}
                 activeTabs={openTabs}
                 recentConns={connections.slice(0, 5)}

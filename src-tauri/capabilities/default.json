@@ -2,7 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability for Termina",
-  "windows": ["main", "sftp-editor-*"],
+  "windows": [
+    "main",
+    "sftp-editor-*"
+  ],
   "permissions": [
     "core:default",
     "core:webview:allow-create-webview-window",
@@ -13,6 +16,7 @@
     "dialog:default",
     "dialog:allow-confirm",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "core:window:allow-hide"
   ]
 }

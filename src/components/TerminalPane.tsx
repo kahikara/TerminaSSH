@@ -499,7 +499,7 @@ export default function TerminalPane(props: any) {
   const showStatusBarTunnel = settings.showStatusBarTunnel !== false
   const showStatusBarLoad = settings.showStatusBarLoad !== false
   const showStatusBarRam = settings.showStatusBarRam !== false
-  const statusLang = settings?.lang || "de"
+  const statusLang = settings?.lang || "en"
 
   useEffect(() => {
     paneIdsRef.current = paneIds
@@ -887,7 +887,7 @@ export default function TerminalPane(props: any) {
           {showSearchBtn && (
             <button
               onClick={toggleSearchBar}
-              title={t("search", settings?.lang || "de")}
+              title={t("search", settings?.lang || "en")}
               style={{
                 ...iconOnlyBtnStyle,
                 background: showSearch ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -1054,7 +1054,7 @@ export default function TerminalPane(props: any) {
                 runSearch(e.shiftKey, undefined, false)
               }
             }}
-            placeholder={t("search", settings?.lang || "de")}
+            placeholder={t("search", settings?.lang || "en")}
             style={searchInputStyle}
           />
 
@@ -1076,7 +1076,7 @@ export default function TerminalPane(props: any) {
 
           <button
             onClick={closeSearchBar}
-            title={t("close", settings?.lang || "de")}
+            title={t("close", settings?.lang || "en")}
             style={iconOnlyBtnStyle}
           >
             <X size={13} />
@@ -1103,7 +1103,7 @@ export default function TerminalPane(props: any) {
             settings={settings}
             onClose={() => closePane(paneIds[0])}
             showToast={props.showToast}
-            lang={settings?.lang || "de"}
+            lang={settings?.lang || "en"}
             onFocus={() => setFocusedPaneId(paneIds[0])}
           />
         </div>
@@ -1131,7 +1131,7 @@ export default function TerminalPane(props: any) {
                 settings={settings}
                 onClose={() => closePane(paneIds[1])}
                 showToast={props.showToast}
-                lang={settings?.lang || "de"}
+                lang={settings?.lang || "en"}
                 onFocus={() => setFocusedPaneId(paneIds[1])}
               />
             </div>
@@ -1226,7 +1226,7 @@ export default function TerminalPane(props: any) {
       {!isLocalServer(server) && (
         <SftpPanel
           server={server}
-          lang={settings?.lang || "de"}
+          lang={settings?.lang || "en"}
           visible={showSftp}
           onClose={() => setShowSftp(false)}
         />
@@ -1234,7 +1234,7 @@ export default function TerminalPane(props: any) {
 
       {!isLocalServer(server) && (
         <SnippetsPanel
-          lang={settings?.lang || "de"}
+          lang={settings?.lang || "en"}
           showDialog={props.showDialog}
           visible={showSnippets}
           onClose={() => setShowSnippets(false)}
@@ -1264,7 +1264,7 @@ export default function TerminalPane(props: any) {
       {!isLocalServer(server) && (
         <NotesPanel
           server={server}
-          lang={settings?.lang || "de"}
+          lang={settings?.lang || "en"}
           visible={showNotes}
           onClose={() => setShowNotes(false)}
           showDialog={props.showDialog}

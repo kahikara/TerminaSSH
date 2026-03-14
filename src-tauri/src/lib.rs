@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use rusqlite::Connection;
 use tauri::{AppHandle, Emitter, State, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
 use ssh2::Session;
 use std::net::{TcpStream, TcpListener, ToSocketAddrs};
 use std::io::{Read, Write};
@@ -930,6 +932,7 @@ pub fn run() {
             get_tunnels, save_tunnel, update_tunnel, delete_tunnel,
             open_external_url,
             copy_text_to_clipboard,
+            set_tray_visible,
             start_tunnel,
             stop_tunnel,
             get_active_tunnels])
@@ -939,6 +942,57 @@ pub fn run() {
                 let version = app.package_info().version.to_string();
                 let _ = window.set_title(&format!("Termina SSH v{}", version)); 
             }
+
+            let show_item = MenuItem::with_id(app, "tray_show", "Show", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let tray_builder = TrayIconBuilder::with_id("main-tray")
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "tray_show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "tray_quit" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                        let _ = app.emit("tray-quit-requested", true);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
+
+            let tray_result = if let Some(icon) = app.default_window_icon().cloned() {
+                tray_builder.icon(icon).build(app)
+            } else {
+                tray_builder.build(app)
+            };
+
+            if let Ok(tray) = tray_result {
+                let _ = tray.set_visible(false);
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -955,4 +1009,12 @@ fn open_external_url(_app: tauri::AppHandle, url: String) -> Result<(), String> 
 #[tauri::command]
 fn copy_text_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
     app.clipboard().write_text(text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_tray_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_visible(visible).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
