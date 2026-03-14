@@ -464,6 +464,21 @@ export default function App() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (lastActiveConnectionId == null) return;
+
+    const stillOpen = openTabs.some((tab: any) => {
+      if (lastActiveConnectionId === "__local__") {
+        return !!tab?.isLocal;
+      }
+      return tab?.id != null && String(tab.id) === String(lastActiveConnectionId);
+    });
+
+    if (!stillOpen) {
+      setLastActiveConnectionId(null);
+    }
+  }, [openTabs, lastActiveConnectionId]);
+
   const activeConnectionId = activeTab?.isLocal ? "__local__" : activeTab?.id != null ? String(activeTab.id) : null;
   const sidebarActiveConnectionId = activeConnectionId ?? lastActiveConnectionId;
   const isLocalActive = sidebarActiveConnectionId === "__local__";
