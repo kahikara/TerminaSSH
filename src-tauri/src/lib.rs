@@ -13,7 +13,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -64,6 +64,46 @@ pub struct SnippetItem {
     id: i32,
     name: String,
     command: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupSnippet {
+    name: String,
+    command: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupConnection {
+    name: String,
+    host: String,
+    port: u16,
+    username: String,
+    password: String,
+    private_key: String,
+    passphrase: String,
+    group_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupSshKey {
+    name: String,
+    public_key: String,
+    key_type: String,
+    fingerprint: String,
+    original_path: String,
+    private_key_content_base64: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupBundleV3 {
+    version: u32,
+    #[serde(rename = "exportedAt")]
+    exported_at: String,
+    settings: serde_json::Value,
+    connections: Vec<BackupConnection>,
+    snippets: Vec<BackupSnippet>,
+    #[serde(rename = "sshKeys")]
+    ssh_keys: Vec<BackupSshKey>,
 }
 
 #[derive(Debug, Serialize)]
@@ -265,6 +305,21 @@ fn get_or_create_key() -> [u8; 32] {
     OsRng.fill_bytes(&mut key);
     fs::write(key_path, STANDARD.encode(key)).unwrap_or_default();
     key
+}
+
+fn read_file_base64_if_exists(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if !Path::new(trimmed).exists() {
+        return String::new();
+    }
+
+    fs::read(trimmed)
+        .map(|bytes| STANDARD.encode(bytes))
+        .unwrap_or_default()
 }
 
 fn encrypt_pw(pw: &str) -> String {
@@ -510,6 +565,131 @@ fn fingerprint_for_pubkey_path(pub_path: &str) -> String {
         }
         _ => String::new(),
     }
+}
+
+#[tauri::command]
+fn get_managed_keys_dir() -> Result<String, String> {
+    Ok(get_keys_dir())
+}
+
+#[tauri::command]
+fn export_backup_bundle(settings_json: String) -> Result<String, String> {
+    let settings = if settings_json.trim().is_empty() {
+        serde_json::json!({})
+    } else {
+        serde_json::from_str::<serde_json::Value>(&settings_json)
+            .map_err(|e| format!("Invalid settings JSON: {}", e))?
+    };
+
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+
+    let mut connections = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT name, host, port, username, password, private_key, passphrase, group_name FROM connections ORDER BY name ASC")
+            .map_err(|e| e.to_string())?;
+
+        let iter = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, u16>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        for item in iter {
+            let (name, host, port, username, enc_pw, private_key, enc_passphrase, group_name) =
+                item.map_err(|e| e.to_string())?;
+
+            connections.push(BackupConnection {
+                name,
+                host,
+                port,
+                username,
+                password: decrypt_pw(&enc_pw)?,
+                private_key,
+                passphrase: decrypt_pw(&enc_passphrase)?,
+                group_name,
+            });
+        }
+    }
+
+    let mut snippets = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT name, command FROM snippets ORDER BY name ASC")
+            .map_err(|e| e.to_string())?;
+
+        let iter = stmt
+            .query_map([], |row| {
+                Ok(BackupSnippet {
+                    name: row.get(0)?,
+                    command: row.get(1)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+
+        for item in iter {
+            snippets.push(item.map_err(|e| e.to_string())?);
+        }
+    }
+
+    let mut ssh_keys = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare("SELECT name, public_key, private_key_path, key_type, fingerprint FROM ssh_keys ORDER BY name ASC")
+            .map_err(|e| e.to_string())?;
+
+        let iter = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+
+        for item in iter {
+            let (name, public_key, original_path, key_type, fingerprint) =
+                item.map_err(|e| e.to_string())?;
+
+            ssh_keys.push(BackupSshKey {
+                name,
+                public_key,
+                key_type,
+                fingerprint,
+                private_key_content_base64: read_file_base64_if_exists(&original_path),
+                original_path,
+            });
+        }
+    }
+
+    let exported_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs()
+        .to_string();
+
+    let bundle = BackupBundleV3 {
+        version: 3,
+        exported_at,
+        settings,
+        connections,
+        snippets,
+        ssh_keys,
+    };
+
+    serde_json::to_string_pretty(&bundle).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1727,6 +1907,8 @@ pub fn run() {
             add_snippet,
             update_snippet,
             delete_snippet,
+            get_managed_keys_dir,
+            export_backup_bundle,
             get_ssh_keys,
             save_ssh_key,
             delete_ssh_key,
