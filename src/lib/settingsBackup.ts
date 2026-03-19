@@ -11,10 +11,86 @@ type BackupDeps = {
   lang: string
 }
 
+type BackupNote = {
+  storage_key: string
+  content: string
+}
+
+const NOTES_STORAGE_PREFIX = "termina_notes:"
+
+function collectNotesForBackup(): BackupNote[] {
+  const notes: BackupNote[] = []
+
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key || !key.startsWith(NOTES_STORAGE_PREFIX)) continue
+
+      const content = localStorage.getItem(key) ?? ""
+      if (!content) continue
+
+      notes.push({
+        storage_key: key,
+        content
+      })
+    }
+  } catch {
+  }
+
+  notes.sort((a, b) => a.storage_key.localeCompare(b.storage_key))
+  return notes
+}
+
+function importNotesFromBundle(bundleJson: string): number {
+  try {
+    const parsed = JSON.parse(bundleJson)
+    const notesValue = parsed?.notes
+
+    if (!Array.isArray(notesValue)) return 0
+
+    let imported = 0
+
+    for (const item of notesValue) {
+      const storageKey =
+        typeof item?.storage_key === "string"
+          ? item.storage_key
+          : typeof item?.storageKey === "string"
+            ? item.storageKey
+            : ""
+
+      const content =
+        typeof item?.content === "string"
+          ? item.content
+          : ""
+
+      if (!storageKey.startsWith(NOTES_STORAGE_PREFIX)) continue
+
+      try {
+        if (content) {
+          localStorage.setItem(storageKey, content)
+        } else {
+          localStorage.removeItem(storageKey)
+        }
+        imported += 1
+      } catch {
+      }
+    }
+
+    return imported
+  } catch {
+    return 0
+  }
+}
+
 export async function buildExportPayload(settings: any): Promise<string> {
-  return await invoke("export_backup_bundle", {
+  const backendBundle = await invoke("export_backup_bundle", {
     settingsJson: JSON.stringify(settings ?? {})
   })
+
+  const parsed = JSON.parse(String(backendBundle))
+  parsed.notes = collectNotesForBackup()
+
+  return JSON.stringify(parsed, null, 2)
 }
 
 export async function saveBackupFile() {
@@ -90,6 +166,7 @@ export async function handleImportConfig({
     if (!path) return
 
     const applyImportedBundle = async (bundleJson: string) => {
+      const notesImported = importNotesFromBundle(bundleJson)
       const result: any = await invoke("import_backup_bundle", { bundleJson })
 
       if (result?.settings) {
@@ -111,13 +188,15 @@ export async function handleImportConfig({
               `Verbindungen importiert: ${connectionsImported}`,
               `Snippets importiert: ${snippetsImported}`,
               `SSH Schlüssel importiert: ${sshKeysImported}`,
-              `Tunnels importiert: ${tunnelsImported}`
+              `Tunnels importiert: ${tunnelsImported}`,
+              `Notizen importiert: ${notesImported}`
             ]
           : [
               `Connections imported: ${connectionsImported}`,
               `Snippets imported: ${snippetsImported}`,
               `SSH keys imported: ${sshKeysImported}`,
-              `Tunnels imported: ${tunnelsImported}`
+              `Tunnels imported: ${tunnelsImported}`,
+              `Notes imported: ${notesImported}`
             ]
 
       const warningHeader =
