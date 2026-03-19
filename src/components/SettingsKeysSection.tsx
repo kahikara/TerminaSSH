@@ -1,0 +1,118 @@
+import { Plus, Upload, Trash2, Copy } from "lucide-react"
+import { t } from "../lib/i18n"
+import { SettingCard } from "./SettingsUi"
+
+type Props = {
+  lang: string
+  ui: any
+  keys: any[]
+  loadKeys: () => Promise<void>
+  showDialog: any
+  showToast: any
+  primaryBtnStyle: React.CSSProperties
+  actionBtnStyle: React.CSSProperties
+  promptGenerateSshKey: any
+  importExistingSshKey: any
+  copySshPublicKey: any
+  confirmDeleteSshKey: any
+}
+
+export default function SettingsKeysSection({
+  lang,
+  ui,
+  keys,
+  loadKeys,
+  showDialog,
+  showToast,
+  primaryBtnStyle,
+  actionBtnStyle,
+  promptGenerateSshKey,
+  importExistingSshKey,
+  copySshPublicKey,
+  confirmDeleteSshKey
+}: Props) {
+  return (
+    <SettingCard title={t("keyManager", lang)} desc={ui.keysDesc}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+        <button
+          onClick={() => promptGenerateSshKey({ lang, showDialog, showToast, ui, loadKeys })}
+          style={primaryBtnStyle}
+        >
+          <Plus size={15} />
+          {t("generateKey", lang)}
+        </button>
+
+        <button
+          onClick={() => void importExistingSshKey({ lang, showToast, ui, loadKeys })}
+          style={actionBtnStyle}
+        >
+          <Upload size={15} />
+          {t("importKey", lang)}
+        </button>
+      </div>
+
+      {keys.length === 0 ? (
+        <div
+          style={{
+            border: "1px dashed var(--border-subtle)",
+            borderRadius: 15,
+            background: "var(--bg-app)",
+            padding: 20,
+            textAlign: "center"
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>{ui.noKeys}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 5, lineHeight: 1.45 }}>
+            {ui.noKeysHint}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 10, opacity: 0.85 }}>
+            Imported keys currently expect a valid existing key file path.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
+          {keys.map((k: any) => (
+            <div
+              key={k.id}
+              style={{
+                border: "1px solid var(--border-subtle)",
+                borderRadius: 15,
+                background: "var(--bg-app)",
+                padding: 14,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>{k.name}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontFamily: "JetBrains Mono, monospace" }}>
+                  {k.key_type} • {k.fingerprint}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={() => void copySshPublicKey({ publicKey: k.public_key, lang, showToast })}
+                  style={actionBtnStyle}
+                  title={t("copy", lang)}
+                >
+                  <Copy size={14} />
+                </button>
+
+                <button
+                  onClick={() => confirmDeleteSshKey({ id: k.id, lang, showDialog, showToast, loadKeys })}
+                  style={actionBtnStyle}
+                  title={t("delete", lang)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingCard>
+  )
+}
