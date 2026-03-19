@@ -17,6 +17,8 @@
     "dialog:allow-confirm",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
-    "core:window:allow-hide"
+    "core:window:allow-hide",
+    "fs:read-files",
+    "fs:write-files"
   ]
 }
