@@ -33,7 +33,7 @@ export default function SettingsBackupSection({
       <SettingsBackupCards
         lang={lang}
         cardStyle={cardStyle}
-        onExportPlain={() => handleExportPlainConfig({ settings, showToast, ui })}
+        onExportPlain={() => handleExportPlainConfig({ settings, showToast, showDialog, ui, lang })}
         onExportEncrypted={() => handleExportEncryptedConfig({ settings, showToast, showDialog, ui, lang })}
         onImport={() => handleImportConfig({ settings, setSettings, showToast, showDialog, ui, lang })}
         importLabel={t("importConfig", lang)}

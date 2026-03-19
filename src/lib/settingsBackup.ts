@@ -29,6 +29,14 @@ type BundleMeta = {
   exportedAt: string
 }
 
+type BundleCounts = {
+  connections: number
+  snippets: number
+  tunnels: number
+  sshKeys: number
+  notes: number
+}
+
 const NOTES_STORAGE_PREFIX = "termina_notes:"
 const MAX_BACKUP_NOTES = 250
 const MAX_BACKUP_NOTE_CHARS = 200_000
@@ -88,6 +96,185 @@ function getBundleMeta(bundleJson: string): BundleMeta {
       exportedAt: ""
     }
   }
+}
+
+function getBundleCounts(bundleJson: string): BundleCounts {
+  try {
+    const parsed = JSON.parse(bundleJson)
+
+    return {
+      connections: Array.isArray(parsed?.connections) ? parsed.connections.length : 0,
+      snippets: Array.isArray(parsed?.snippets) ? parsed.snippets.length : 0,
+      tunnels: Array.isArray(parsed?.tunnels) ? parsed.tunnels.length : 0,
+      sshKeys: Array.isArray(parsed?.sshKeys) ? parsed.sshKeys.length : Array.isArray(parsed?.ssh_keys) ? parsed.ssh_keys.length : 0,
+      notes: Array.isArray(parsed?.notes) ? parsed.notes.length : 0
+    }
+  } catch {
+    return {
+      connections: 0,
+      snippets: 0,
+      tunnels: 0,
+      sshKeys: 0,
+      notes: 0
+    }
+  }
+}
+
+function showExportSummaryDialog(
+  showDialog: (config: any) => void,
+  lang: string,
+  path: string,
+  bundleJson: string,
+  encrypted: boolean
+) {
+  const meta = getBundleMeta(bundleJson)
+  const counts = getBundleCounts(bundleJson)
+
+  const title =
+    lang === "de" ? "Backup exportiert" : "Backup exported"
+
+  const modeLabel =
+    encrypted
+      ? lang === "de" ? "Verschlüsselt" : "Encrypted"
+      : lang === "de" ? "Unverschlüsselt" : "Plain"
+
+  const description =
+    lang === "de"
+      ? [
+          "Export Übersicht",
+          "",
+          `• Datei: ${path}`,
+          `• Modus: ${modeLabel}`,
+          `• Bundle Version: ${meta.version || "-"}`,
+          `• App: ${meta.appName || "-"}`,
+          `• App Version: ${meta.appVersion || "-"}`,
+          `• Format: ${meta.formatName || "-"}`,
+          `• Exportiert: ${meta.exportedAt || "-"}`,
+          "",
+          "Inhalt",
+          "",
+          `• Verbindungen: ${counts.connections}`,
+          `• Snippets: ${counts.snippets}`,
+          `• SSH Schlüssel: ${counts.sshKeys}`,
+          `• Tunnels: ${counts.tunnels}`,
+          `• Notizen: ${counts.notes}`
+        ].join("\n")
+      : [
+          "Export summary",
+          "",
+          `• File: ${path}`,
+          `• Mode: ${modeLabel}`,
+          `• Bundle version: ${meta.version || "-"}`,
+          `• App: ${meta.appName || "-"}`,
+          `• App version: ${meta.appVersion || "-"}`,
+          `• Format: ${meta.formatName || "-"}`,
+          `• Exported: ${meta.exportedAt || "-"}`,
+          "",
+          "Content",
+          "",
+          `• Connections: ${counts.connections}`,
+          `• Snippets: ${counts.snippets}`,
+          `• SSH keys: ${counts.sshKeys}`,
+          `• Tunnels: ${counts.tunnels}`,
+          `• Notes: ${counts.notes}`
+        ].join("\n")
+
+  showDialog({
+    type: "alert",
+    title,
+    description,
+    confirmLabel: "OK",
+    onConfirm: () => {}
+  })
+}
+
+function validateBackupBundle(bundleJson: string, lang: string): string | null {
+  let parsed: any
+
+  try {
+    parsed = JSON.parse(bundleJson)
+  } catch {
+    return lang === "de"
+      ? "Die Datei ist kein gültiges JSON Backup."
+      : "The file is not a valid JSON backup."
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return lang === "de"
+      ? "Die Backup Datei hat kein gültiges Objekt als Wurzel."
+      : "The backup file does not contain a valid object root."
+  }
+
+  const formatName = typeof parsed?.format === "string" ? parsed.format.trim() : ""
+  if (formatName && formatName !== "terminassh-backup") {
+    return lang === "de"
+      ? "Die Datei ist kein Termina SSH Backup."
+      : "The file is not a Termina SSH backup."
+  }
+
+  const rawVersion = parsed?.version
+  if (rawVersion !== undefined) {
+    const version = Number(rawVersion)
+
+    if (!Number.isFinite(version) || version <= 0) {
+      return lang === "de"
+        ? "Die Backup Version ist ungültig."
+        : "The backup version is invalid."
+    }
+
+    if (version > 3) {
+      return lang === "de"
+        ? `Dieses Backup verwendet Version ${version}, diese App unterstützt aber nur bis Version 3.`
+        : `This backup uses version ${version}, but this app only supports up to version 3.`
+    }
+  }
+
+  const hasKnownBackupField =
+    "settings" in parsed ||
+    "connections" in parsed ||
+    "snippets" in parsed ||
+    "tunnels" in parsed ||
+    "sshKeys" in parsed ||
+    "ssh_keys" in parsed ||
+    "notes" in parsed
+
+  if (!hasKnownBackupField) {
+    return lang === "de"
+      ? "Die Datei enthält keine erkennbaren Termina SSH Backup Daten."
+      : "The file does not contain recognizable Termina SSH backup data."
+  }
+
+  return null
+}
+
+function looksLikeEncryptedBackupPayload(rawContent: string): boolean {
+  const trimmed = rawContent.trim()
+  if (trimmed.length < 64) return false
+  if (trimmed.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/=\r\n]+$/.test(trimmed)
+}
+
+function showInvalidBackupDialog(showDialog: (config: any) => void, lang: string, description: string) {
+  showDialog({
+    type: "alert",
+    title: lang === "de" ? "Ungültiges Backup" : "Invalid backup",
+    description,
+    confirmLabel: "OK",
+    onConfirm: () => {}
+  })
+}
+
+function showInvalidEncryptedBackupDialog(showDialog: (config: any) => void, lang: string) {
+  showDialog({
+    type: "alert",
+    title: lang === "de" ? "Beschädigtes verschlüsseltes Backup" : "Corrupted encrypted backup",
+    description:
+      lang === "de"
+        ? "Die Datei konnte zwar entschlüsselt werden, enthält danach aber kein gültiges Termina SSH Backup."
+        : "The file could be decrypted, but the decrypted content is not a valid Termina SSH backup.",
+    confirmLabel: "OK",
+    onConfirm: () => {}
+  })
 }
 
 function importNotesFromResult(notesValue: unknown, lang: string): NotesImportResult {
@@ -322,7 +509,13 @@ export async function saveBackupFile() {
   return await save({ defaultPath: `backup_termina_${dateStr}.json` })
 }
 
-export async function handleExportPlainConfig({ settings, showToast, ui }: Pick<BackupDeps, "settings" | "showToast" | "ui">) {
+export async function handleExportPlainConfig({
+  settings,
+  showToast,
+  showDialog,
+  ui,
+  lang
+}: Pick<BackupDeps, "settings" | "showToast" | "showDialog" | "ui" | "lang">) {
   try {
     const path = await saveBackupFile()
     if (!path) return
@@ -330,6 +523,7 @@ export async function handleExportPlainConfig({ settings, showToast, ui }: Pick<
     const exportPayload = await buildExportPayload(settings)
     await writeTextFile(path, exportPayload)
     showToast(ui.exported)
+    showExportSummaryDialog(showDialog, lang, String(path), exportPayload, false)
   } catch (e: any) {
     showToast(`Backup export failed: ${String(e)}`, true)
   }
@@ -367,6 +561,7 @@ export function handleExportEncryptedConfig({
         const encrypted = await encryptData(exportPayload, pwd)
         await writeTextFile(path, encrypted)
         showToast(ui.exported)
+        showExportSummaryDialog(showDialog, lang, String(path), exportPayload, true)
       } catch (e: any) {
         showToast(`Backup export failed: ${String(e)}`, true)
       }
@@ -477,9 +672,33 @@ export async function handleImportConfig({
 
     try {
       JSON.parse(rawContent)
+
+      const validationError = validateBackupBundle(rawContent, lang)
+      if (validationError) {
+        showDialog({
+          type: "alert",
+          title: lang === "de" ? "Ungültiges Backup" : "Invalid backup",
+          description: validationError,
+          confirmLabel: "OK",
+          onConfirm: () => {}
+        })
+        return
+      }
+
       await applyImportedBundle(rawContent)
       return
     } catch {
+    }
+
+    if (!looksLikeEncryptedBackupPayload(rawContent)) {
+      showInvalidBackupDialog(
+        showDialog,
+        lang,
+        lang === "de"
+          ? "Die Datei ist weder ein gültiges JSON Backup noch ein erkennbares verschlüsseltes Backup."
+          : "The file is neither a valid JSON backup nor a recognizable encrypted backup."
+      )
+      return
     }
 
     showDialog({
@@ -489,13 +708,29 @@ export async function handleImportConfig({
       onConfirm: async (pwd: string) => {
         if (!pwd) return
 
+        let decrypted = ""
+
         try {
-          const decrypted = await decryptData(rawContent, pwd)
-          JSON.parse(decrypted)
-          await applyImportedBundle(decrypted)
+          decrypted = await decryptData(rawContent, pwd)
         } catch {
           showToast(ui.wrongPassword, true)
+          return
         }
+
+        try {
+          JSON.parse(decrypted)
+        } catch {
+          showInvalidEncryptedBackupDialog(showDialog, lang)
+          return
+        }
+
+        const validationError = validateBackupBundle(decrypted, lang)
+        if (validationError) {
+          showInvalidBackupDialog(showDialog, lang, validationError)
+          return
+        }
+
+        await applyImportedBundle(decrypted)
       }
     })
   } catch (e: any) {
