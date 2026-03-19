@@ -185,26 +185,32 @@ export async function handleImportConfig({
       const summary =
         lang === "de"
           ? [
-              `Verbindungen importiert: ${connectionsImported}`,
-              `Snippets importiert: ${snippetsImported}`,
-              `SSH Schlüssel importiert: ${sshKeysImported}`,
-              `Tunnels importiert: ${tunnelsImported}`,
-              `Notizen importiert: ${notesImported}`
+              "Import Übersicht",
+              "",
+              `• Verbindungen: ${connectionsImported}`,
+              `• Snippets: ${snippetsImported}`,
+              `• SSH Schlüssel: ${sshKeysImported}`,
+              `• Tunnels: ${tunnelsImported}`,
+              `• Notizen: ${notesImported}`
             ]
           : [
-              `Connections imported: ${connectionsImported}`,
-              `Snippets imported: ${snippetsImported}`,
-              `SSH keys imported: ${sshKeysImported}`,
-              `Tunnels imported: ${tunnelsImported}`,
-              `Notes imported: ${notesImported}`
+              "Import summary",
+              "",
+              `• Connections: ${connectionsImported}`,
+              `• Snippets: ${snippetsImported}`,
+              `• SSH keys: ${sshKeysImported}`,
+              `• Tunnels: ${tunnelsImported}`,
+              `• Notes: ${notesImported}`
             ]
 
       const warningHeader =
-        lang === "de" ? "Warnungen:" : "Warnings:"
+        lang === "de" ? "Warnungen" : "Warnings"
+
+      const warningLines = warnings.map((warning: string) => `• ${warning}`)
 
       const description =
         warnings.length > 0
-          ? `${summary.join("\n")}\n\n${warningHeader}\n${warnings.join("\n")}`
+          ? `${summary.join("\n")}\n\n${warningHeader}\n\n${warningLines.join("\n")}`
           : summary.join("\n")
 
       showDialog({
@@ -212,11 +218,12 @@ export async function handleImportConfig({
         title,
         description,
         confirmLabel: "OK",
-        onConfirm: () => {}
+        onConfirm: () => {
+          window.location.reload()
+        }
       })
 
       showToast(ui.importedBackup)
-      setTimeout(() => window.location.reload(), 1500)
     }
 
     const rawContent = await readTextFile(path as string)

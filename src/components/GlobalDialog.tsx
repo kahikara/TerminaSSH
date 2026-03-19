@@ -61,7 +61,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
 
     return (
       <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-[430px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl overflow-hidden">
+      <div className="w-full max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl overflow-hidden">
       <div className="min-h-[52px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
       <div className="text-[14px] leading-[1.2] font-bold text-[var(--text-main)]">
       {title}
@@ -74,7 +74,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
 
       <div className="p-4">
       {description ? (
-        <div className="text-[13px] leading-[1.45] text-[var(--text-muted)]">
+        <div className="text-[13px] leading-[1.5] text-[var(--text-muted)] whitespace-pre-line">
         {description}
         </div>
       ) : null}
