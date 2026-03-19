@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
@@ -129,6 +129,66 @@ pub struct TunnelRuntimeEntry {
 const APP_DIR_NAME: &str = "terminassh";
 const LEGACY_APP_DIR_NAME: &str = "ssh-mgr";
 
+fn home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        return Some(PathBuf::from(home));
+    }
+
+    if let Ok(user_profile) = std::env::var("USERPROFILE") {
+        return Some(PathBuf::from(user_profile));
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn get_platform_config_root() -> PathBuf {
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        return PathBuf::from(appdata);
+    }
+
+    if let Some(home) = home_dir() {
+        return home.join("AppData").join("Roaming");
+    }
+
+    PathBuf::from(".")
+}
+
+#[cfg(target_os = "macos")]
+fn get_platform_config_root() -> PathBuf {
+    if let Some(home) = home_dir() {
+        return home.join("Library").join("Application Support");
+    }
+
+    PathBuf::from(".")
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn get_platform_config_root() -> PathBuf {
+    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
+        return PathBuf::from(xdg_config_home);
+    }
+
+    if let Some(home) = home_dir() {
+        return home.join(".config");
+    }
+
+    PathBuf::from(".")
+}
+
+fn legacy_app_dirs(config_root: &Path) -> Vec<PathBuf> {
+    let mut dirs = vec![config_root.join(LEGACY_APP_DIR_NAME)];
+
+    if let Some(home) = home_dir() {
+        let legacy_home_config = home.join(".config").join(LEGACY_APP_DIR_NAME);
+        if !dirs.iter().any(|p| p == &legacy_home_config) {
+            dirs.push(legacy_home_config);
+        }
+    }
+
+    dirs
+}
+
 fn copy_dir_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
@@ -162,18 +222,20 @@ fn migrate_legacy_app_dir(legacy_dir: &Path, new_dir: &Path) {
 }
 
 fn get_app_dir() -> String {
-    if let Ok(home) = std::env::var("HOME") {
-        let config_root = Path::new(&home).join(".config");
-        let legacy_dir = config_root.join(LEGACY_APP_DIR_NAME);
-        let new_dir = config_root.join(APP_DIR_NAME);
+    let config_root = get_platform_config_root();
+    let new_dir = config_root.join(APP_DIR_NAME);
 
-        migrate_legacy_app_dir(&legacy_dir, &new_dir);
-
-        let _ = fs::create_dir_all(&new_dir);
-        new_dir.to_string_lossy().to_string()
-    } else {
-        ".".to_string()
+    if !new_dir.exists() {
+        for legacy_dir in legacy_app_dirs(&config_root) {
+            migrate_legacy_app_dir(&legacy_dir, &new_dir);
+            if new_dir.exists() {
+                break;
+            }
+        }
     }
+
+    let _ = fs::create_dir_all(&new_dir);
+    new_dir.to_string_lossy().to_string()
 }
 
 fn get_db_path() -> String {
