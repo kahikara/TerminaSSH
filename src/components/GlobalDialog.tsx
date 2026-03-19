@@ -21,6 +21,8 @@ export default function GlobalDialog({ dialog, onClose }: any) {
     dialog.confirmLabel ||
     (dialog.type === "confirm" ? "OK" : "OK")
     const cancelLabel = dialog.cancelLabel || "Cancel"
+    const secondaryLabel = dialog.secondaryLabel || ""
+    const tertiaryLabel = dialog.tertiaryLabel || ""
 
     const needsDoubleInput = dialog.type === "prompt" && dialog.requireConfirm === true
     const confirmPlaceholder = dialog.confirmPlaceholder || ""
@@ -129,6 +131,28 @@ export default function GlobalDialog({ dialog, onClose }: any) {
         className="ui-btn-ghost"
         >
         {cancelLabel}
+        </button>
+      )}
+
+      {secondaryLabel && dialog.onSecondary && (
+        <button
+        onClick={async () => {
+          await dialog.onSecondary(val)
+        }}
+        className="ui-btn-ghost"
+        >
+        {secondaryLabel}
+        </button>
+      )}
+
+      {tertiaryLabel && dialog.onTertiary && (
+        <button
+        onClick={async () => {
+          await dialog.onTertiary(val)
+        }}
+        className="ui-btn-ghost"
+        >
+        {tertiaryLabel}
         </button>
       )}
 

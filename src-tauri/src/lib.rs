@@ -2554,6 +2554,7 @@ pub fn run() {
             update_tunnel,
             delete_tunnel,
             open_external_url,
+            reveal_path_in_file_manager,
             copy_text_to_clipboard,
             set_tray_visible,
             start_tunnel,
@@ -2626,6 +2627,61 @@ pub fn run() {
 #[tauri::command]
 fn open_external_url(_app: tauri::AppHandle, url: String) -> Result<(), String> {
     tauri_plugin_opener::open_url(url, None::<String>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
+    let raw = path.trim();
+    if raw.is_empty() {
+        return Err("Path is empty".to_string());
+    }
+
+    let target = PathBuf::from(raw);
+    if !target.exists() {
+        return Err(format!("Path not found: {}", raw));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let normalized = target.to_string_lossy().replace("/", "\\");
+        let mut cmd = Command::new("explorer");
+        if target.is_file() {
+            cmd.arg("/select,").arg(&normalized);
+        } else {
+            cmd.arg(&normalized);
+        }
+        cmd.spawn().map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = Command::new("open");
+        if target.is_file() {
+            cmd.arg("-R").arg(&target);
+        } else {
+            cmd.arg(&target);
+        }
+        cmd.spawn().map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let open_target = if target.is_dir() {
+            target.clone()
+        } else {
+            target
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| target.clone())
+        };
+
+        Command::new("xdg-open")
+            .arg(open_target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

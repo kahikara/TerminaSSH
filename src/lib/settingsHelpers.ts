@@ -51,6 +51,15 @@ export async function openExternalLink(url: string) {
   }
 }
 
+export async function openPathInFileManager(path: string) {
+  try {
+    await invoke("reveal_path_in_file_manager", { path })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function copyToClipboard(text: string) {
   try {
     await invoke("copy_text_to_clipboard", { text })

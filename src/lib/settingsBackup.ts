@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
-import { encryptData, decryptData } from "./settingsHelpers"
+import { encryptData, decryptData, copyToClipboard, openPathInFileManager } from "./settingsHelpers"
 
 type BackupDeps = {
   settings: any
@@ -122,6 +122,7 @@ function getBundleCounts(bundleJson: string): BundleCounts {
 
 function showExportSummaryDialog(
   showDialog: (config: any) => void,
+  showToast: (msg: string, isErr?: boolean) => void,
   lang: string,
   path: string,
   bundleJson: string,
@@ -183,6 +184,26 @@ function showExportSummaryDialog(
     type: "alert",
     title,
     description,
+    secondaryLabel: lang === "de" ? "Pfad kopieren" : "Copy path",
+    onSecondary: async () => {
+      const ok = await copyToClipboard(path)
+      showToast(
+        ok
+          ? lang === "de" ? "Pfad kopiert" : "Path copied"
+          : lang === "de" ? "Pfad konnte nicht kopiert werden" : "Failed to copy path",
+        !ok
+      )
+    },
+    tertiaryLabel: lang === "de" ? "Ordner öffnen" : "Open folder",
+    onTertiary: async () => {
+      const ok = await openPathInFileManager(path)
+      showToast(
+        ok
+          ? lang === "de" ? "Ordner geöffnet" : "Folder opened"
+          : lang === "de" ? "Ordner konnte nicht geöffnet werden" : "Failed to open folder",
+        !ok
+      )
+    },
     confirmLabel: "OK",
     onConfirm: () => {}
   })
@@ -523,7 +544,7 @@ export async function handleExportPlainConfig({
     const exportPayload = await buildExportPayload(settings)
     await writeTextFile(path, exportPayload)
     showToast(ui.exported)
-    showExportSummaryDialog(showDialog, lang, String(path), exportPayload, false)
+    showExportSummaryDialog(showDialog, showToast, lang, String(path), exportPayload, false)
   } catch (e: any) {
     showToast(`Backup export failed: ${String(e)}`, true)
   }
@@ -561,7 +582,7 @@ export function handleExportEncryptedConfig({
         const encrypted = await encryptData(exportPayload, pwd)
         await writeTextFile(path, encrypted)
         showToast(ui.exported)
-        showExportSummaryDialog(showDialog, lang, String(path), exportPayload, true)
+        showExportSummaryDialog(showDialog, showToast, lang, String(path), exportPayload, true)
       } catch (e: any) {
         showToast(`Backup export failed: ${String(e)}`, true)
       }
