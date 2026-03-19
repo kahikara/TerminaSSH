@@ -82,6 +82,10 @@ async function copyToClipboard(text: string) {
   }
 }
 
+function getPathBaseName(filePath: string) {
+  return filePath.split(/[\\/]/).pop()?.trim() || "";
+}
+
 const modalShell: React.CSSProperties = {
   width: 860,
   height: 580,
@@ -513,9 +517,45 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
           setSettings({ ...settings, ...result.settings });
         }
 
-        if (Array.isArray(result?.warnings) && result.warnings.length > 0) {
-          console.warn("Backup import warnings:", result.warnings);
-        }
+        const connectionsImported = Number(result?.connections_imported || 0);
+        const snippetsImported = Number(result?.snippets_imported || 0);
+        const sshKeysImported = Number(result?.ssh_keys_imported || 0);
+        const tunnelsImported = Number(result?.tunnels_imported || 0);
+        const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
+
+        const title =
+          lang === "de" ? "Backup Import abgeschlossen" : "Backup import completed";
+
+        const summary =
+          lang === "de"
+            ? [
+                `Verbindungen importiert: ${connectionsImported}`,
+                `Snippets importiert: ${snippetsImported}`,
+                `SSH Schlüssel importiert: ${sshKeysImported}`,
+                `Tunnels importiert: ${tunnelsImported}`
+              ]
+            : [
+                `Connections imported: ${connectionsImported}`,
+                `Snippets imported: ${snippetsImported}`,
+                `SSH keys imported: ${sshKeysImported}`,
+                `Tunnels imported: ${tunnelsImported}`
+              ];
+
+        const warningHeader =
+          lang === "de" ? "Warnungen:" : "Warnings:";
+
+        const description =
+          warnings.length > 0
+            ? `${summary.join("\n")}\n\n${warningHeader}\n${warnings.join("\n")}`
+            : summary.join("\n");
+
+        showDialog({
+          type: "alert",
+          title,
+          description,
+          confirmLabel: "OK",
+          onConfirm: () => {}
+        });
 
         showToast(ui.importedBackup);
         setTimeout(() => window.location.reload(), 1500);
@@ -920,7 +960,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                           const filePath = Array.isArray(picked) ? picked[0] : picked;
                           if (!filePath || typeof filePath !== "string") return;
 
-                          const fileName = filePath.split("/").pop()?.trim() || ui.importedLabel;
+                          const fileName = getPathBaseName(filePath) || ui.importedLabel;
 
                           await invoke("save_ssh_key", {
                             name: fileName,

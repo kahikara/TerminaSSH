@@ -1,11 +1,13 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use ssh2::Session;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -99,7 +101,9 @@ pub struct BackupTunnel {
     name: String,
     server_name: String,
     server_host: String,
+    server_port: u16,
     server_username: String,
+    server_group_name: String,
     local_port: u16,
     remote_host: String,
     remote_port: u16,
@@ -376,6 +380,85 @@ fn ensure_unique_key_path(dir: &str, stem: &str) -> String {
     }
 
     candidate
+}
+
+fn default_ssh_private_key_paths() -> Vec<PathBuf> {
+    let Some(home) = home_dir() else {
+        return Vec::new();
+    };
+
+    let ssh_dir = home.join(".ssh");
+
+    ["id_ed25519", "id_ecdsa", "id_rsa"]
+        .into_iter()
+        .map(|name| ssh_dir.join(name))
+        .collect()
+}
+
+fn try_auth_with_private_key(
+    sess: &Session,
+    username: &str,
+    private_key: &str,
+    passphrase: Option<&str>,
+) -> bool {
+    let trimmed = private_key.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let path = Path::new(trimmed);
+    if !path.exists() {
+        return false;
+    }
+
+    sess.userauth_pubkey_file(username, None, path, passphrase)
+        .is_ok()
+}
+
+fn try_auth_with_default_keys(sess: &Session, username: &str) -> bool {
+    for path in default_ssh_private_key_paths() {
+        if path.exists()
+            && sess
+                .userauth_pubkey_file(username, None, &path, None)
+                .is_ok()
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn authenticate_session(
+    sess: &Session,
+    username: &str,
+    password: &str,
+    private_key: &str,
+    passphrase: &str,
+) -> bool {
+    let pass = if passphrase.is_empty() {
+        None
+    } else {
+        Some(passphrase)
+    };
+
+    if try_auth_with_private_key(sess, username, private_key, pass) {
+        return true;
+    }
+
+    if sess.userauth_agent(username).is_ok() {
+        return true;
+    }
+
+    if try_auth_with_default_keys(sess, username) {
+        return true;
+    }
+
+    if !password.is_empty() && sess.userauth_password(username, password).is_ok() {
+        return true;
+    }
+
+    false
 }
 
 fn encrypt_pw(pw: &str) -> String {
@@ -701,7 +784,7 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
     {
         let mut stmt = conn
             .prepare(
-                "SELECT t.name, c.name, c.host, c.username, t.local_port, t.remote_host, t.remote_port, t.bind_host, t.auto_start
+                "SELECT t.name, c.name, c.host, c.port, c.username, c.group_name, t.local_port, t.remote_host, t.remote_port, t.bind_host, t.auto_start
                  FROM ssh_tunnels t
                  JOIN connections c ON c.id = t.server_id
                  ORDER BY t.name ASC"
@@ -710,16 +793,18 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
 
         let iter = stmt
             .query_map([], |row| {
-                let auto_start_raw: i32 = row.get(8)?;
+                let auto_start_raw: i32 = row.get(10)?;
                 Ok(BackupTunnel {
                     name: row.get(0)?,
                     server_name: row.get(1)?,
                     server_host: row.get(2)?,
-                    server_username: row.get(3)?,
-                    local_port: row.get(4)?,
-                    remote_host: row.get(5)?,
-                    remote_port: row.get(6)?,
-                    bind_host: row.get(7)?,
+                    server_port: row.get(3)?,
+                    server_username: row.get(4)?,
+                    server_group_name: row.get(5)?,
+                    local_port: row.get(6)?,
+                    remote_host: row.get(7)?,
+                    remote_port: row.get(8)?,
+                    bind_host: row.get(9)?,
                     auto_start: auto_start_raw != 0,
                 })
             })
@@ -890,6 +975,11 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 
             fs::write(&private_path, bytes).map_err(|e| e.to_string())?;
 
+            #[cfg(unix)]
+            {
+                let _ = fs::set_permissions(&private_path, fs::Permissions::from_mode(0o600));
+            }
+
             if !public_key.is_empty() {
                 let _ = fs::write(
                     format!("{}.pub", &private_path),
@@ -923,6 +1013,33 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         } else {
             fingerprint.clone()
         };
+
+        let existing_key_path: Option<String> = tx
+            .query_row(
+                "SELECT private_key_path FROM ssh_keys WHERE (public_key = ?1 AND ?1 != '') OR (name = ?2 AND key_type = ?3 AND fingerprint = ?4 AND ?4 != '') LIMIT 1",
+                (&final_public_key, &name, &key_type, &final_fingerprint),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if let Some(existing_path) = existing_key_path {
+            if !original_path.is_empty() {
+                key_path_map.insert(original_path.clone(), existing_path.clone());
+            }
+            key_path_map.insert(existing_path.clone(), existing_path.clone());
+
+            if !private_key_content_base64.is_empty() && final_path != existing_path {
+                let _ = fs::remove_file(&final_path);
+                let _ = fs::remove_file(format!("{}.pub", &final_path));
+            }
+
+            warnings.push(format!(
+                "SSH key '{}' already exists and was skipped.",
+                name
+            ));
+            continue;
+        }
 
         tx.execute(
             "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -1001,6 +1118,26 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             private_key.clear();
         }
 
+        let map_key = format!("{}|{}|{}|{}|{}", name, host, port, username, group_name);
+
+        let existing_connection_id: Option<i32> = tx
+            .query_row(
+                "SELECT id FROM connections WHERE name = ?1 AND host = ?2 AND port = ?3 AND username = ?4 AND group_name = ?5 LIMIT 1",
+                (&name, &host, &port, &username, &group_name),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if let Some(existing_id) = existing_connection_id {
+            connection_id_map.insert(map_key, existing_id);
+            warnings.push(format!(
+                "Connection '{}' already exists and was skipped.",
+                name
+            ));
+            continue;
+        }
+
         let enc_pw = encrypt_pw(&password);
         let enc_passphrase = encrypt_pw(&passphrase);
 
@@ -1011,7 +1148,6 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         .map_err(|e| e.to_string())?;
 
         let new_id = tx.last_insert_rowid() as i32;
-        let map_key = format!("{}|{}|{}", name, host, username);
         connection_id_map.insert(map_key, new_id);
         connections_imported += 1;
     }
@@ -1033,6 +1169,23 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 
         if name.is_empty() {
             warnings.push("One snippet was skipped because its name was empty.".to_string());
+            continue;
+        }
+
+        let existing_snippet_id: Option<i32> = tx
+            .query_row(
+                "SELECT id FROM snippets WHERE name = ?1 AND command = ?2 LIMIT 1",
+                (&name, &command),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if existing_snippet_id.is_some() {
+            warnings.push(format!(
+                "Snippet '{}' already exists and was skipped.",
+                name
+            ));
             continue;
         }
 
@@ -1072,6 +1225,15 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             .unwrap_or("")
             .trim()
             .to_string();
+        let server_port = item
+            .get("server_port")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(22) as u16;
+        let server_group_name = item
+            .get("server_group_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let local_port = item.get("local_port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
         let remote_host = item
             .get("remote_host")
@@ -1104,15 +1266,38 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         }
 
-        let map_key = format!("{}|{}|{}", server_name, server_host, server_username);
+        let primary_map_key = format!(
+            "{}|{}|{}|{}|{}",
+            server_name, server_host, server_port, server_username, server_group_name
+        );
+        let legacy_map_key = format!("{}|{}|{}", server_name, server_host, server_username);
 
-        let Some(server_id) = connection_id_map.get(&map_key).copied() else {
+        let server_id = connection_id_map
+            .get(&primary_map_key)
+            .copied()
+            .or_else(|| connection_id_map.get(&legacy_map_key).copied());
+
+        let Some(server_id) = server_id else {
             warnings.push(format!(
                 "Tunnel '{}' could not be linked to an imported connection and was skipped.",
                 name
             ));
             continue;
         };
+
+        let existing_tunnel_id: Option<i32> = tx
+            .query_row(
+                "SELECT id FROM ssh_tunnels WHERE server_id = ?1 AND name = ?2 AND local_port = ?3 AND remote_host = ?4 AND remote_port = ?5 AND bind_host = ?6 LIMIT 1",
+                (&server_id, &name, &local_port, &remote_host, &remote_port, &bind_host),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if existing_tunnel_id.is_some() {
+            warnings.push(format!("Tunnel '{}' already exists and was skipped.", name));
+            continue;
+        }
 
         tx.execute(
             "INSERT INTO ssh_tunnels (server_id, name, local_port, remote_host, remote_port, bind_host, auto_start) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1439,54 +1624,7 @@ fn connect_quick_session(
     sess.handshake()
         .map_err(|e| format!("Handshake Error: {}", e))?;
 
-    let mut auth_success = false;
-
-    if !private_key.is_empty() {
-        let pass = if passphrase.is_empty() {
-            None
-        } else {
-            Some(passphrase.as_str())
-        };
-        if sess
-            .userauth_pubkey_file(&username, None, Path::new(&private_key), pass)
-            .is_ok()
-        {
-            auth_success = true;
-        }
-    }
-
-    if !auth_success && sess.userauth_agent(&username).is_ok() {
-        auth_success = true;
-    }
-
-    if !auth_success {
-        if let Ok(home) = std::env::var("HOME") {
-            let ed25519 = format!("{}/.ssh/id_ed25519", home);
-            let rsa = format!("{}/.ssh/id_rsa", home);
-
-            if Path::new(&ed25519).exists()
-                && sess
-                    .userauth_pubkey_file(&username, None, Path::new(&ed25519), None)
-                    .is_ok()
-            {
-                auth_success = true;
-            } else if Path::new(&rsa).exists()
-                && sess
-                    .userauth_pubkey_file(&username, None, Path::new(&rsa), None)
-                    .is_ok()
-            {
-                auth_success = true;
-            }
-        }
-    }
-
-    if !auth_success && !password.is_empty() {
-        if sess.userauth_password(&username, &password).is_ok() {
-            auth_success = true;
-        }
-    }
-
-    if !auth_success {
+    if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
         return Err("Authentifizierung fehlgeschlagen!".to_string());
     }
 
@@ -1518,48 +1656,7 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
     sess.handshake()
         .map_err(|e| format!("Handshake Error: {}", e))?;
 
-    let mut auth_success = false;
-    if !private_key.is_empty() {
-        let pass = if passphrase.is_empty() {
-            None
-        } else {
-            Some(passphrase.as_str())
-        };
-        if sess
-            .userauth_pubkey_file(&username, None, Path::new(&private_key), pass)
-            .is_ok()
-        {
-            auth_success = true;
-        }
-    }
-    if !auth_success && sess.userauth_agent(&username).is_ok() {
-        auth_success = true;
-    }
-    if !auth_success {
-        if let Ok(home) = std::env::var("HOME") {
-            let ed25519 = format!("{}/.ssh/id_ed25519", home);
-            let rsa = format!("{}/.ssh/id_rsa", home);
-            if Path::new(&ed25519).exists()
-                && sess
-                    .userauth_pubkey_file(&username, None, Path::new(&ed25519), None)
-                    .is_ok()
-            {
-                auth_success = true;
-            } else if Path::new(&rsa).exists()
-                && sess
-                    .userauth_pubkey_file(&username, None, Path::new(&rsa), None)
-                    .is_ok()
-            {
-                auth_success = true;
-            }
-        }
-    }
-    if !auth_success && !password.is_empty() {
-        if sess.userauth_password(&username, &password).is_ok() {
-            auth_success = true;
-        }
-    }
-    if !auth_success {
+    if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
         return Err("Authentifizierung fehlgeschlagen!".to_string());
     }
     Ok(sess)
