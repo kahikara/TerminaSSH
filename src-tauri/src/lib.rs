@@ -95,6 +95,19 @@ pub struct BackupSshKey {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct BackupTunnel {
+    name: String,
+    server_name: String,
+    server_host: String,
+    server_username: String,
+    local_port: u16,
+    remote_host: String,
+    remote_port: u16,
+    bind_host: String,
+    auto_start: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BackupBundleV3 {
     version: u32,
     #[serde(rename = "exportedAt")]
@@ -102,8 +115,19 @@ pub struct BackupBundleV3 {
     settings: serde_json::Value,
     connections: Vec<BackupConnection>,
     snippets: Vec<BackupSnippet>,
+    tunnels: Vec<BackupTunnel>,
     #[serde(rename = "sshKeys")]
     ssh_keys: Vec<BackupSshKey>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportBackupResult {
+    settings: serde_json::Value,
+    connections_imported: usize,
+    snippets_imported: usize,
+    ssh_keys_imported: usize,
+    tunnels_imported: usize,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -320,6 +344,38 @@ fn read_file_base64_if_exists(path: &str) -> String {
     fs::read(trimmed)
         .map(|bytes| STANDARD.encode(bytes))
         .unwrap_or_default()
+}
+
+fn sanitize_key_file_stem(name: &str) -> String {
+    let cleaned: String = name
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    if cleaned.is_empty() {
+        "imported_key".to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn ensure_unique_key_path(dir: &str, stem: &str) -> String {
+    let mut candidate = format!("{}/{}", dir, stem);
+    let mut index = 1usize;
+
+    while Path::new(&candidate).exists() || Path::new(&format!("{}.pub", candidate)).exists() {
+        candidate = format!("{}/{}_{}", dir, stem, index);
+        index += 1;
+    }
+
+    candidate
 }
 
 fn encrypt_pw(pw: &str) -> String {
@@ -641,6 +697,39 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
         }
     }
 
+    let mut tunnels = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.name, c.name, c.host, c.username, t.local_port, t.remote_host, t.remote_port, t.bind_host, t.auto_start
+                 FROM ssh_tunnels t
+                 JOIN connections c ON c.id = t.server_id
+                 ORDER BY t.name ASC"
+            )
+            .map_err(|e| e.to_string())?;
+
+        let iter = stmt
+            .query_map([], |row| {
+                let auto_start_raw: i32 = row.get(8)?;
+                Ok(BackupTunnel {
+                    name: row.get(0)?,
+                    server_name: row.get(1)?,
+                    server_host: row.get(2)?,
+                    server_username: row.get(3)?,
+                    local_port: row.get(4)?,
+                    remote_host: row.get(5)?,
+                    remote_port: row.get(6)?,
+                    bind_host: row.get(7)?,
+                    auto_start: auto_start_raw != 0,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+
+        for item in iter {
+            tunnels.push(item.map_err(|e| e.to_string())?);
+        }
+    }
+
     let mut ssh_keys = Vec::new();
     {
         let mut stmt = conn
@@ -686,10 +775,364 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
         settings,
         connections,
         snippets,
+        tunnels,
         ssh_keys,
     };
 
     serde_json::to_string_pretty(&bundle).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, String> {
+    let parsed: serde_json::Value =
+        serde_json::from_str(&bundle_json).map_err(|e| format!("Invalid backup JSON: {}", e))?;
+
+    let settings = parsed
+        .get("settings")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    let ssh_keys_value = parsed
+        .get("sshKeys")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let connections_value = parsed
+        .get("connections")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let snippets_value = parsed
+        .get("snippets")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let tunnels_value = parsed
+        .get("tunnels")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let keys_dir = get_keys_dir();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut key_path_map: HashMap<String, String> = HashMap::new();
+
+    let mut conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let mut ssh_keys_imported = 0usize;
+
+    for item in ssh_keys_value {
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Imported")
+            .trim()
+            .to_string();
+
+        let public_key = item
+            .get("public_key")
+            .or_else(|| item.get("publicKey"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let key_type = item
+            .get("key_type")
+            .or_else(|| item.get("keyType"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("imported")
+            .trim()
+            .to_string();
+
+        let fingerprint = item
+            .get("fingerprint")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let original_path = item
+            .get("original_path")
+            .or_else(|| item.get("private_key_path"))
+            .or_else(|| item.get("privateKeyPath"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let private_key_content_base64 = item
+            .get("private_key_content_base64")
+            .or_else(|| item.get("privateKeyContentBase64"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let final_path = if !private_key_content_base64.is_empty() {
+            let bytes = match STANDARD.decode(private_key_content_base64.as_bytes()) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    warnings.push(format!(
+                        "SSH key '{}' could not be decoded and was skipped.",
+                        name
+                    ));
+                    continue;
+                }
+            };
+
+            let stem = sanitize_key_file_stem(&name);
+            let private_path = ensure_unique_key_path(&keys_dir, &stem);
+
+            fs::write(&private_path, bytes).map_err(|e| e.to_string())?;
+
+            if !public_key.is_empty() {
+                let _ = fs::write(
+                    format!("{}.pub", &private_path),
+                    format!(
+                        "{}
+",
+                        public_key
+                    ),
+                );
+            }
+
+            private_path
+        } else if !original_path.is_empty() && Path::new(&original_path).exists() {
+            original_path.clone()
+        } else {
+            warnings.push(format!(
+                "SSH key '{}' had no portable key content and no usable local path, so it was skipped.",
+                name
+            ));
+            continue;
+        };
+
+        let final_public_key = if public_key.is_empty() {
+            read_public_key_for_path(&final_path)
+        } else {
+            public_key.clone()
+        };
+
+        let final_fingerprint = if fingerprint.is_empty() {
+            fingerprint_for_pubkey_path(&format!("{}.pub", &final_path))
+        } else {
+            fingerprint.clone()
+        };
+
+        tx.execute(
+            "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
+            (&name, &final_public_key, &final_path, &key_type, &final_fingerprint)
+        )
+        .map_err(|e| e.to_string())?;
+
+        if !original_path.is_empty() {
+            key_path_map.insert(original_path.clone(), final_path.clone());
+        }
+        key_path_map.insert(final_path.clone(), final_path.clone());
+
+        ssh_keys_imported += 1;
+    }
+
+    let mut connection_id_map: HashMap<String, i32> = HashMap::new();
+    let mut connections_imported = 0usize;
+
+    for item in connections_value {
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let host = item
+            .get("host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let port = item.get("port").and_then(|v| v.as_u64()).unwrap_or(22) as u16;
+        let username = item
+            .get("username")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let password = item
+            .get("password")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let passphrase = item
+            .get("passphrase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let group_name = item
+            .get("group_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if name.is_empty() || host.is_empty() || username.is_empty() {
+            warnings.push(
+                "One connection was skipped because required fields were missing.".to_string(),
+            );
+            continue;
+        }
+
+        let mut private_key = item
+            .get("private_key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        if let Some(mapped) = key_path_map.get(&private_key) {
+            private_key = mapped.clone();
+        } else if !private_key.is_empty() && !Path::new(&private_key).exists() {
+            warnings.push(format!(
+                "Connection '{}' referenced a key path that is not available on this system. The key path was cleared.",
+                name
+            ));
+            private_key.clear();
+        }
+
+        let enc_pw = encrypt_pw(&password);
+        let enc_passphrase = encrypt_pw(&passphrase);
+
+        tx.execute(
+            "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (&name, &host, &port, &username, &enc_pw, &private_key, &enc_passphrase, &group_name)
+        )
+        .map_err(|e| e.to_string())?;
+
+        let new_id = tx.last_insert_rowid() as i32;
+        let map_key = format!("{}|{}|{}", name, host, username);
+        connection_id_map.insert(map_key, new_id);
+        connections_imported += 1;
+    }
+
+    let mut snippets_imported = 0usize;
+
+    for item in snippets_value {
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let command = item
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if name.is_empty() {
+            warnings.push("One snippet was skipped because its name was empty.".to_string());
+            continue;
+        }
+
+        tx.execute(
+            "INSERT INTO snippets (name, command) VALUES (?1, ?2)",
+            (&name, &command),
+        )
+        .map_err(|e| e.to_string())?;
+
+        snippets_imported += 1;
+    }
+
+    let mut tunnels_imported = 0usize;
+
+    for item in tunnels_value {
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let server_name = item
+            .get("server_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let server_host = item
+            .get("server_host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let server_username = item
+            .get("server_username")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let local_port = item.get("local_port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+        let remote_host = item
+            .get("remote_host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let remote_port = item
+            .get("remote_port")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u16;
+        let bind_host = item
+            .get("bind_host")
+            .and_then(|v| v.as_str())
+            .unwrap_or("127.0.0.1")
+            .trim()
+            .to_string();
+        let auto_start = item
+            .get("auto_start")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        if name.is_empty()
+            || server_name.is_empty()
+            || server_host.is_empty()
+            || server_username.is_empty()
+        {
+            warnings
+                .push("One tunnel was skipped because required fields were missing.".to_string());
+            continue;
+        }
+
+        let map_key = format!("{}|{}|{}", server_name, server_host, server_username);
+
+        let Some(server_id) = connection_id_map.get(&map_key).copied() else {
+            warnings.push(format!(
+                "Tunnel '{}' could not be linked to an imported connection and was skipped.",
+                name
+            ));
+            continue;
+        };
+
+        tx.execute(
+            "INSERT INTO ssh_tunnels (server_id, name, local_port, remote_host, remote_port, bind_host, auto_start) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            (&server_id, &name, &local_port, &remote_host, &remote_port, &bind_host, &(if auto_start { 1 } else { 0 }))
+        )
+        .map_err(|e| e.to_string())?;
+
+        tunnels_imported += 1;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+
+    Ok(ImportBackupResult {
+        settings,
+        connections_imported,
+        snippets_imported,
+        ssh_keys_imported,
+        tunnels_imported,
+        warnings,
+    })
 }
 
 #[tauri::command]
@@ -1909,6 +2352,7 @@ pub fn run() {
             delete_snippet,
             get_managed_keys_dir,
             export_backup_bundle,
+            import_backup_bundle,
             get_ssh_keys,
             save_ssh_key,
             delete_ssh_key,

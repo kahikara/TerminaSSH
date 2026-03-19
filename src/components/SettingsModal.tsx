@@ -441,19 +441,10 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
     if (isOpen && activeTab === "keys") loadKeys();
   }, [isOpen, activeTab]);
 
-  async function buildExportPayload() {
-    const conns = await invoke("get_connections");
-    const snippets = await invoke("get_snippets");
-    const sshKeys = await invoke("get_ssh_keys");
-
-    return {
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      settings,
-      connections: conns,
-      snippets,
-      sshKeys
-    };
+  async function buildExportPayload(): Promise<string> {
+    return await invoke("export_backup_bundle", {
+      settingsJson: JSON.stringify(settings ?? {})
+    });
   }
 
   async function saveBackupFile() {
@@ -468,7 +459,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       if (!path) return;
 
       const exportPayload = await buildExportPayload();
-      await writeTextFile(path, JSON.stringify(exportPayload, null, 2));
+      await writeTextFile(path, exportPayload);
       showToast(ui.exported);
     } catch (e: any) {
       showToast(`Backup export failed: ${String(e)}`, true);
@@ -498,7 +489,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
           if (!path) return;
 
           const exportPayload = await buildExportPayload();
-          const encrypted = await encryptData(JSON.stringify(exportPayload, null, 2), pwd);
+          const encrypted = await encryptData(exportPayload, pwd);
           await writeTextFile(path, encrypted);
           showToast(ui.exported);
         } catch (e: any) {
@@ -515,38 +506,15 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
 
       if (!path) return;
 
-      const applyImportedData = async (parsed: any) => {
-        if (parsed.settings) {
-          setSettings({ ...settings, ...parsed.settings });
+      const applyImportedBundle = async (bundleJson: string) => {
+        const result: any = await invoke("import_backup_bundle", { bundleJson });
+
+        if (result?.settings) {
+          setSettings({ ...settings, ...result.settings });
         }
 
-        if (Array.isArray(parsed.connections)) {
-          for (const c of parsed.connections) {
-            const { id, ...connData } = c;
-            await invoke("save_connection", { connection: connData });
-          }
-        }
-
-        if (Array.isArray(parsed.snippets)) {
-          for (const s of parsed.snippets) {
-            await invoke("add_snippet", {
-              name: s.name,
-              command: s.command
-            });
-          }
-        }
-
-        if (Array.isArray(parsed.sshKeys)) {
-          for (const k of parsed.sshKeys) {
-            if (k?.private_key_path) {
-              await invoke("save_ssh_key", {
-                name: k.name || "Imported",
-                publicKey: k.public_key || "",
-                privateKeyPath: k.private_key_path,
-                keyType: k.key_type || "imported"
-              });
-            }
-          }
+        if (Array.isArray(result?.warnings) && result.warnings.length > 0) {
+          console.warn("Backup import warnings:", result.warnings);
         }
 
         showToast(ui.importedBackup);
@@ -556,8 +524,8 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       const rawContent = await readTextFile(path as string);
 
       try {
-        const parsed = JSON.parse(rawContent);
-        await applyImportedData(parsed);
+        JSON.parse(rawContent);
+        await applyImportedBundle(rawContent);
         return;
       } catch {
       }
@@ -571,8 +539,8 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
 
           try {
             const decrypted = await decryptData(rawContent, pwd);
-            const parsed = JSON.parse(decrypted);
-            await applyImportedData(parsed);
+            JSON.parse(decrypted);
+            await applyImportedBundle(decrypted);
           } catch {
             showToast(ui.wrongPassword, true);
           }
