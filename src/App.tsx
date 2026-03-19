@@ -1,7 +1,6 @@
 import React from "react";
-const TERMINA_SAFE_RENDER = true;
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -106,6 +105,8 @@ export default function App() {
   const [tabGhostPos, setTabGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [connections, setConnections] = useState<any[]>([]);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [showSidebarSearch, setShowSidebarSearch] = useState(false);
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
@@ -141,6 +142,7 @@ export default function App() {
   const isDragging = useRef(false);
   const expandedSidebarWidthRef = useRef(260);
   const settingsRef = useRef(settings);
+  const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const mainClosingRef = useRef(false);
   const mainWaitingForEditorsRef = useRef(false);
@@ -446,6 +448,44 @@ export default function App() {
     return items;
   }, [rootServers, groups]);
 
+  const normalizedSidebarSearch = sidebarSearchQuery.trim().toLowerCase();
+  const isSidebarSearching = showSidebarSearch && normalizedSidebarSearch.length > 0;
+
+  const matchesSidebarSearch = (conn: any) => {
+    if (!normalizedSidebarSearch) return true;
+    const haystack = [
+      conn?.name || "",
+      conn?.host || "",
+      conn?.username || ""
+    ].join(" ").toLowerCase();
+    return haystack.includes(normalizedSidebarSearch);
+  };
+
+  const filteredRootServers = useMemo(() => {
+    if (!isSidebarSearching) return rootServers;
+    return rootServers.filter((conn: any) => matchesSidebarSearch(conn));
+  }, [rootServers, isSidebarSearching, normalizedSidebarSearch]);
+
+  const filteredGroups = useMemo(() => {
+    if (!isSidebarSearching) return groups;
+
+    const next: Record<string, any[]> = {};
+    Object.keys(groups).forEach((group) => {
+      const matches = groups[group].filter((conn: any) => matchesSidebarSearch(conn));
+      if (matches.length > 0) next[group] = matches;
+    });
+    return next;
+  }, [groups, isSidebarSearching, normalizedSidebarSearch]);
+
+  const sidebarVisibleGroups = isSidebarSearching ? filteredGroups : groups;
+  const sidebarVisibleRootServers = isSidebarSearching ? filteredRootServers : rootServers;
+  const sidebarSearchLocalVisible = !isSidebarSearching || matchesSidebarSearch({ name: 'Local Terminal', username: 'local', host: 'localhost' });
+
+  const effectiveFolderCollapsed = (group: string) => {
+    if (!isSidebarSearching) return Boolean(collapsedFolders[group]);
+    return false;
+  };
+
   const activeTab = useMemo(
     () => openTabs.find((tab: any) => tab.tabId === activeTabId) || null,
     [openTabs, activeTabId]
@@ -505,6 +545,43 @@ export default function App() {
     expandedSidebarWidthRef.current = sidebarWidth;
     setIsSidebarCollapsed(true);
   };
+
+  const closeSidebarSearch = () => {
+    setShowSidebarSearch(false);
+    setSidebarSearchQuery("");
+  };
+
+  const toggleSidebarSearch = () => {
+    if (showSidebarSearch) {
+      closeSidebarSearch();
+      return;
+    }
+
+    setShowSidebarSearch(true);
+    window.setTimeout(() => {
+      sidebarSearchInputRef.current?.focus();
+      sidebarSearchInputRef.current?.select();
+    }, 0);
+  };
+
+  useEffect(() => {
+    if (!showSidebarSearch) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      closeSidebarSearch();
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [showSidebarSearch]);
+
+  useEffect(() => {
+    if (!isSidebarCollapsed) return;
+    if (!showSidebarSearch && !sidebarSearchQuery) return;
+    setShowSidebarSearch(false);
+    setSidebarSearchQuery("");
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
@@ -754,6 +831,15 @@ export default function App() {
                 </h3>
               )}
               <div className="flex gap-1">
+                {!isSidebarCollapsed && (
+                  <button
+                    onClick={toggleSidebarSearch}
+                    className={`text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${showSidebarSearch ? 'text-[var(--accent)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))]' : ''}`}
+                    title={settings.lang === 'de' ? 'Suche' : 'Search'}
+                  >
+                    <Search size={16} />
+                  </button>
+                )}
                 <button
                   onClick={() => { setServerToEdit(null); setConnModalOpen(true); }}
                   className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
@@ -763,6 +849,32 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {!isSidebarCollapsed && showSidebarSearch && (
+              <div className="mb-3 px-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none">
+                    <Search size={14} />
+                  </span>
+                  <input
+                    ref={sidebarSearchInputRef}
+                    value={sidebarSearchQuery}
+                    onChange={(e) => setSidebarSearchQuery(e.target.value)}
+                    placeholder={settings.lang === 'de' ? 'Verbindungen suchen' : 'Search connections'}
+                    className="w-full h-9 pl-9 pr-9 rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-main)] text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] placeholder:text-[var(--text-muted)]"
+                  />
+                  {sidebarSearchQuery && (
+                    <button
+                      onClick={() => setSidebarSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 rounded transition-colors"
+                      title={settings.lang === 'de' ? 'Leeren' : 'Clear'}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {isSidebarCollapsed ? (
               <div className="flex flex-col items-center gap-1.5 rounded-xl">
@@ -800,33 +912,35 @@ export default function App() {
               </div>
             ) : (
               <div className="flex flex-col gap-0.5 rounded-xl">
-                <div
-                  className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
-                    isLocalActive
-                      ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
-                      : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
-                  }`}
-                >
-                  <button
-                    onClick={() => openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
-                    className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
-                      isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                {sidebarSearchLocalVisible && (
+                  <div
+                    className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
+                      isLocalActive
+                        ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
+                        : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
                     }`}
                   >
-                    <div
-                      className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
-                        isLocalActive
-                          ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
-                          : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
+                    <button
+                      onClick={() => openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
+                      className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
+                        isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
-                      <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
-                    </div>
-                    <span className="truncate font-medium min-w-0">Local Terminal</span>
-                  </button>
-                </div>
+                      <div
+                        className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
+                          isLocalActive
+                            ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
+                            : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
+                        }`}
+                      >
+                        <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
+                      </div>
+                      <span className="truncate font-medium min-w-0">Local Terminal</span>
+                    </button>
+                  </div>
+                )}
 
-                {rootServers.length === 0 && Object.keys(groups).length === 0 && (
+                {sidebarVisibleRootServers.length === 0 && Object.keys(sidebarVisibleGroups).length === 0 && !sidebarSearchLocalVisible && (
                   <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-4 py-5 text-center">
                     <div className="text-sm font-semibold text-[var(--text-main)]">
                       {t('noConnectionsYet', settings.lang)}
@@ -837,7 +951,7 @@ export default function App() {
                   </div>
                 )}
 
-                {rootServers.map((conn: any) => {
+                {sidebarVisibleRootServers.map((conn: any) => {
                   const active = isServerActive(conn);
 
                   return (
@@ -877,8 +991,8 @@ export default function App() {
                   );
                 })}
 
-                {Object.keys(groups).sort().map(group => {
-                  const isCollapsed = collapsedFolders[group];
+                {Object.keys(sidebarVisibleGroups).sort().map(group => {
+                  const isCollapsed = effectiveFolderCollapsed(group);
                   return (
                     <div key={group}>
                       <button
@@ -890,7 +1004,7 @@ export default function App() {
                           <Folder size={12} className="text-[var(--accent)] shrink-0" />
                           <span className="truncate text-[10px] font-semibold min-w-0 text-[var(--text-muted)]">{group}</span>
                         </div>
-                        {groups[group].length === 0 && (
+                        {!isSidebarSearching && groups[group].length === 0 && (
                            <span
                              onClick={(e) => { e.stopPropagation(); setSettings({...settings, customFolders: settings.customFolders.filter((f:string)=>f!==group)}); }}
                              className="opacity-0 group-hover/folder:opacity-100 text-[var(--danger)] transition-all focus-visible:opacity-100 flex items-center justify-center shrink-0"
@@ -902,7 +1016,7 @@ export default function App() {
                       </button>
                       {!isCollapsed && (
                         <div className="flex flex-col gap-0 ml-3 border-l border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] pl-2 mt-0.5">
-                          {groups[group].map((conn: any) => {
+                          {sidebarVisibleGroups[group].map((conn: any) => {
                             const active = isServerActive(conn);
 
                             return (

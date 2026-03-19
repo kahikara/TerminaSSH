@@ -1,4 +1,3 @@
-import React from "react"
 import { useState, useEffect } from "react"
 import { X } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"

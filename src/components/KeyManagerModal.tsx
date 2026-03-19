@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { X, Plus, Trash2, KeyRound, Copy } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { t } from "../lib/i18n"

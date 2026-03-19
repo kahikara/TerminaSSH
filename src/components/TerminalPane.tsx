@@ -96,7 +96,7 @@ function createTerminalOptions(settings: any) {
   } as const
 }
 
-function ensureTerminal(server: any, sessionId: string, settings: any, onClose?: () => void): StoreEntry {
+function ensureTerminal(_server: any, sessionId: string, settings: any, onClose?: () => void): StoreEntry {
   let entry: StoreEntry = terminalStore[sessionId]
 
   if (!entry) {

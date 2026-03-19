@@ -170,13 +170,6 @@ function sortFiles(items: FileItem[], mode: SftpSortMode) {
   return sorted
 }
 
-function nextSortMode(mode: SftpSortMode): SftpSortMode {
-  if (mode === "folders") return "name"
-  if (mode === "name") return "size"
-  if (mode === "size") return "type"
-  return "folders"
-}
-
 function sortModeLabel(mode: SftpSortMode, lang: string) {
   if (mode === "folders") return t("foldersFirst", lang)
   if (mode === "size") return t("sortBySize", lang)
@@ -321,35 +314,6 @@ const modalBtn: React.CSSProperties = {
   cursor: "pointer",
   fontSize: 12,
   transition: "background 140ms ease, border-color 140ms ease, transform 120ms ease, opacity 140ms ease"
-}
-
-const editorBtn: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "0 10px",
-  height: 30,
-  borderRadius: 8,
-  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-  background: "var(--bg-sidebar, #111827)",
-  color: "var(--text-main, #e5e7eb)",
-  cursor: "pointer",
-  fontSize: 12,
-  whiteSpace: "nowrap",
-  transition: "background 140ms ease, border-color 140ms ease, transform 120ms ease"
-}
-
-const selectStyle: React.CSSProperties = {
-  height: 30,
-  padding: "0 10px",
-  borderRadius: 8,
-  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-  background: "var(--bg-sidebar, #111827)",
-  color: "var(--text-main, #e5e7eb)",
-  fontSize: 12,
-  outline: "none",
-  cursor: "pointer",
-  minWidth: 132
 }
 
 const menuButtonStyle: React.CSSProperties = {

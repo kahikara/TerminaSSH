@@ -2,7 +2,6 @@ import React from "react";
 import { useState, useEffect, useMemo } from "react";
 import {
   X,
-  Palette,
   Terminal as TermIcon,
   Folder,
   Key,
@@ -442,36 +441,66 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
     if (isOpen && activeTab === "keys") loadKeys();
   }, [isOpen, activeTab]);
 
-  async function handleExportConfig() {
+  async function buildExportPayload() {
+    const conns = await invoke("get_connections");
+    const snippets = await invoke("get_snippets");
+    const sshKeys = await invoke("get_ssh_keys");
+
+    return {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      settings,
+      connections: conns,
+      snippets,
+      sshKeys
+    };
+  }
+
+  async function saveBackupFile() {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const dateStr = new Date().toISOString().replace(/T/, "_").replace(/:/g, "-").split(".")[0];
+    return await save({ defaultPath: `backup_termina_${dateStr}.json` });
+  }
+
+  async function handleExportPlainConfig() {
+    try {
+      const path = await saveBackupFile();
+      if (!path) return;
+
+      const exportPayload = await buildExportPayload();
+      await writeTextFile(path, JSON.stringify(exportPayload, null, 2));
+      showToast(ui.exported);
+    } catch (e: any) {
+      showToast(`Backup export failed: ${String(e)}`, true);
+    }
+  }
+
+  async function handleExportEncryptedConfig() {
     showDialog({
       type: "prompt",
       title: t("pwdSet", settings.lang),
+      placeholder: t("password", settings.lang),
+      confirmPlaceholder: settings.lang === "de" ? "Passwort erneut eingeben" : "Enter password again",
       isPassword: true,
+      requireConfirm: true,
+      validate: (pwd: string, confirmPwd: string) => {
+        if (!pwd || !confirmPwd) return "";
+        if (pwd !== confirmPwd) {
+          return settings.lang === "de"
+            ? "Die Passwörter stimmen nicht überein."
+            : "Passwords do not match.";
+        }
+        return "";
+      },
       onConfirm: async (pwd: string) => {
-        if (!pwd) return;
         try {
-          const { save } = await import("@tauri-apps/plugin-dialog");
-          const dateStr = new Date().toISOString().replace(/T/, "_").replace(/:/g, "-").split(".")[0];
-          const path = await save({ defaultPath: `backup_termina_${dateStr}.json` });
+          const path = await saveBackupFile();
+          if (!path) return;
 
-          if (path) {
-            const conns = await invoke("get_connections");
-            const snippets = await invoke("get_snippets");
-            const sshKeys = await invoke("get_ssh_keys");
-
-            const exportPayload = {
-              version: 2,
-              exportedAt: new Date().toISOString(),
-              settings,
-              connections: conns,
-              snippets,
-              sshKeys
-            };
-
-            const encrypted = await encryptData(JSON.stringify(exportPayload, null, 2), pwd);
-            await writeTextFile(path, encrypted);
-            showToast(ui.exported);
-          }
+          const exportPayload = await buildExportPayload();
+          const encrypted = await encryptData(JSON.stringify(exportPayload, null, 2), pwd);
+          await writeTextFile(path, encrypted);
+          showToast(ui.exported);
         } catch (e: any) {
           showToast(`Backup export failed: ${String(e)}`, true);
         }
@@ -484,64 +513,76 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
       const { open } = await import("@tauri-apps/plugin-dialog");
       const path = await open({ multiple: false, filters: [{ name: "JSON/Backup", extensions: ["json", "bak"] }] });
 
-      if (path) {
-        showDialog({
-          type: "prompt",
-          title: t("pwdPrompt", settings.lang),
-          isPassword: true,
-          onConfirm: async (pwd: string) => {
-            if (!pwd) return;
+      if (!path) return;
 
-            try {
-              const encryptedContent = await readTextFile(path as string);
-              const decrypted = await decryptData(encryptedContent, pwd);
-              const parsed = JSON.parse(decrypted);
+      const applyImportedData = async (parsed: any) => {
+        if (parsed.settings) {
+          setSettings({ ...settings, ...parsed.settings });
+        }
 
-              if (parsed.settings) {
-                setSettings({ ...settings, ...parsed.settings });
-              }
+        if (Array.isArray(parsed.connections)) {
+          for (const c of parsed.connections) {
+            const { id, ...connData } = c;
+            await invoke("save_connection", { connection: connData });
+          }
+        }
 
-              if (Array.isArray(parsed.connections)) {
-                for (const c of parsed.connections) {
-                  const { id, ...connData } = c;
-                  await invoke("save_connection", { connection: connData });
-                }
-              }
+        if (Array.isArray(parsed.snippets)) {
+          for (const s of parsed.snippets) {
+            await invoke("add_snippet", {
+              name: s.name,
+              command: s.command
+            });
+          }
+        }
 
-              if (Array.isArray(parsed.snippets)) {
-                for (const s of parsed.snippets) {
-                  await invoke("add_snippet", {
-                    name: s.name,
-                    command: s.command
-                  });
-                }
-              }
-
-              if (Array.isArray(parsed.sshKeys)) {
-                for (const k of parsed.sshKeys) {
-                  if (k?.private_key_path) {
-                    await invoke("save_ssh_key", {
-                      name: k.name || "Imported",
-                      publicKey: k.public_key || "",
-                      privateKeyPath: k.private_key_path,
-                      keyType: k.key_type || "imported"
-                    });
-                  }
-                }
-              }
-
-              showToast(ui.importedBackup);
-              setTimeout(() => window.location.reload(), 1500);
-            } catch (err) {
-              showToast(ui.wrongPassword, true);
+        if (Array.isArray(parsed.sshKeys)) {
+          for (const k of parsed.sshKeys) {
+            if (k?.private_key_path) {
+              await invoke("save_ssh_key", {
+                name: k.name || "Imported",
+                publicKey: k.public_key || "",
+                privateKeyPath: k.private_key_path,
+                keyType: k.key_type || "imported"
+              });
             }
           }
-        });
+        }
+
+        showToast(ui.importedBackup);
+        setTimeout(() => window.location.reload(), 1500);
+      };
+
+      const rawContent = await readTextFile(path as string);
+
+      try {
+        const parsed = JSON.parse(rawContent);
+        await applyImportedData(parsed);
+        return;
+      } catch {
       }
+
+      showDialog({
+        type: "prompt",
+        title: t("pwdPrompt", settings.lang),
+        isPassword: true,
+        onConfirm: async (pwd: string) => {
+          if (!pwd) return;
+
+          try {
+            const decrypted = await decryptData(rawContent, pwd);
+            const parsed = JSON.parse(decrypted);
+            await applyImportedData(parsed);
+          } catch {
+            showToast(ui.wrongPassword, true);
+          }
+        }
+      });
     } catch (e: any) {
       showToast(`Backup import failed: ${String(e)}`, true);
     }
   }
+
 
   if (!isOpen) return null;
 
@@ -1022,12 +1063,12 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
+                      gridTemplateColumns: "1fr 1fr 1fr",
                       gap: 12
                     }}
                   >
                     <button
-                      onClick={handleExportConfig}
+                      onClick={handleExportPlainConfig}
                       style={{
                         ...cardStyle,
                         background: "var(--bg-app)",
@@ -1041,9 +1082,38 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                       }}
                     >
                       <Save size={26} style={{ color: "var(--accent)" }} />
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>{t("exportConfig", lang)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
+                        {lang === "de" ? "Ohne Passwort exportieren" : "Export without password"}
+                      </div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
-                        {t("backupDesc", lang)}
+                        {lang === "de"
+                          ? "Speichert das Backup als lesbare JSON Datei."
+                          : "Saves the backup as a readable JSON file."}
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={handleExportEncryptedConfig}
+                      style={{
+                        ...cardStyle,
+                        background: "var(--bg-app)",
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        minHeight: 140
+                      }}
+                    >
+                      <Database size={26} style={{ color: "var(--accent)" }} />
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
+                        {lang === "de" ? "Mit Passwort exportieren" : "Export with password"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
+                        {lang === "de"
+                          ? "Schützt das Backup mit AES 256 und Passwort."
+                          : "Protects the backup with AES 256 and a password."}
                       </div>
                     </button>
 
@@ -1062,9 +1132,13 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                       }}
                     >
                       <DownloadIcon size={26} style={{ color: "var(--accent)" }} />
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>{t("importConfig", lang)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
+                        {t("importConfig", lang)}
+                      </div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
-                        {ui.backupDescTitle}
+                        {lang === "de"
+                          ? "Importiert normale JSON Backups oder verschlüsselte Backups."
+                          : "Imports plain JSON backups or encrypted backups."}
                       </div>
                     </button>
                   </div>
