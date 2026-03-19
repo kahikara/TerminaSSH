@@ -16,37 +16,97 @@ type BackupNote = {
   content: string
 }
 
+type NotesImportResult = {
+  imported: number
+  warnings: string[]
+}
+
+type BundleMeta = {
+  version: number
+  appName: string
+  formatName: string
+  exportedAt: string
+}
+
 const NOTES_STORAGE_PREFIX = "termina_notes:"
+const MAX_BACKUP_NOTES = 250
+const MAX_BACKUP_NOTE_CHARS = 200_000
 
 function collectNotesForBackup(): BackupNote[] {
-  const notes: BackupNote[] = []
+  const keys: string[] = []
 
   try {
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i)
       if (!key || !key.startsWith(NOTES_STORAGE_PREFIX)) continue
+      keys.push(key)
+    }
+  } catch {
+  }
 
+  keys.sort((a, b) => a.localeCompare(b))
+
+  const notes: BackupNote[] = []
+
+  for (const key of keys) {
+    if (notes.length >= MAX_BACKUP_NOTES) break
+
+    try {
       const content = localStorage.getItem(key) ?? ""
       if (!content) continue
+      if (content.length > MAX_BACKUP_NOTE_CHARS) continue
 
       notes.push({
         storage_key: key,
         content
       })
+    } catch {
     }
-  } catch {
   }
 
-  notes.sort((a, b) => a.storage_key.localeCompare(b.storage_key))
   return notes
 }
 
-function importNotesFromResult(notesValue: unknown): number {
-  if (!Array.isArray(notesValue)) return 0
+function getBundleMeta(bundleJson: string): BundleMeta {
+  try {
+    const parsed = JSON.parse(bundleJson)
+
+    return {
+      version: Number(parsed?.version || 0),
+      appName: typeof parsed?.appName === "string" ? parsed.appName : "",
+      formatName: typeof parsed?.format === "string" ? parsed.format : "",
+      exportedAt: typeof parsed?.exportedAt === "string" ? parsed.exportedAt : ""
+    }
+  } catch {
+    return {
+      version: 0,
+      appName: "",
+      formatName: "",
+      exportedAt: ""
+    }
+  }
+}
+
+function importNotesFromResult(notesValue: unknown, lang: string): NotesImportResult {
+  if (!Array.isArray(notesValue)) {
+    return {
+      imported: 0,
+      warnings: []
+    }
+  }
 
   let imported = 0
+  const warnings: string[] = []
 
-  for (const item of notesValue) {
+  if (notesValue.length > MAX_BACKUP_NOTES) {
+    warnings.push(
+      lang === "de"
+        ? `Es wurden nur die ersten ${MAX_BACKUP_NOTES} Notizen importiert.`
+        : `Only the first ${MAX_BACKUP_NOTES} notes were imported.`
+    )
+  }
+
+  for (const item of notesValue.slice(0, MAX_BACKUP_NOTES)) {
     const storageKey =
       typeof item?.storage_key === "string"
         ? item.storage_key
@@ -61,6 +121,15 @@ function importNotesFromResult(notesValue: unknown): number {
 
     if (!storageKey.startsWith(NOTES_STORAGE_PREFIX)) continue
 
+    if (content.length > MAX_BACKUP_NOTE_CHARS) {
+      warnings.push(
+        lang === "de"
+          ? `Eine Notiz wurde übersprungen, weil sie größer als ${MAX_BACKUP_NOTE_CHARS} Zeichen ist.`
+          : `One note was skipped because it is larger than ${MAX_BACKUP_NOTE_CHARS} characters.`
+      )
+      continue
+    }
+
     try {
       if (content) {
         localStorage.setItem(storageKey, content)
@@ -72,7 +141,10 @@ function importNotesFromResult(notesValue: unknown): number {
     }
   }
 
-  return imported
+  return {
+    imported,
+    warnings
+  }
 }
 
 export async function buildExportPayload(settings: any): Promise<string> {
@@ -155,8 +227,10 @@ export async function handleImportConfig({
     if (!path) return
 
     const applyImportedBundle = async (bundleJson: string) => {
+      const bundleMeta = getBundleMeta(bundleJson)
       const result: any = await invoke("import_backup_bundle", { bundleJson })
-      const notesImported = importNotesFromResult(result?.notes)
+      const notesResult = importNotesFromResult(result?.notes, lang)
+      const notesImported = Number(result?.notes_imported ?? notesResult.imported)
 
       if (result?.settings) {
         setSettings({ ...settings, ...result.settings })
@@ -166,10 +240,30 @@ export async function handleImportConfig({
       const snippetsImported = Number(result?.snippets_imported || 0)
       const sshKeysImported = Number(result?.ssh_keys_imported || 0)
       const tunnelsImported = Number(result?.tunnels_imported || 0)
-      const warnings = Array.isArray(result?.warnings) ? result.warnings : []
+      const backendWarnings = Array.isArray(result?.warnings) ? result.warnings : []
+      const warnings = [...backendWarnings, ...notesResult.warnings]
 
       const title =
         lang === "de" ? "Backup Import abgeschlossen" : "Backup import completed"
+
+      const details =
+        lang === "de"
+          ? [
+              "Backup Details",
+              "",
+              `• Version: ${bundleMeta.version || "-"}`,
+              `• App: ${bundleMeta.appName || "-"}`,
+              `• Format: ${bundleMeta.formatName || "-"}`,
+              `• Exportiert: ${bundleMeta.exportedAt || "-"}`
+            ]
+          : [
+              "Backup details",
+              "",
+              `• Version: ${bundleMeta.version || "-"}`,
+              `• App: ${bundleMeta.appName || "-"}`,
+              `• Format: ${bundleMeta.formatName || "-"}`,
+              `• Exported: ${bundleMeta.exportedAt || "-"}`
+            ]
 
       const summary =
         lang === "de"
@@ -199,8 +293,8 @@ export async function handleImportConfig({
 
       const description =
         warnings.length > 0
-          ? `${summary.join("\n")}\n\n${warningHeader}\n\n${warningLines.join("\n")}`
-          : summary.join("\n")
+          ? `${details.join("\n")}\n\n${summary.join("\n")}\n\n${warningHeader}\n\n${warningLines.join("\n")}`
+          : `${details.join("\n")}\n\n${summary.join("\n")}`
 
       showDialog({
         type: "alert",
