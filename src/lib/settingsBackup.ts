@@ -41,56 +41,45 @@ function collectNotesForBackup(): BackupNote[] {
   return notes
 }
 
-function importNotesFromBundle(bundleJson: string): number {
-  try {
-    const parsed = JSON.parse(bundleJson)
-    const notesValue = parsed?.notes
+function importNotesFromResult(notesValue: unknown): number {
+  if (!Array.isArray(notesValue)) return 0
 
-    if (!Array.isArray(notesValue)) return 0
+  let imported = 0
 
-    let imported = 0
-
-    for (const item of notesValue) {
-      const storageKey =
-        typeof item?.storage_key === "string"
-          ? item.storage_key
-          : typeof item?.storageKey === "string"
-            ? item.storageKey
-            : ""
-
-      const content =
-        typeof item?.content === "string"
-          ? item.content
+  for (const item of notesValue) {
+    const storageKey =
+      typeof item?.storage_key === "string"
+        ? item.storage_key
+        : typeof item?.storageKey === "string"
+          ? item.storageKey
           : ""
 
-      if (!storageKey.startsWith(NOTES_STORAGE_PREFIX)) continue
+    const content =
+      typeof item?.content === "string"
+        ? item.content
+        : ""
 
-      try {
-        if (content) {
-          localStorage.setItem(storageKey, content)
-        } else {
-          localStorage.removeItem(storageKey)
-        }
-        imported += 1
-      } catch {
+    if (!storageKey.startsWith(NOTES_STORAGE_PREFIX)) continue
+
+    try {
+      if (content) {
+        localStorage.setItem(storageKey, content)
+      } else {
+        localStorage.removeItem(storageKey)
       }
+      imported += 1
+    } catch {
     }
-
-    return imported
-  } catch {
-    return 0
   }
+
+  return imported
 }
 
 export async function buildExportPayload(settings: any): Promise<string> {
-  const backendBundle = await invoke("export_backup_bundle", {
-    settingsJson: JSON.stringify(settings ?? {})
+  return await invoke("export_backup_bundle", {
+    settingsJson: JSON.stringify(settings ?? {}),
+    notesJson: JSON.stringify(collectNotesForBackup())
   })
-
-  const parsed = JSON.parse(String(backendBundle))
-  parsed.notes = collectNotesForBackup()
-
-  return JSON.stringify(parsed, null, 2)
 }
 
 export async function saveBackupFile() {
@@ -166,8 +155,8 @@ export async function handleImportConfig({
     if (!path) return
 
     const applyImportedBundle = async (bundleJson: string) => {
-      const notesImported = importNotesFromBundle(bundleJson)
       const result: any = await invoke("import_backup_bundle", { bundleJson })
+      const notesImported = importNotesFromResult(result?.notes)
 
       if (result?.settings) {
         setSettings({ ...settings, ...result.settings })

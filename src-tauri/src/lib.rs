@@ -112,6 +112,12 @@ pub struct BackupTunnel {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct BackupNote {
+    storage_key: String,
+    content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BackupBundleV3 {
     version: u32,
     #[serde(rename = "exportedAt")]
@@ -124,6 +130,7 @@ pub struct BackupBundleV3 {
     connections: Vec<BackupConnection>,
     snippets: Vec<BackupSnippet>,
     tunnels: Vec<BackupTunnel>,
+    notes: Vec<BackupNote>,
     #[serde(rename = "sshKeys")]
     ssh_keys: Vec<BackupSshKey>,
 }
@@ -135,6 +142,8 @@ pub struct ImportBackupResult {
     snippets_imported: usize,
     ssh_keys_imported: usize,
     tunnels_imported: usize,
+    notes_imported: usize,
+    notes: Vec<BackupNote>,
     warnings: Vec<String>,
 }
 
@@ -732,12 +741,19 @@ fn get_managed_keys_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn export_backup_bundle(settings_json: String) -> Result<String, String> {
+fn export_backup_bundle(settings_json: String, notes_json: String) -> Result<String, String> {
     let settings = if settings_json.trim().is_empty() {
         serde_json::json!({})
     } else {
         serde_json::from_str::<serde_json::Value>(&settings_json)
             .map_err(|e| format!("Invalid settings JSON: {}", e))?
+    };
+
+    let notes = if notes_json.trim().is_empty() {
+        Vec::<BackupNote>::new()
+    } else {
+        serde_json::from_str::<Vec<BackupNote>>(&notes_json)
+            .map_err(|e| format!("Invalid notes JSON: {}", e))?
     };
 
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
@@ -879,6 +895,7 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
         connections,
         snippets,
         tunnels,
+        notes,
         ssh_keys,
     };
 
@@ -933,6 +950,40 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         .cloned()
         .unwrap_or_default();
 
+    let notes_value = parsed
+        .get("notes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut imported_notes: Vec<BackupNote> = Vec::new();
+    for item in notes_value {
+        let storage_key = item
+            .get("storage_key")
+            .or_else(|| item.get("storageKey"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let content = item
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if storage_key.is_empty() {
+            continue;
+        }
+
+        imported_notes.push(BackupNote {
+            storage_key,
+            content,
+        });
+    }
+
+    let notes_imported = imported_notes.len();
+
     let keys_dir = get_keys_dir();
     let mut warnings: Vec<String> = Vec::new();
 
@@ -942,7 +993,6 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
                 .to_string(),
         );
     }
-    let mut warnings: Vec<String> = Vec::new();
     let mut key_path_map: HashMap<String, String> = HashMap::new();
 
     let mut conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
@@ -1356,6 +1406,8 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         snippets_imported,
         ssh_keys_imported,
         tunnels_imported,
+        notes_imported,
+        notes: imported_notes,
         warnings,
     })
 }
