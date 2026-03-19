@@ -1,47 +1,65 @@
-import { useState, useEffect } from "react";
-import { t } from "../lib/i18n";
-import { modalShell, iconButton, navButtonBase, cardStyle, uniformSelectStyle, uniformNumberInputStyle, actionBtnStyle, primaryBtnStyle } from "./SettingsStyles";
-import SettingsSidebar from "./SettingsSidebar";
-import SettingsModalHeader from "./SettingsModalHeader";
-import SettingsKeysSection from "./SettingsKeysSection";
-import SettingsGeneralSection from "./SettingsGeneralSection";
-import SettingsStatusBarSection from "./SettingsStatusBarSection";
-import SettingsTerminalSection from "./SettingsTerminalSection";
-import SettingsSftpSection from "./SettingsSftpSection";
-import SettingsBackupSection from "./SettingsBackupSection";
-import SettingsAboutSection from "./SettingsAboutSection";
-import { getSettingsNavItems } from "./settingsNav";
-import { getSettingsUi } from "./settingsText";
-import { loadSshKeys, promptGenerateSshKey, importExistingSshKey, copySshPublicKey, confirmDeleteSshKey } from "../lib/settingsKeys";
-import { openExternalLink, copyToClipboard } from "../lib/settingsHelpers";
-import { handleExportPlainConfig, handleExportEncryptedConfig, handleImportConfig } from "../lib/settingsBackup";
+import { useState, useEffect } from "react"
+import type { AppSettings, SettingsSectionId, StoredSshKey } from "../lib/types"
+import { t } from "../lib/i18n"
+import { modalShell, iconButton, navButtonBase, cardStyle, uniformSelectStyle, uniformNumberInputStyle, actionBtnStyle, primaryBtnStyle } from "./SettingsStyles"
+import SettingsSidebar from "./SettingsSidebar"
+import SettingsModalHeader from "./SettingsModalHeader"
+import SettingsKeysSection from "./SettingsKeysSection"
+import SettingsGeneralSection from "./SettingsGeneralSection"
+import SettingsStatusBarSection from "./SettingsStatusBarSection"
+import SettingsTerminalSection from "./SettingsTerminalSection"
+import SettingsSftpSection from "./SettingsSftpSection"
+import SettingsBackupSection from "./SettingsBackupSection"
+import SettingsAboutSection from "./SettingsAboutSection"
+import { getSettingsNavItems } from "./settingsNav"
+import { getSettingsUi } from "./settingsText"
+import { loadSshKeys, promptGenerateSshKey, importExistingSshKey, copySshPublicKey, confirmDeleteSshKey } from "../lib/settingsKeys"
+import { openExternalLink, copyToClipboard } from "../lib/settingsHelpers"
+import { handleExportPlainConfig, handleExportEncryptedConfig, handleImportConfig } from "../lib/settingsBackup"
 
-export default function SettingsModal({ isOpen, onClose, settings, setSettings, showToast, showDialog }: any) {
-  const [activeTab, setActiveTab] = useState("general");
-  const [keys, setKeys] = useState<any[]>([]);
+type SettingsModalProps = {
+  isOpen: boolean
+  onClose: () => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
+  showToast: any
+  showDialog: any
+}
 
-  const lang = settings?.lang || "en";
+export default function SettingsModal({
+  isOpen,
+  onClose,
+  settings,
+  setSettings,
+  showToast,
+  showDialog
+}: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<SettingsSectionId>("general")
+  const [keys, setKeys] = useState<StoredSshKey[]>([])
+
+  const lang = settings?.lang || "en"
 
   const loadKeys = async () => {
-    await loadSshKeys({ setKeys });
-  };
-  const ui = getSettingsUi(lang);
+    await loadSshKeys({ setKeys })
+  }
+
+  const ui = getSettingsUi(lang)
 
   useEffect(() => {
     if (isOpen && activeTab === "keys") {
-      void loadKeys();
+      void loadKeys()
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab])
 
-          
-  if (!isOpen) return null;
-  const navItems = getSettingsNavItems(lang, ui);
+  if (!isOpen) return null
+
+  const navItems = getSettingsNavItems(lang, ui)
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) onClose()
       }}
     >
       <div style={modalShell}>
@@ -52,14 +70,15 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
           closeLabel={t("close", lang)}
           iconButton={iconButton}
         />
-        <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
 
+        <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
           <SettingsSidebar
             navItems={navItems}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             navButtonBase={navButtonBase}
           />
+
           <div
             style={{
               flex: 1,
@@ -113,22 +132,20 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
             )}
 
             {activeTab === "keys" && (
-              <>
-                <SettingsKeysSection
-                  lang={lang}
-                  ui={ui}
-                  keys={keys}
-                  loadKeys={loadKeys}
-                  showDialog={showDialog}
-                  showToast={showToast}
-                  primaryBtnStyle={primaryBtnStyle}
-                  actionBtnStyle={actionBtnStyle}
-                  promptGenerateSshKey={promptGenerateSshKey}
-                  importExistingSshKey={importExistingSshKey}
-                  copySshPublicKey={copySshPublicKey}
-                  confirmDeleteSshKey={confirmDeleteSshKey}
-                />
-              </>
+              <SettingsKeysSection
+                lang={lang}
+                ui={ui}
+                keys={keys}
+                loadKeys={loadKeys}
+                showDialog={showDialog}
+                showToast={showToast}
+                primaryBtnStyle={primaryBtnStyle}
+                actionBtnStyle={actionBtnStyle}
+                promptGenerateSshKey={promptGenerateSshKey}
+                importExistingSshKey={importExistingSshKey}
+                copySshPublicKey={copySshPublicKey}
+                confirmDeleteSshKey={confirmDeleteSshKey}
+              />
             )}
 
             {activeTab === "backup" && (
@@ -145,6 +162,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                 handleImportConfig={handleImportConfig}
               />
             )}
+
             {activeTab === "about" && (
               <SettingsAboutSection
                 ui={ui}
@@ -155,10 +173,9 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                 actionBtnStyle={actionBtnStyle}
               />
             )}
-
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

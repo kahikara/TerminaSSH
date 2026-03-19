@@ -1,11 +1,12 @@
 import { t } from "../lib/i18n"
+import type { AppSettings } from "../lib/types"
 import { SettingCard, FieldRow, Toggle } from "./SettingsUi"
 
 type Props = {
   lang: string
   ui: any
-  settings: any
-  setSettings: (next: any) => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
   uniformNumberInputStyle: React.CSSProperties
   uniformSelectStyle: React.CSSProperties
 }
@@ -41,7 +42,7 @@ export default function SettingsTerminalSection({
       <FieldRow label={t("cursorStyle", lang)} desc={ui.cursorStyleDesc}>
         <select
           value={settings.cursorStyle}
-          onChange={(e) => setSettings({ ...settings, cursorStyle: e.target.value })}
+          onChange={(e) => setSettings({ ...settings, cursorStyle: e.target.value as AppSettings["cursorStyle"] })}
           style={uniformSelectStyle}
         >
           <option value="block">{t("block", lang)}</option>

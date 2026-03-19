@@ -1,11 +1,12 @@
 import { Plus, Upload, Trash2, Copy } from "lucide-react"
 import { t } from "../lib/i18n"
+import type { StoredSshKey } from "../lib/types"
 import { SettingCard } from "./SettingsUi"
 
 type Props = {
   lang: string
   ui: any
-  keys: any[]
+  keys: StoredSshKey[]
   loadKeys: () => Promise<void>
   showDialog: any
   showToast: any
@@ -71,7 +72,7 @@ export default function SettingsKeysSection({
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
-          {keys.map((k: any) => (
+          {keys.map((k) => (
             <div
               key={k.id}
               style={{

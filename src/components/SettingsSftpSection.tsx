@@ -1,11 +1,12 @@
 import { t } from "../lib/i18n"
+import type { AppSettings } from "../lib/types"
 import { SettingCard, FieldRow, Toggle } from "./SettingsUi"
 
 type Props = {
   lang: string
   ui: any
-  settings: any
-  setSettings: (next: any) => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
   uniformSelectStyle: React.CSSProperties
 }
 
@@ -28,7 +29,7 @@ export default function SettingsSftpSection({
       <FieldRow label={t("sortOrder", lang)} desc={ui.sortOrderDesc}>
         <select
           value={settings.sftpSort}
-          onChange={(e) => setSettings({ ...settings, sftpSort: e.target.value })}
+          onChange={(e) => setSettings({ ...settings, sftpSort: e.target.value as AppSettings["sftpSort"] })}
           style={uniformSelectStyle}
         >
           <option value="folders">{t("foldersFirst", lang)}</option>

@@ -1,4 +1,5 @@
 import { t } from "../lib/i18n"
+import type { AppSettings } from "../lib/types"
 import { SettingCard } from "./SettingsUi"
 import SettingsBackupCards from "./SettingsBackupCards"
 
@@ -6,8 +7,8 @@ type Props = {
   lang: string
   ui: any
   cardStyle: React.CSSProperties
-  settings: any
-  setSettings: (next: any) => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
   showToast: any
   showDialog: any
   handleExportPlainConfig: any

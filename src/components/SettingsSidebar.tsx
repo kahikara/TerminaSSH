@@ -1,15 +1,11 @@
 import type { CSSProperties } from "react"
-
-type NavItem = {
-  id: string
-  icon: any
-  label: string
-}
+import type { SettingsNavItem, } from "./settingsNav"
+import type { SettingsSectionId } from "../lib/types"
 
 type Props = {
-  navItems: NavItem[]
-  activeTab: string
-  setActiveTab: (tab: string) => void
+  navItems: SettingsNavItem[]
+  activeTab: SettingsSectionId
+  setActiveTab: (tab: SettingsSectionId) => void
   navButtonBase: CSSProperties
 }
 

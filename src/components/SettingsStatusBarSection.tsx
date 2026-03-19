@@ -1,9 +1,10 @@
+import type { AppSettings } from "../lib/types"
 import { SettingCard, FieldRow, Toggle } from "./SettingsUi"
 
 type Props = {
   ui: any
-  settings: any
-  setSettings: (next: any) => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
 }
 
 export default function SettingsStatusBarSection({

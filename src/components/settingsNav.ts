@@ -7,9 +7,17 @@ import {
   Globe,
   MonitorCog
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { t } from "../lib/i18n"
+import type { SettingsSectionId } from "../lib/types"
 
-export function getSettingsNavItems(lang: string, ui: any) {
+export type SettingsNavItem = {
+  id: SettingsSectionId
+  icon: LucideIcon
+  label: string
+}
+
+export function getSettingsNavItems(lang: string, ui: any): SettingsNavItem[] {
   return [
     { id: "general", icon: Globe, label: ui.general },
     { id: "statusbar", icon: MonitorCog, label: ui.statusBar },

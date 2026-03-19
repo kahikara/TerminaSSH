@@ -1,12 +1,18 @@
 import { t } from "../lib/i18n"
+import type { AppSettings, ToolToggleKey } from "../lib/types"
 import { SettingCard, FieldRow, Toggle } from "./SettingsUi"
 
 type Props = {
   lang: string
   ui: any
-  settings: any
-  setSettings: (next: any) => void
+  settings: AppSettings
+  setSettings: (next: AppSettings) => void
   uniformSelectStyle: React.CSSProperties
+}
+
+type ToolItem = {
+  key: ToolToggleKey
+  label: string
 }
 
 export default function SettingsGeneralSection({
@@ -16,6 +22,15 @@ export default function SettingsGeneralSection({
   setSettings,
   uniformSelectStyle
 }: Props) {
+  const toolItems: ToolItem[] = [
+    { key: "showSplit", label: t("showSplit", lang) },
+    { key: "showSftp", label: t("showSftp", lang) },
+    { key: "showTunnels", label: "Tunnels" },
+    { key: "showSnippets", label: "Snippets" },
+    { key: "showSearch", label: lang === "de" ? "Suche" : "Search" },
+    { key: "showNotes", label: "Notes" }
+  ]
+
   return (
     <>
       <SettingCard title={ui.general} desc={ui.generalDesc}>
@@ -33,7 +48,7 @@ export default function SettingsGeneralSection({
         <FieldRow label={t("theme", lang)} desc={ui.themeDesc}>
           <select
             value={settings.theme}
-            onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
+            onChange={(e) => setSettings({ ...settings, theme: e.target.value as AppSettings["theme"] })}
             style={uniformSelectStyle}
           >
             <option value="catppuccin">Catppuccin</option>
@@ -57,14 +72,7 @@ export default function SettingsGeneralSection({
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              { key: "showSplit", label: t("showSplit", lang) },
-              { key: "showSftp", label: t("showSftp", lang) },
-              { key: "showTunnels", label: "Tunnels" },
-              { key: "showSnippets", label: "Snippets" },
-              { key: "showSearch", label: lang === "de" ? "Suche" : "Search" },
-              { key: "showNotes", label: "Notes" }
-            ].map((tool) => (
+            {toolItems.map((tool) => (
               <div
                 key={tool.key}
                 style={{

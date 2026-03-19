@@ -1,13 +1,42 @@
+export type ThemeName = "catppuccin" | "nord" | "pitch-black"
+export type CursorStyleName = "block" | "bar" | "underline"
+export type SftpSortName = "folders" | "name" | "size" | "type"
+
+export type SettingsSectionId =
+  | "general"
+  | "statusbar"
+  | "terminal"
+  | "sftp"
+  | "keys"
+  | "backup"
+  | "about"
+
+export type ToolToggleKey =
+  | "showSplit"
+  | "showSftp"
+  | "showTunnels"
+  | "showSnippets"
+  | "showSearch"
+  | "showNotes"
+
+export type StoredSshKey = {
+  id: number | string
+  name: string
+  key_type: string
+  fingerprint: string
+  public_key: string
+}
+
 export type AppSettings = {
   [key: string]: any
   lang: string
-  theme: string
+  theme: ThemeName
   fontSize: number
-  cursorStyle: string
+  cursorStyle: CursorStyleName
   cursorBlink: boolean
   scrollback: number
   sftpHidden: boolean
-  sftpSort: string
+  sftpSort: SftpSortName
   showSplit: boolean
   showSftp: boolean
   showTunnels: boolean
