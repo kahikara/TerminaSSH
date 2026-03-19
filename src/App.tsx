@@ -1,24 +1,21 @@
-import React from "react";
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { listen } from '@tauri-apps/api/event';
 import { t } from './lib/i18n';
+import { useAppSettings } from './hooks/useAppSettings';
+import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
 import SftpEditorWindow from "./components/SftpEditorWindow";
 import ConnectionModal from './components/ConnectionModal';
 import Dashboard from './components/Dashboard';
 import GlobalDialog from './components/GlobalDialog';
-
-type EditorWindowInfo = {
-  label: string
-  fileName: string
-  remotePath: string
-  dirty: boolean
-}
+import { useMainWindowCloseFlow } from './hooks/useMainWindowCloseFlow';
+import SessionCloseDialog from './components/SessionCloseDialog';
+import MainCloseDialog from './components/MainCloseDialog';
+import ToastStack from './components/ToastStack';
+import InputContextMenu from './components/InputContextMenu';
+import { useInputContextMenu } from './hooks/useInputContextMenu';
 
 export default function App() {
   const params = new URLSearchParams(window.location.search)
@@ -28,63 +25,7 @@ export default function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [settings, setSettings] = useState(() => {
-    const defaults = {
-      lang: 'en',
-      theme: 'catppuccin',
-      fontSize: 14,
-      cursorStyle: 'bar',
-      cursorBlink: true,
-      scrollback: 10000,
-      sftpHidden: false,
-      sftpSort: 'folders',
-      showSplit: true,
-      showSftp: true,
-      showTunnels: true,
-      showSearch: true,
-      showDashboardQuickConnect: true,
-      showDashboardWorkflow: true,
-      showDashboardActiveSessions: true,
-      showDashboardRecentConnections: true,
-      closeToTray: false,
-      customFolders: []
-    };
-
-    try {
-      const saved = localStorage.getItem('termina_settings');
-      if (!saved) return defaults;
-
-      const parsed = JSON.parse(saved);
-
-      let normalizedSort = parsed.sftpSort;
-      if (normalizedSort === 'az') normalizedSort = 'name';
-      if (normalizedSort === 'za') normalizedSort = 'name';
-      if (!['folders', 'name', 'size', 'type'].includes(normalizedSort)) normalizedSort = 'folders';
-
-      return {
-        ...defaults,
-        ...parsed,
-        sftpSort: normalizedSort,
-        showSplit: parsed.showSplit !== false,
-        showSftp: parsed.showSftp !== false,
-        showTunnels: parsed.showTunnels !== false,
-        showSearch: parsed.showSearch !== false,
-        showDashboardQuickConnect: parsed.showDashboardQuickConnect !== false,
-        showDashboardWorkflow: parsed.showDashboardWorkflow !== false,
-        showDashboardActiveSessions: parsed.showDashboardActiveSessions !== false,
-        showDashboardRecentConnections: parsed.showDashboardRecentConnections !== false,
-        closeToTray: parsed.closeToTray === true,
-        customFolders: Array.isArray(parsed.customFolders) ? parsed.customFolders : []
-      };
-    } catch {
-      return defaults;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('termina_settings', JSON.stringify(settings));
-    document.documentElement.setAttribute('data-theme', settings.theme);
-  }, [settings]);
+  const { settings, setSettings } = useAppSettings();
 
   useEffect(() => {
     invoke("set_tray_visible", { visible: Boolean(settings.closeToTray) }).catch(() => {});
@@ -112,311 +53,42 @@ export default function App() {
   const [isConnModalOpen, setConnModalOpen] = useState(false);
   const [serverToEdit, setServerToEdit] = useState<any>(null);
 
-  const [toasts, setToasts] = useState<{id: number, msg: string, isErr: boolean}[]>([]);
-  const showToast = (msg: string, isErr = false) => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, isErr }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  };
+  const {
+    dirtyEditors,
+    sessionCloseDialogOpen,
+    mainCloseDialogOpen,
+    mainCloseDialogBusy,
+    cancelSessionCloseDialog,
+    confirmSessionCloseDialog,
+    cancelMainCloseDialog,
+    confirmMainCloseDialog
+  } = useMainWindowCloseFlow({
+    openTabs,
+    closeToTray: Boolean(settings.closeToTray)
+  })
+
+  const { toasts, showToast } = useToasts();
 
   const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', title: '', placeholder: '', defaultValue: '', isPassword: false, onConfirm: (_v:any)=>{}, onCancel: ()=>{} });
-  const showDialog = (config: any) => setDialog({ ...dialog, isOpen: true, ...config });
-
-  const [inputMenu, setInputMenu] = useState<{
-    open: boolean
-    x: number
-    y: number
-    target: HTMLInputElement | HTMLTextAreaElement | null
-  }>({
-    open: false,
-    x: 0,
-    y: 0,
-    target: null
-  });
-
-  const [editorWindows, setEditorWindows] = useState<EditorWindowInfo[]>([]);
-  const [mainCloseDialogOpen, setMainCloseDialogOpen] = useState(false);
-  const [mainCloseDialogBusy, setMainCloseDialogBusy] = useState(false);
-  const [sessionCloseDialogOpen, setSessionCloseDialogOpen] = useState(false);
+  const showDialog = (config: any) => setDialog(prev => ({ ...prev, isOpen: true, ...config }));
 
   const isDragging = useRef(false);
   const expandedSidebarWidthRef = useRef(260);
   const settingsRef = useRef(settings);
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const channelRef = useRef<BroadcastChannel | null>(null);
-  const mainClosingRef = useRef(false);
-  const mainWaitingForEditorsRef = useRef(false);
-  const openTabsRef = useRef<any[]>([]);
-  const editorWindowsRef = useRef<EditorWindowInfo[]>([]);
-  const mainCloseDialogBusyRef = useRef(false);
   const tabDragStartXRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    openTabsRef.current = openTabs;
-  }, [openTabs]);
-
-  useEffect(() => {
-    editorWindowsRef.current = editorWindows;
-  }, [editorWindows]);
-
-  useEffect(() => {
-    mainCloseDialogBusyRef.current = mainCloseDialogBusy;
-  }, [mainCloseDialogBusy]);
+  const { inputMenu, runInputMenuAction } = useInputContextMenu({
+    lang: settings.lang,
+    showToast
+  });
 
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
 
-  const closeInputMenu = () => {
-    setInputMenu({ open: false, x: 0, y: 0, target: null });
-  };
-
-  const isTextField = (el: Element | null): el is HTMLInputElement | HTMLTextAreaElement => {
-    if (!el) return false;
-    if (el instanceof HTMLTextAreaElement) return true;
-    if (!(el instanceof HTMLInputElement)) return false;
-
-    const blocked = new Set([
-      'checkbox',
-      'radio',
-      'button',
-      'submit',
-      'reset',
-      'file',
-      'color',
-      'range',
-      'date',
-      'datetime-local',
-      'month',
-      'time',
-      'week',
-      'hidden',
-      'image'
-    ]);
-
-    return !blocked.has(el.type);
-  };
-
-  const replaceInputSelection = (el: HTMLInputElement | HTMLTextAreaElement, text: string) => {
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    const nextValue = el.value.slice(0, start) + text + el.value.slice(end);
-
-    el.value = nextValue;
-    const nextPos = start + text.length;
-    el.setSelectionRange(nextPos, nextPos);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  };
-
-  const runInputMenuAction = async (action: 'copy' | 'paste' | 'cut' | 'selectAll') => {
-    const el = inputMenu.target;
-    if (!el) return;
-
-    try {
-      el.focus();
-
-      if (action === 'selectAll') {
-        el.select();
-        closeInputMenu();
-        return;
-      }
-
-      const start = el.selectionStart ?? 0;
-      const end = el.selectionEnd ?? 0;
-      const selectedText = el.value.slice(start, end);
-      const canEdit = !el.readOnly && !el.disabled;
-
-      if (action === 'copy') {
-        if (!selectedText) {
-          closeInputMenu();
-          return;
-        }
-        await writeText(selectedText);
-        closeInputMenu();
-        return;
-      }
-
-      if (action === 'cut') {
-        if (!selectedText || !canEdit) {
-          closeInputMenu();
-          return;
-        }
-        await writeText(selectedText);
-        replaceInputSelection(el, '');
-        closeInputMenu();
-        return;
-      }
-
-      if (action === 'paste') {
-        if (!canEdit) {
-          closeInputMenu();
-          return;
-        }
-        const text = await readText();
-        if (!text) {
-          closeInputMenu();
-          return;
-        }
-        replaceInputSelection(el, text);
-        closeInputMenu();
-        return;
-      }
-    } catch (e: any) {
-      showToast(
-        settings.lang === 'de'
-          ? `Kontextmenü Aktion fehlgeschlagen: ${String(e)}`
-          : `Context menu action failed: ${String(e)}`,
-        true
-      );
-      closeInputMenu();
-    }
-  };
-
   const loadServers = async () => { try { setConnections(await invoke('get_connections')); } catch(e){} };
   useEffect(() => { loadServers(); }, []);
-
-  const finalizeMainClose = async () => {
-    if (mainClosingRef.current) return
-    mainClosingRef.current = true
-    const win = getCurrentWindow()
-    await win.close()
-  }
-
-  const requestEditorClose = (force: boolean) => {
-    const currentEditors = editorWindowsRef.current
-
-    if (currentEditors.length === 0) {
-      void finalizeMainClose()
-      return
-    }
-
-    mainWaitingForEditorsRef.current = true
-    channelRef.current?.postMessage({
-      type: "main-request-close-editors",
-      force
-    })
-  }
-
-  const continueMainCloseFlow = async () => {
-    if (mainCloseDialogBusyRef.current) return
-
-    const currentEditors = editorWindowsRef.current
-
-    if (currentEditors.length === 0) {
-      await finalizeMainClose()
-      return
-    }
-
-    const dirtyEditors = currentEditors.filter((item) => item.dirty)
-
-    if (dirtyEditors.length > 0) {
-      mainWaitingForEditorsRef.current = false
-      setMainCloseDialogOpen(true)
-      return
-    }
-
-    requestEditorClose(false)
-  }
-
-  useEffect(() => {
-    const channel = new BroadcastChannel("termina-editor-sync")
-    channelRef.current = channel
-
-    channel.onmessage = (event) => {
-      const msg = event.data || {}
-
-      if (msg.type === "editor-state" && msg.label) {
-        setEditorWindows((prev) => {
-          const nextItem: EditorWindowInfo = {
-            label: String(msg.label),
-            fileName: String(msg.fileName || ""),
-            remotePath: String(msg.remotePath || ""),
-            dirty: Boolean(msg.dirty)
-          }
-
-          const filtered = prev.filter((item) => item.label !== nextItem.label)
-          return [...filtered, nextItem]
-        })
-        return
-      }
-
-      if (msg.type === "editor-closed" && msg.label) {
-        setEditorWindows((prev) => {
-          const next = prev.filter((item) => item.label !== msg.label)
-
-          if (mainWaitingForEditorsRef.current && next.length === 0) {
-            window.setTimeout(() => {
-              void finalizeMainClose()
-            }, 0)
-          }
-
-          return next
-        })
-      }
-    }
-
-    return () => {
-      channel.close()
-      channelRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    const win = getCurrentWindow()
-    let unlisten: (() => void) | undefined
-
-    win.onCloseRequested(async (event) => {
-      if (mainClosingRef.current) return
-
-      event.preventDefault()
-
-      if (mainCloseDialogBusyRef.current) return
-
-      if (settingsRef.current?.closeToTray) {
-        await win.hide()
-        return
-      }
-
-      const currentTabs = openTabsRef.current
-
-      if (currentTabs.length > 0) {
-        setSessionCloseDialogOpen(true)
-        return
-      }
-
-      await continueMainCloseFlow()
-    }).then((fn) => {
-      unlisten = fn
-    }).catch(console.error)
-
-    return () => {
-      if (unlisten) unlisten()
-    }
-  }, [])
-
-  useEffect(() => {
-    let unlistenTrayQuit: (() => void) | undefined
-
-    listen("tray-quit-requested", async () => {
-      if (mainClosingRef.current) return
-      if (mainCloseDialogBusyRef.current) return
-
-      const currentTabs = openTabsRef.current
-
-      if (currentTabs.length > 0) {
-        setSessionCloseDialogOpen(true)
-        return
-      }
-
-      await continueMainCloseFlow()
-    }).then((fn) => {
-      unlistenTrayQuit = fn
-    }).catch(console.error)
-
-    return () => {
-      if (unlistenTrayQuit) unlistenTrayQuit()
-    }
-  }, [])
 
   const { groups, rootServers } = useMemo(() => {
     const grps: Record<string, any[]> = {};
@@ -583,64 +255,6 @@ export default function App() {
     setSidebarSearchQuery("");
   }, [isSidebarCollapsed]);
 
-  useEffect(() => {
-    const handleContextMenu = (e: MouseEvent) => {
-      if (e.defaultPrevented) return;
-
-      const target = e.target as Element | null;
-      const field = target?.closest('input, textarea') ?? null;
-
-      if (isTextField(field)) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        field.focus();
-
-        const menuWidth = 176;
-        const menuHeight = 172;
-        const nextX = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
-        const nextY = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
-
-        setInputMenu({
-          open: true,
-          x: Math.max(8, nextX),
-          y: Math.max(8, nextY),
-          target: field
-        });
-        return;
-      }
-
-      e.preventDefault();
-      closeInputMenu();
-    };
-
-    const handlePointerDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-input-context-menu="true"]')) return;
-      closeInputMenu();
-    };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeInputMenu();
-    };
-
-    const handleWindowChange = () => closeInputMenu();
-
-    window.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    window.addEventListener('resize', handleWindowChange);
-    window.addEventListener('scroll', handleWindowChange, true);
-
-    return () => {
-      window.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-      window.removeEventListener('resize', handleWindowChange);
-      window.removeEventListener('scroll', handleWindowChange, true);
-    };
-  }, [settings.lang, inputMenu.target]);
-
   const openTerminal = (server: any) => {
     const findExistingTabId = () => {
       if (server?.isQuickConnect) return null;
@@ -783,8 +397,6 @@ export default function App() {
   }, [tabDragId, tabDropId, tabPointerDragging]);
 
     
-
-  const dirtyEditors = editorWindows.filter((item) => item.dirty)
 
   return (
     <div className="flex h-screen w-full font-sans overflow-hidden relative">
@@ -1172,110 +784,22 @@ export default function App() {
       <ConnectionModal isOpen={isConnModalOpen} onClose={() => setConnModalOpen(false)} serverToEdit={serverToEdit} onSuccess={loadServers} showToast={showToast} showDialog={showDialog} lang={settings.lang} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} setSettings={setSettings} showToast={showToast} showDialog={showDialog} />
 
-      {sessionCloseDialogOpen && (
-        <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xl rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl">
-            <div className="px-4 py-3 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
-              <div className="text-[14px] leading-[1.2] font-bold text-[var(--text-main)]">
-                {t("activeTerminalSessionsTitle", settings.lang)}
-              </div>
-              <div className="text-[12px] leading-[1.4] text-[var(--text-muted)] mt-1">
-                {t("activeTerminalSessionsText", settings.lang)}
-              </div>
-            </div>
+      <SessionCloseDialog
+        isOpen={sessionCloseDialogOpen}
+        openTabs={openTabs}
+        lang={settings.lang}
+        onCancel={cancelSessionCloseDialog}
+        onConfirm={confirmSessionCloseDialog}
+      />
 
-            <div className="px-4 py-3 max-h-72 overflow-auto">
-              <div className="flex flex-col gap-3">
-                {openTabs.map((tab) => (
-                  <div key={tab.tabId} className="rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_84%,var(--bg-app))] px-3 py-2.5">
-                    <div className="text-sm font-medium text-[var(--text-main)] break-words">
-                      {tab.name || tab.host || tab.tabId}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)] break-words mt-1">
-                      {tab.isLocal ? t("localTerminalShort", settings.lang) : `${tab.username || ""}@${tab.host || ""}`}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] flex items-center justify-end gap-2 bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))]">
-              <button
-                onClick={() => setSessionCloseDialogOpen(false)}
-                className="min-h-9 px-4 py-2 rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] text-[var(--text-main)] text-[13px] transition-colors hover:bg-[var(--bg-hover)]"
-              >
-                {t("cancel", settings.lang)}
-              </button>
-
-              <button
-                onClick={async () => {
-                  setSessionCloseDialogOpen(false)
-                  await continueMainCloseFlow()
-                }}
-                className="min-h-9 px-4 py-2 rounded-xl border border-yellow-500 bg-yellow-500 text-black text-[13px] font-medium transition-opacity hover:opacity-90"
-              >
-                {t("closeAnyway", settings.lang)}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mainCloseDialogOpen && (
-        <div className="fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xl rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl">
-            <div className="px-4 py-3 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
-              <div className="text-[14px] leading-[1.2] font-bold text-[var(--text-main)]">
-                {t("unsavedEditorChangesTitle", settings.lang)}
-              </div>
-              <div className="text-[12px] leading-[1.4] text-[var(--text-muted)] mt-1">
-                {t("unsavedEditorChangesText", settings.lang)}
-              </div>
-            </div>
-
-            <div className="px-4 py-3 max-h-72 overflow-auto">
-              <div className="flex flex-col gap-3">
-                {dirtyEditors.map((item) => (
-                  <div key={item.label} className="rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_84%,var(--bg-app))] px-3 py-2.5">
-                    <div className="text-sm font-medium text-[var(--text-main)] break-words">
-                      {item.fileName || item.label}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)] break-words mt-1">
-                      {item.remotePath || item.label}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] flex items-center justify-end gap-2 bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))]">
-              <button
-                onClick={() => {
-                  mainWaitingForEditorsRef.current = false
-                  setMainCloseDialogBusy(false)
-                  setMainCloseDialogOpen(false)
-                }}
-                className="min-h-9 px-4 py-2 rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] text-[var(--text-main)] text-[13px] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60"
-                disabled={mainCloseDialogBusy}
-              >
-                {t("cancel", settings.lang)}
-              </button>
-
-              <button
-                onClick={() => {
-                  setMainCloseDialogBusy(true)
-                  setMainCloseDialogOpen(false)
-                  requestEditorClose(true)
-                }}
-                className="min-h-9 px-4 py-2 rounded-xl border border-[var(--danger)] bg-[var(--danger)] text-white text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
-                disabled={mainCloseDialogBusy}
-              >
-                {t("closeAllAndDiscard", settings.lang)}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MainCloseDialog
+        isOpen={mainCloseDialogOpen}
+        busy={mainCloseDialogBusy}
+        dirtyEditors={dirtyEditors}
+        lang={settings.lang}
+        onCancel={cancelMainCloseDialog}
+        onConfirm={confirmMainCloseDialog}
+      />
 
       {tabPointerDragging && draggedTabGhost && tabGhostPos && (
         <div
@@ -1294,70 +818,13 @@ export default function App() {
         </div>
       )}
 
-      {inputMenu.open && (
-        <div
-          data-input-context-menu="true"
-          className="fixed z-[320] w-[176px] rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl overflow-hidden"
-          style={{ left: inputMenu.x, top: inputMenu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => runInputMenuAction('copy')}
-            className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {settings.lang === 'de' ? 'Kopieren' : 'Copy'}
-          </button>
+      <InputContextMenu
+        inputMenu={inputMenu}
+        lang={settings.lang}
+        onAction={runInputMenuAction}
+      />
 
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => runInputMenuAction('paste')}
-            className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {settings.lang === 'de' ? 'Einfügen' : 'Paste'}
-          </button>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => runInputMenuAction('cut')}
-            className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {settings.lang === 'de' ? 'Ausschneiden' : 'Cut'}
-          </button>
-
-          <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => runInputMenuAction('selectAll')}
-            className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {settings.lang === 'de' ? 'Alles auswählen' : 'Select all'}
-          </button>
-        </div>
-      )}
-
-      <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2.5 pointer-events-none">
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-auto ${
-              t.isErr
-                ? 'border-[color-mix(in_srgb,var(--danger)_58%,var(--border-subtle))] bg-[color-mix(in_srgb,var(--bg-app)_88%,black)]'
-                : 'border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))] bg-[color-mix(in_srgb,var(--bg-app)_88%,black)]'
-            }`}
-          >
-            <span
-              className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-                t.isErr ? 'bg-[var(--danger)]' : 'bg-[var(--accent)]'
-              }`}
-            />
-            <span className="text-[13px] leading-[1.35] font-medium text-[var(--text-main)] max-w-sm break-words">
-              {t.msg}
-            </span>
-          </div>
-        ))}
-      </div>
+      <ToastStack toasts={toasts} />
     </div>
   );
 }

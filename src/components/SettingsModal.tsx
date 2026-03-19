@@ -1,4 +1,3 @@
-import React from "react";
 import { useState, useEffect, useMemo } from "react";
 import {
   X,
@@ -14,288 +13,26 @@ import {
   Database,
   Info,
   Globe,
-  MonitorCog,
-  Heart
+  MonitorCog
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
 import { t } from "../lib/i18n";
-
-async function encryptData(text: string, password: string) {
-  const enc = new TextEncoder();
-  const salt = window.crypto.getRandomValues(new Uint8Array(16));
-  const keyMaterial = await window.crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-  const key = await window.crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt"]
-  );
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const cipher = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
-  const bundle = new Uint8Array(salt.length + iv.length + cipher.byteLength);
-  bundle.set(salt, 0);
-  bundle.set(iv, salt.length);
-  bundle.set(new Uint8Array(cipher), salt.length + iv.length);
-  let binary = "";
-  for (let i = 0; i < bundle.length; i++) binary += String.fromCharCode(bundle[i]);
-  return btoa(binary);
-}
-
-async function decryptData(base64: string, password: string) {
-  const binary = atob(base64);
-  const bundle = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bundle[i] = binary.charCodeAt(i);
-  const salt = bundle.slice(0, 16);
-  const iv = bundle.slice(16, 28);
-  const cipher = bundle.slice(28);
-  const enc = new TextEncoder();
-  const keyMaterial = await window.crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-  const key = await window.crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["decrypt"]
-  );
-  const plain = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
-  return new TextDecoder().decode(plain);
-}
-
-async function openExternalLink(url: string) {
-  try {
-    await invoke("open_external_url", { url });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function copyToClipboard(text: string) {
-  try {
-    await invoke("copy_text_to_clipboard", { text });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function getPathBaseName(filePath: string) {
-  return filePath.split(/[\\/]/).pop()?.trim() || "";
-}
-
-const modalShell: React.CSSProperties = {
-  width: 860,
-  height: 580,
-  maxWidth: "calc(100vw - 40px)",
-  maxHeight: "calc(100vh - 40px)",
-  borderRadius: 16,
-  overflow: "hidden",
-  display: "flex",
-  flexDirection: "column",
-  background: "var(--bg-app)",
-  border: "1px solid var(--border-subtle)",
-  boxShadow: "0 18px 60px rgba(0,0,0,0.38)"
-};
-
-const iconButton: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 10,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  border: "1px solid var(--border-subtle)",
-  background: "var(--bg-app)",
-  color: "var(--text-muted)",
-  cursor: "pointer",
-  transition: "background 140ms ease, border-color 140ms ease, color 140ms ease"
-};
-
-const navButtonBase: React.CSSProperties = {
-  width: "100%",
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "9px 10px",
-  borderRadius: 12,
-  fontSize: 13,
-  border: "1px solid transparent",
-  background: "transparent",
-  cursor: "pointer",
-  textAlign: "left",
-  transition: "all 140ms ease"
-};
-
-const cardStyle: React.CSSProperties = {
-  border: "1px solid var(--border-subtle)",
-  background: "color-mix(in srgb, var(--bg-sidebar) 82%, var(--bg-app))",
-  borderRadius: 14,
-  padding: 14
-};
-
-const fieldRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  padding: "10px 0",
-  borderTop: "1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent)"
-};
-
-const inputStyle: React.CSSProperties = {
-  height: 36,
-  padding: "0 12px",
-  borderRadius: 10,
-  border: "1px solid var(--border-subtle)",
-  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
-  color: "var(--text-main)",
-  outline: "none",
-  fontSize: 13
-};
-
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  width: 156,
-  cursor: "pointer",
-  appearance: "none",
-  WebkitAppearance: "none",
-  MozAppearance: "none",
-  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
-  backgroundImage: "linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%)",
-  backgroundPosition: "calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px)",
-  backgroundSize: "6px 6px, 6px 6px",
-  backgroundRepeat: "no-repeat",
-  paddingRight: 32
-};
-
-const uniformSelectStyle: React.CSSProperties = {
-  ...selectStyle
-};
-
-const uniformNumberInputStyle: React.CSSProperties = {
-  ...inputStyle,
-  width: 156,
-  textAlign: "center"
-};
-
-const actionBtnStyle: React.CSSProperties = {
-  minHeight: 36,
-  padding: "0 12px",
-  borderRadius: 10,
-  border: "1px solid var(--border-subtle)",
-  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
-  color: "var(--text-main)",
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: 600,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  transition: "background 140ms ease, border-color 140ms ease, opacity 140ms ease"
-};
-
-const primaryBtnStyle: React.CSSProperties = {
-  ...actionBtnStyle,
-  background: "var(--accent)",
-  color: "black",
-  border: "1px solid transparent"
-};
-
-function SettingCard({
-  title,
-  desc,
-  children
-}: {
-  title: string;
-  desc?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={cardStyle}>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>{title}</div>
-        {desc ? (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.4 }}>
-            {desc}
-          </div>
-        ) : null}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function FieldRow({
-  label,
-  desc,
-  children,
-  first = false
-}: {
-  label: string;
-  desc?: string;
-  children: React.ReactNode;
-  first?: boolean;
-}) {
-  return (
-    <div style={{ ...fieldRowStyle, borderTop: first ? "none" : fieldRowStyle.borderTop }}>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, lineHeight: 1.25, fontWeight: 600, color: "var(--text-main)" }}>{label}</div>
-        {desc ? (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.4 }}>{desc}</div>
-        ) : null}
-      </div>
-      <div style={{ flexShrink: 0 }}>{children}</div>
-    </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      style={{
-        width: 42,
-        height: 24,
-        borderRadius: 999,
-        border: "1px solid var(--border-subtle)",
-        background: checked ? "var(--accent)" : "var(--bg-app)",
-        position: "relative",
-        cursor: "pointer",
-        transition: "all 140ms ease"
-      }}
-    >
-      <span
-        style={{
-          position: "absolute",
-          top: 2,
-          left: checked ? 20 : 2,
-          width: 18,
-          height: 18,
-          borderRadius: 999,
-          background: checked ? "black" : "var(--text-main)",
-          transition: "left 140ms ease, background 140ms ease"
-        }}
-      />
-    </button>
-  );
-}
+import { modalShell, iconButton, navButtonBase, cardStyle, uniformSelectStyle, uniformNumberInputStyle, actionBtnStyle, primaryBtnStyle } from "./SettingsStyles";
+import { SettingCard, FieldRow, Toggle } from "./SettingsUi";
+import SettingsAboutCard from "./SettingsAboutCard";
+import { loadSshKeys, promptGenerateSshKey, importExistingSshKey, copySshPublicKey, confirmDeleteSshKey } from "../lib/settingsKeys";
+import { openExternalLink, copyToClipboard } from "../lib/settingsHelpers";
+import { handleExportPlainConfig, handleExportEncryptedConfig, handleImportConfig } from "../lib/settingsBackup";
 
 export default function SettingsModal({ isOpen, onClose, settings, setSettings, showToast, showDialog }: any) {
   const [activeTab, setActiveTab] = useState("general");
   const [keys, setKeys] = useState<any[]>([]);
 
   const lang = settings?.lang || "en";
+
+  const loadKeys = async () => {
+    await loadSshKeys({ setKeys });
+  };
+
 
   const ui = useMemo(() => {
     if (lang === "de") {
@@ -435,163 +172,13 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
     };
   }, [lang]);
 
-  const loadKeys = async () => {
-    try {
-      setKeys(await invoke("get_ssh_keys"));
-    } catch (e) {}
-  };
-
   useEffect(() => {
-    if (isOpen && activeTab === "keys") loadKeys();
+    if (isOpen && activeTab === "keys") {
+      void loadKeys();
+    }
   }, [isOpen, activeTab]);
 
-  async function buildExportPayload(): Promise<string> {
-    return await invoke("export_backup_bundle", {
-      settingsJson: JSON.stringify(settings ?? {})
-    });
-  }
-
-  async function saveBackupFile() {
-    const { save } = await import("@tauri-apps/plugin-dialog");
-    const dateStr = new Date().toISOString().replace(/T/, "_").replace(/:/g, "-").split(".")[0];
-    return await save({ defaultPath: `backup_termina_${dateStr}.json` });
-  }
-
-  async function handleExportPlainConfig() {
-    try {
-      const path = await saveBackupFile();
-      if (!path) return;
-
-      const exportPayload = await buildExportPayload();
-      await writeTextFile(path, exportPayload);
-      showToast(ui.exported);
-    } catch (e: any) {
-      showToast(`Backup export failed: ${String(e)}`, true);
-    }
-  }
-
-  async function handleExportEncryptedConfig() {
-    showDialog({
-      type: "prompt",
-      title: t("pwdSet", settings.lang),
-      placeholder: t("password", settings.lang),
-      confirmPlaceholder: settings.lang === "de" ? "Passwort erneut eingeben" : "Enter password again",
-      isPassword: true,
-      requireConfirm: true,
-      validate: (pwd: string, confirmPwd: string) => {
-        if (!pwd || !confirmPwd) return "";
-        if (pwd !== confirmPwd) {
-          return settings.lang === "de"
-            ? "Die Passwörter stimmen nicht überein."
-            : "Passwords do not match.";
-        }
-        return "";
-      },
-      onConfirm: async (pwd: string) => {
-        try {
-          const path = await saveBackupFile();
-          if (!path) return;
-
-          const exportPayload = await buildExportPayload();
-          const encrypted = await encryptData(exportPayload, pwd);
-          await writeTextFile(path, encrypted);
-          showToast(ui.exported);
-        } catch (e: any) {
-          showToast(`Backup export failed: ${String(e)}`, true);
-        }
-      }
-    });
-  }
-
-  async function handleImportConfig() {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const path = await open({ multiple: false, filters: [{ name: "JSON/Backup", extensions: ["json", "bak"] }] });
-
-      if (!path) return;
-
-      const applyImportedBundle = async (bundleJson: string) => {
-        const result: any = await invoke("import_backup_bundle", { bundleJson });
-
-        if (result?.settings) {
-          setSettings({ ...settings, ...result.settings });
-        }
-
-        const connectionsImported = Number(result?.connections_imported || 0);
-        const snippetsImported = Number(result?.snippets_imported || 0);
-        const sshKeysImported = Number(result?.ssh_keys_imported || 0);
-        const tunnelsImported = Number(result?.tunnels_imported || 0);
-        const warnings = Array.isArray(result?.warnings) ? result.warnings : [];
-
-        const title =
-          lang === "de" ? "Backup Import abgeschlossen" : "Backup import completed";
-
-        const summary =
-          lang === "de"
-            ? [
-                `Verbindungen importiert: ${connectionsImported}`,
-                `Snippets importiert: ${snippetsImported}`,
-                `SSH Schlüssel importiert: ${sshKeysImported}`,
-                `Tunnels importiert: ${tunnelsImported}`
-              ]
-            : [
-                `Connections imported: ${connectionsImported}`,
-                `Snippets imported: ${snippetsImported}`,
-                `SSH keys imported: ${sshKeysImported}`,
-                `Tunnels imported: ${tunnelsImported}`
-              ];
-
-        const warningHeader =
-          lang === "de" ? "Warnungen:" : "Warnings:";
-
-        const description =
-          warnings.length > 0
-            ? `${summary.join("\n")}\n\n${warningHeader}\n${warnings.join("\n")}`
-            : summary.join("\n");
-
-        showDialog({
-          type: "alert",
-          title,
-          description,
-          confirmLabel: "OK",
-          onConfirm: () => {}
-        });
-
-        showToast(ui.importedBackup);
-        setTimeout(() => window.location.reload(), 1500);
-      };
-
-      const rawContent = await readTextFile(path as string);
-
-      try {
-        JSON.parse(rawContent);
-        await applyImportedBundle(rawContent);
-        return;
-      } catch {
-      }
-
-      showDialog({
-        type: "prompt",
-        title: t("pwdPrompt", settings.lang),
-        isPassword: true,
-        onConfirm: async (pwd: string) => {
-          if (!pwd) return;
-
-          try {
-            const decrypted = await decryptData(rawContent, pwd);
-            JSON.parse(decrypted);
-            await applyImportedBundle(decrypted);
-          } catch {
-            showToast(ui.wrongPassword, true);
-          }
-        }
-      });
-    } catch (e: any) {
-      showToast(`Backup import failed: ${String(e)}`, true);
-    }
-  }
-
-
+          
   if (!isOpen) return null;
 
   const navItems = [
@@ -924,23 +511,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                 <SettingCard title={t("keyManager", lang)} desc={ui.keysDesc}>
                   <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
                     <button
-                      onClick={() =>
-                        showDialog({
-                          type: "prompt",
-                          title: t("generateKey", lang),
-                          placeholder: t("name", lang),
-                          onConfirm: async (val: string) => {
-                            if (!val?.trim()) return;
-                            try {
-                              await invoke("generate_ssh_key", { name: val.trim(), keyType: "ed25519" });
-                              await loadKeys();
-                              showToast(ui.generated);
-                            } catch (e: any) {
-                              showToast(`Key generation failed: ${String(e)}`, true);
-                            }
-                          }
-                        })
-                      }
+                      onClick={() => promptGenerateSshKey({ lang, showDialog, showToast, ui, loadKeys })}
                       style={primaryBtnStyle}
                     >
                       <Plus size={15} />
@@ -948,33 +519,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                     </button>
 
                     <button
-                      onClick={async () => {
-                        try {
-                          const { open } = await import("@tauri-apps/plugin-dialog");
-                          const picked = await open({
-                            multiple: false,
-                            directory: false,
-                            filters: [{ name: "SSH Key", extensions: ["pem", "key", "pub", "id_rsa", "id_ed25519"] }]
-                          });
-
-                          const filePath = Array.isArray(picked) ? picked[0] : picked;
-                          if (!filePath || typeof filePath !== "string") return;
-
-                          const fileName = getPathBaseName(filePath) || ui.importedLabel;
-
-                          await invoke("save_ssh_key", {
-                            name: fileName,
-                            publicKey: "",
-                            privateKeyPath: filePath,
-                            keyType: "imported"
-                          });
-
-                          await loadKeys();
-                          showToast(ui.imported);
-                        } catch (e: any) {
-                          showToast(`Key import failed: ${String(e)}`, true);
-                        }
-                      }}
+                      onClick={() => void importExistingSshKey({ lang, showToast, ui, loadKeys })}
                       style={actionBtnStyle}
                     >
                       <Upload size={15} />
@@ -1019,16 +564,13 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>{k.name}</div>
                             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontFamily: "JetBrains Mono, monospace" }}>
-                              {k.type} • {k.fingerprint}
+                              {k.key_type} • {k.fingerprint}
                             </div>
                           </div>
 
                           <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                             <button
-                              onClick={() => {
-                                writeText(k.public_key);
-                                showToast(t("copied", lang));
-                              }}
+                              onClick={() => void copySshPublicKey({ publicKey: k.public_key, lang, showToast })}
                               style={actionBtnStyle}
                               title={t("copy", lang)}
                             >
@@ -1036,21 +578,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                             </button>
 
                             <button
-                              onClick={() =>
-                                showDialog({
-                                  type: "confirm",
-                                  title: t("confirmDelete", lang),
-                                  onConfirm: async () => {
-                                    try {
-                                      await invoke("delete_ssh_key", { id: k.id });
-                                      await loadKeys();
-                                      showToast(t("delete", lang));
-                                    } catch (e: any) {
-                                      showToast(`Key delete failed: ${String(e)}`, true);
-                                    }
-                                  }
-                                })
-                              }
+                              onClick={() => confirmDeleteSshKey({ id: k.id, lang, showDialog, showToast, loadKeys })}
                               style={actionBtnStyle}
                               title={t("delete", lang)}
                             >
@@ -1076,7 +604,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                     }}
                   >
                     <button
-                      onClick={handleExportPlainConfig}
+                      onClick={() => handleExportPlainConfig({ settings, showToast, ui })}
                       style={{
                         ...cardStyle,
                         background: "var(--bg-app)",
@@ -1101,7 +629,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                     </button>
 
                     <button
-                      onClick={handleExportEncryptedConfig}
+                      onClick={() => handleExportEncryptedConfig({ settings, showToast, showDialog, ui, lang })}
                       style={{
                         ...cardStyle,
                         background: "var(--bg-app)",
@@ -1126,7 +654,7 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                     </button>
 
                     <button
-                      onClick={handleImportConfig}
+                      onClick={() => handleImportConfig({ settings, setSettings, showToast, showDialog, ui, lang })}
                       style={{
                         ...cardStyle,
                         background: "var(--bg-app)",
@@ -1153,146 +681,21 @@ export default function SettingsModal({ isOpen, onClose, settings, setSettings, 
                 </SettingCard>
               </>
             )}
-
             {activeTab === "about" && (
               <>
                 <SettingCard title={ui.projectTitle} desc={ui.aboutDesc}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.2fr 0.8fr",
-                      gap: 14
-                    }}
-                  >
-                    <div
-                      style={{
-                        border: "1px solid var(--border-subtle)",
-                        borderRadius: 15,
-                        background: "var(--bg-app)",
-                        padding: 15
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                        <span
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: 11,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "var(--bg-sidebar)",
-                            border: "1px solid var(--border-subtle)"
-                          }}
-                        >
-                          <MonitorCog size={16} color="var(--accent)" />
-                        </span>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>{ui.projectTitle}</div>
-                          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>{ui.versionLabel}</div>
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 13, color: "var(--text-main)", lineHeight: 1.58 }}>
-                        {ui.projectText}
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop: 14,
-                          padding: 12,
-                          borderRadius: 13,
-                          background: "var(--bg-sidebar)",
-                          border: "1px solid var(--border-subtle)"
-                        }}
-                      >
-                        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 5 }}>
-                          {ui.versionLabel}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--text-main)" }}>{ui.versionValue}</div>
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        border: "1px solid var(--border-subtle)",
-                        borderRadius: 15,
-                        background: "var(--bg-app)",
-                        padding: 15,
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "space-between",
-                        gap: 14
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                          <span
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: 11,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              background: "var(--bg-sidebar)",
-                              border: "1px solid var(--border-subtle)"
-                            }}
-                          >
-                            <Heart size={16} color="var(--accent)" />
-                          </span>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>{ui.supportTitle}</div>
-                        </div>
-
-                        <div style={{ fontSize: 13, color: "var(--text-main)", lineHeight: 1.55 }}>
-                          {ui.supportText}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 12,
-                            padding: 11,
-                            borderRadius: 13,
-                            background: "var(--bg-sidebar)",
-                            border: "1px solid var(--border-subtle)",
-                            fontSize: 12,
-                            color: "var(--text-muted)",
-                            wordBreak: "break-all"
-                          }}
-                        >
-                          https://ko-fi.com/ming83
-                        </div>
-                      </div>
-
-                      <div style={{ display: "flex", flexDirection: "row", gap: 9 }}>
-                        <button
-                          onClick={async () => {
-                            const ok = await openExternalLink("https://ko-fi.com/ming83");
-                            if (!ok) showToast("Could not open link", true);
-                          }}
-                          style={primaryBtnStyle}
-                        >
-                          <Heart size={15} />
-                          {ui.openKofi}
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            const ok = await copyToClipboard("https://ko-fi.com/ming83");
-                            if (ok) showToast(ui.copiedLink);
-                            else showToast("Clipboard failed", true);
-                          }}
-                          style={actionBtnStyle}
-                        >
-                          <Copy size={15} />
-                          {ui.copyLink}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <SettingsAboutCard
+                    ui={ui}
+                    showToast={showToast}
+                    openExternalLink={openExternalLink}
+                    copyToClipboard={copyToClipboard}
+                    primaryBtnStyle={primaryBtnStyle}
+                    actionBtnStyle={actionBtnStyle}
+                  />
                 </SettingCard>
               </>
             )}
+
           </div>
         </div>
       </div>
