@@ -15,7 +15,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -116,6 +116,10 @@ pub struct BackupBundleV3 {
     version: u32,
     #[serde(rename = "exportedAt")]
     exported_at: String,
+    #[serde(rename = "appName")]
+    app_name: String,
+    #[serde(rename = "format")]
+    format_name: String,
     settings: serde_json::Value,
     connections: Vec<BackupConnection>,
     snippets: Vec<BackupSnippet>,
@@ -427,6 +431,22 @@ fn try_auth_with_default_keys(sess: &Session, username: &str) -> bool {
     }
 
     false
+}
+
+fn current_export_timestamp() -> String {
+    if let Ok(output) = Command::new("date")
+        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !value.is_empty() {
+                return value;
+            }
+        }
+    }
+
+    "1970-01-01T00:00:00Z".to_string()
 }
 
 fn authenticate_session(
@@ -848,15 +868,13 @@ fn export_backup_bundle(settings_json: String) -> Result<String, String> {
         }
     }
 
-    let exported_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_secs()
-        .to_string();
+    let exported_at = current_export_timestamp();
 
     let bundle = BackupBundleV3 {
         version: 3,
         exported_at,
+        app_name: "TerminaSSH".to_string(),
+        format_name: "terminassh-backup".to_string(),
         settings,
         connections,
         snippets,
@@ -872,6 +890,19 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
     let parsed: serde_json::Value =
         serde_json::from_str(&bundle_json).map_err(|e| format!("Invalid backup JSON: {}", e))?;
 
+    if !parsed.is_object() {
+        return Err("Backup root must be a JSON object".to_string());
+    }
+
+    let version = parsed.get("version").and_then(|v| v.as_u64()).unwrap_or(2);
+
+    if version > 3 {
+        return Err(format!(
+            "Backup version {} is newer than this app supports.",
+            version
+        ));
+    }
+
     let settings = parsed
         .get("settings")
         .cloned()
@@ -879,6 +910,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 
     let ssh_keys_value = parsed
         .get("sshKeys")
+        .or_else(|| parsed.get("ssh_keys"))
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -902,6 +934,14 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         .unwrap_or_default();
 
     let keys_dir = get_keys_dir();
+    let mut warnings: Vec<String> = Vec::new();
+
+    if version < 3 {
+        warnings.push(
+            "This backup uses an older format. Some data such as portable SSH key content may be unavailable."
+                .to_string(),
+        );
+    }
     let mut warnings: Vec<String> = Vec::new();
     let mut key_path_map: HashMap<String, String> = HashMap::new();
 
