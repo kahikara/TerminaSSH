@@ -124,6 +124,8 @@ pub struct BackupBundleV3 {
     exported_at: String,
     #[serde(rename = "appName")]
     app_name: String,
+    #[serde(rename = "appVersion")]
+    app_version: String,
     #[serde(rename = "format")]
     format_name: String,
     settings: serde_json::Value,
@@ -890,6 +892,7 @@ fn export_backup_bundle(settings_json: String, notes_json: String) -> Result<Str
         version: 3,
         exported_at,
         app_name: "TerminaSSH".to_string(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
         format_name: "terminassh-backup".to_string(),
         settings,
         connections,

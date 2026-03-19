@@ -24,6 +24,7 @@ type NotesImportResult = {
 type BundleMeta = {
   version: number
   appName: string
+  appVersion: string
   formatName: string
   exportedAt: string
 }
@@ -74,6 +75,7 @@ function getBundleMeta(bundleJson: string): BundleMeta {
     return {
       version: Number(parsed?.version || 0),
       appName: typeof parsed?.appName === "string" ? parsed.appName : "",
+      appVersion: typeof parsed?.appVersion === "string" ? parsed.appVersion : "",
       formatName: typeof parsed?.format === "string" ? parsed.format : "",
       exportedAt: typeof parsed?.exportedAt === "string" ? parsed.exportedAt : ""
     }
@@ -81,6 +83,7 @@ function getBundleMeta(bundleJson: string): BundleMeta {
     return {
       version: 0,
       appName: "",
+      appVersion: "",
       formatName: "",
       exportedAt: ""
     }
@@ -146,6 +149,165 @@ function importNotesFromResult(notesValue: unknown, lang: string): NotesImportRe
     warnings
   }
 }
+
+function formatImportWarning(rawWarning: string, lang: string): string {
+  let match: RegExpMatchArray | null = null
+
+  match = rawWarning.match(/^Connection '(.+)' already exists and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `Verbindung „${match[1]}“ existiert bereits und wurde übersprungen.`
+      : `Connection “${match[1]}” already exists and was skipped.`
+  }
+
+  match = rawWarning.match(/^Snippet '(.+)' already exists and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `Snippet „${match[1]}“ existiert bereits und wurde übersprungen.`
+      : `Snippet “${match[1]}” already exists and was skipped.`
+  }
+
+  match = rawWarning.match(/^Tunnel '(.+)' already exists and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `Tunnel „${match[1]}“ existiert bereits und wurde übersprungen.`
+      : `Tunnel “${match[1]}” already exists and was skipped.`
+  }
+
+  match = rawWarning.match(/^SSH key '(.+)' already exists and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `SSH Schlüssel „${match[1]}“ existiert bereits und wurde übersprungen.`
+      : `SSH key “${match[1]}” already exists and was skipped.`
+  }
+
+  match = rawWarning.match(/^SSH key '(.+)' could not be decoded and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `SSH Schlüssel „${match[1]}“ konnte nicht dekodiert werden und wurde übersprungen.`
+      : `SSH key “${match[1]}” could not be decoded and was skipped.`
+  }
+
+  match = rawWarning.match(/^SSH key '(.+)' had no portable key content and no usable local path, so it was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `SSH Schlüssel „${match[1]}“ hatte keinen portablen Schlüsselinhalt und keinen nutzbaren lokalen Pfad und wurde daher übersprungen.`
+      : `SSH key “${match[1]}” had no portable key content and no usable local path, so it was skipped.`
+  }
+
+  match = rawWarning.match(/^Connection '(.+)' referenced a key path that is not available on this system\. The key path was cleared\.$/)
+  if (match) {
+    return lang === "de"
+      ? `Bei Verbindung „${match[1]}“ war ein Schlüsselpfad hinterlegt, der auf diesem System nicht verfügbar ist. Der Schlüsselpfad wurde geleert.`
+      : `Connection “${match[1]}” referenced a key path that is not available on this system. The key path was cleared.`
+  }
+
+  match = rawWarning.match(/^Tunnel '(.+)' could not be linked to an imported connection and was skipped\.$/)
+  if (match) {
+    return lang === "de"
+      ? `Tunnel „${match[1]}“ konnte keiner importierten Verbindung zugeordnet werden und wurde übersprungen.`
+      : `Tunnel “${match[1]}” could not be linked to an imported connection and was skipped.`
+  }
+
+  if (rawWarning === "One connection was skipped because required fields were missing.") {
+    return lang === "de"
+      ? "Eine Verbindung wurde übersprungen, weil Pflichtfelder fehlten."
+      : rawWarning
+  }
+
+  if (rawWarning === "One snippet was skipped because its name was empty.") {
+    return lang === "de"
+      ? "Ein Snippet wurde übersprungen, weil der Name leer war."
+      : rawWarning
+  }
+
+  if (rawWarning === "One tunnel was skipped because required fields were missing.") {
+    return lang === "de"
+      ? "Ein Tunnel wurde übersprungen, weil Pflichtfelder fehlten."
+      : rawWarning
+  }
+
+  if (rawWarning === "This backup uses an older format. Some data such as portable SSH key content may be unavailable.") {
+    return lang === "de"
+      ? "Dieses Backup verwendet ein älteres Format. Manche Daten wie portabler SSH Schlüsselinhalt sind eventuell nicht verfügbar."
+      : rawWarning
+  }
+
+  return rawWarning
+}
+
+function getWarningCategory(formattedWarning: string): "connections" | "sshKeys" | "tunnels" | "snippets" | "notes" | "other" {
+  const lower = formattedWarning.toLowerCase()
+
+  if (lower.includes("verbindung") || lower.includes("connection")) return "connections"
+  if (lower.includes("ssh key") || lower.includes("ssh schlüssel")) return "sshKeys"
+  if (lower.includes("tunnel")) return "tunnels"
+  if (lower.includes("snippet")) return "snippets"
+  if (lower.includes("notiz") || lower.includes("notes") || lower.includes("note ")) return "notes"
+
+  return "other"
+}
+
+function buildWarningSectionLines(warnings: string[], lang: string): string[] {
+  const groups = {
+    connections: [] as string[],
+    sshKeys: [] as string[],
+    tunnels: [] as string[],
+    snippets: [] as string[],
+    notes: [] as string[],
+    other: [] as string[]
+  }
+
+  const seen = new Set<string>()
+
+  for (const rawWarning of warnings) {
+    const formatted = formatImportWarning(rawWarning, lang).trim()
+    if (!formatted || seen.has(formatted)) continue
+    seen.add(formatted)
+
+    const category = getWarningCategory(formatted)
+    groups[category].push(formatted)
+  }
+
+  const titles =
+    lang === "de"
+      ? {
+          connections: "Verbindungen",
+          sshKeys: "SSH Schlüssel",
+          tunnels: "Tunnels",
+          snippets: "Snippets",
+          notes: "Notizen",
+          other: "Allgemein"
+        }
+      : {
+          connections: "Connections",
+          sshKeys: "SSH keys",
+          tunnels: "Tunnels",
+          snippets: "Snippets",
+          notes: "Notes",
+          other: "General"
+        }
+
+  const orderedCategories = ["connections", "sshKeys", "tunnels", "snippets", "notes", "other"] as const
+  const lines: string[] = []
+
+  for (const category of orderedCategories) {
+    const items = groups[category]
+    if (items.length === 0) continue
+
+    if (lines.length > 0) lines.push("")
+    lines.push(titles[category])
+    lines.push("")
+
+    for (const item of items) {
+      lines.push(`• ${item}`)
+    }
+  }
+
+  return lines
+}
+
+
 
 export async function buildExportPayload(settings: any): Promise<string> {
   return await invoke("export_backup_bundle", {
@@ -251,16 +413,18 @@ export async function handleImportConfig({
           ? [
               "Backup Details",
               "",
-              `• Version: ${bundleMeta.version || "-"}`,
+              `• Bundle Version: ${bundleMeta.version || "-"}`,
               `• App: ${bundleMeta.appName || "-"}`,
+              `• App Version: ${bundleMeta.appVersion || "-"}`,
               `• Format: ${bundleMeta.formatName || "-"}`,
               `• Exportiert: ${bundleMeta.exportedAt || "-"}`
             ]
           : [
               "Backup details",
               "",
-              `• Version: ${bundleMeta.version || "-"}`,
+              `• Bundle version: ${bundleMeta.version || "-"}`,
               `• App: ${bundleMeta.appName || "-"}`,
+              `• App version: ${bundleMeta.appVersion || "-"}`,
               `• Format: ${bundleMeta.formatName || "-"}`,
               `• Exported: ${bundleMeta.exportedAt || "-"}`
             ]
@@ -289,7 +453,7 @@ export async function handleImportConfig({
       const warningHeader =
         lang === "de" ? "Warnungen" : "Warnings"
 
-      const warningLines = warnings.map((warning: string) => `• ${warning}`)
+      const warningLines = buildWarningSectionLines(warnings, lang)
 
       const description =
         warnings.length > 0
