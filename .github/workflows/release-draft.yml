@@ -1,0 +1,85 @@
+name: release-draft
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-22.04
+            args: --bundles deb,rpm,appimage
+            rust_targets: ""
+          - name: windows
+            os: windows-latest
+            args: --bundles nsis
+            rust_targets: ""
+          - name: macos-aarch64
+            os: macos-latest
+            args: --target aarch64-apple-darwin --bundles dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - name: macos-x86_64
+            os: macos-latest
+            args: --target x86_64-apple-darwin --bundles dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: install rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: install linux deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: install frontend deps
+        run: npm ci
+
+      - name: typecheck
+        run: npm run check
+
+      - name: build and upload draft release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Termina SSH v__VERSION__
+          releaseBody: |
+            Draft release for testing.
+
+            Included assets:
+            .deb
+            .rpm
+            .AppImage
+            .dmg
+            setup.exe
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+          releaseAssetNamePattern: "[name]_[version]_[arch][_setup][ext]"
