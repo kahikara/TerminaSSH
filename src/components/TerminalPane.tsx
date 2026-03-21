@@ -284,6 +284,7 @@ export default function TerminalPane(props: any) {
     paneServers[focusedPaneIndex] ||
     paneServers[0] ||
     server
+  const isActive = Boolean(props.isActive)
   const showSplit = settings.showSplit !== false && !isMultiServerSplit
   const showSftpBtn = settings.showSftp !== false && !isLocalServer(server)
   const showTunnelsBtn = settings.showTunnels !== false && !isLocalServer(server)
@@ -348,6 +349,8 @@ export default function TerminalPane(props: any) {
   }, [paneIds, paneServers.length, server])
 
   useEffect(() => {
+    if (!isActive) return
+
     if (isLocalServer(activePaneServer)) {
       setPingMs("local")
       return
@@ -367,14 +370,14 @@ export default function TerminalPane(props: any) {
       }
     }
 
-    updatePing()
+    void updatePing()
     const id = window.setInterval(updatePing, 3000)
 
     return () => {
       alive = false
       clearInterval(id)
     }
-  }, [activePaneServer])
+  }, [isActive, activePaneServer])
 
   useEffect(() => {
     setSessionSeconds(0)
@@ -387,6 +390,8 @@ export default function TerminalPane(props: any) {
   }, [sessionId])
 
   useEffect(() => {
+    if (!isActive) return
+
     if (isLocalServer(activePaneServer) || (!showStatusBarLoad && !showStatusBarRam) || !activePaneServer?.id) {
       setStatusMetrics({})
       return
@@ -409,16 +414,18 @@ export default function TerminalPane(props: any) {
       }
     }
 
-    updateStatusMetrics()
+    void updateStatusMetrics()
     const id = window.setInterval(updateStatusMetrics, 5000)
 
     return () => {
       alive = false
       clearInterval(id)
     }
-  }, [activePaneServer?.id, showStatusBarLoad, showStatusBarRam])
+  }, [isActive, activePaneServer?.id, showStatusBarLoad, showStatusBarRam])
 
   useEffect(() => {
+    if (!isActive) return
+
     if (isLocalServer(activePaneServer) || !showStatusBarTunnel || !activePaneServer?.id) {
       setActiveTunnelLabel("")
       return
@@ -455,14 +462,14 @@ export default function TerminalPane(props: any) {
       }
     }
 
-    updateTunnelStatus()
+    void updateTunnelStatus()
     const id = window.setInterval(updateTunnelStatus, 3000)
 
     return () => {
       alive = false
       clearInterval(id)
     }
-  }, [activePaneServer?.id, showStatusBarTunnel, statusLang])
+  }, [isActive, activePaneServer?.id, showStatusBarTunnel, statusLang])
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -664,7 +671,7 @@ export default function TerminalPane(props: any) {
   }
 
   useEffect(() => {
-    if (!props.isActive) return
+    if (!isActive) return
 
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
@@ -695,7 +702,7 @@ export default function TerminalPane(props: any) {
 
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [props.isActive, showSearch, searchQuery, focusedPaneId, paneIds, sessionId])
+  }, [isActive, showSearch, searchQuery, focusedPaneId, paneIds, sessionId])
 
   return (
     <div
