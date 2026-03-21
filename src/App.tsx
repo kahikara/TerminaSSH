@@ -267,7 +267,7 @@ export default function App() {
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, []);
 
-  const toggleSidebarCollapse = () => {
+  const toggleSidebarCollapse = useCallback(() => {
     if (isSidebarCollapsed) {
       setIsSidebarCollapsed(false);
       setSidebarWidth(expandedSidebarWidthRef.current || 260);
@@ -276,7 +276,7 @@ export default function App() {
 
     expandedSidebarWidthRef.current = sidebarWidth;
     setIsSidebarCollapsed(true);
-  };
+  }, [isSidebarCollapsed, sidebarWidth]);
 
   const closeSidebarSearch = useCallback(() => {
     setShowSidebarSearch(false);
