@@ -727,7 +727,7 @@ fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
 fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name, host, port, username, private_key, group_name, password FROM connections")
+        .prepare("SELECT id, name, host, port, username, private_key, group_name, password FROM connections ORDER BY CASE WHEN TRIM(group_name) = '' THEN 0 ELSE 1 END, group_name COLLATE NOCASE ASC, name COLLATE NOCASE ASC, host COLLATE NOCASE ASC")
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map([], |row| {
