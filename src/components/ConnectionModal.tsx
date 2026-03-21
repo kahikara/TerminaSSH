@@ -33,6 +33,7 @@ type ConnectionModalProps = {
   isOpen: boolean
   onClose: () => void
   serverToEdit: EditableConnection | null
+  initialConnection?: Partial<ConnectionForm> | null
   onSuccess: () => void | Promise<void>
   showToast: ToastFn
   showDialog: DialogFn
@@ -43,6 +44,7 @@ export default function ConnectionModal({
   isOpen,
   onClose,
   serverToEdit,
+  initialConnection = null,
   onSuccess,
   showToast,
   showDialog,
@@ -76,10 +78,25 @@ export default function ConnectionModal({
         passphrase: "",
         group_name: String(serverToEdit.group_name || "")
       })
-    } else {
-      setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
+      return
     }
-  }, [serverToEdit, isOpen])
+
+    if (initialConnection) {
+      setForm({
+        name: String(initialConnection.name || ""),
+        host: String(initialConnection.host || ""),
+        port: Number(initialConnection.port) || 22,
+        username: String(initialConnection.username || ""),
+        password: String(initialConnection.password || ""),
+        private_key: String(initialConnection.private_key || ""),
+        passphrase: String(initialConnection.passphrase || ""),
+        group_name: String(initialConnection.group_name || "")
+      })
+      return
+    }
+
+    setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
+  }, [serverToEdit, initialConnection, isOpen])
 
   if (!isOpen) return null
 

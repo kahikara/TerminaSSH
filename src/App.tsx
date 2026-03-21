@@ -69,6 +69,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
   const [serverToEdit, setServerToEdit] = useState<any>(null);
+  const [connectionDraft, setConnectionDraft] = useState<any>(null);
   const [sidebarContextMenu, setSidebarContextMenu] = useState<{ x: number; y: number; server: any; isLocal: boolean } | null>(null);
   const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
@@ -751,9 +752,30 @@ export default function App() {
 
   const editSidebarServer = useCallback((server: any) => {
     closeSidebarContextMenu();
+    setConnectionDraft(null);
     setServerToEdit(server);
     setConnModalOpen(true);
   }, [closeSidebarContextMenu]);
+
+  const duplicateSidebarServer = useCallback((server: any) => {
+    closeSidebarContextMenu();
+
+    const sourceName = String(server?.name || "").trim();
+    const duplicateName = sourceName
+      ? `${sourceName} Copy`
+      : (settings.lang === 'de' ? 'Neue Verbindung Kopie' : 'New Connection Copy');
+
+    setServerToEdit(null);
+    setConnectionDraft({
+      name: duplicateName,
+      host: String(server?.host || ""),
+      port: Number(server?.port) || 22,
+      username: String(server?.username || ""),
+      private_key: String(server?.private_key || ""),
+      group_name: String(server?.group_name || "")
+    });
+    setConnModalOpen(true);
+  }, [closeSidebarContextMenu, settings.lang]);
 
   const deleteSidebarServer = useCallback((server: any) => {
     closeSidebarContextMenu();
@@ -1052,7 +1074,7 @@ export default function App() {
                   </button>
                 )}
                 <button
-                  onClick={() => { setServerToEdit(null); setConnModalOpen(true); }}
+                  onClick={() => { setServerToEdit(null); setConnectionDraft(null); setConnModalOpen(true); }}
                   className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
                   title={t('newConn', settings.lang)}
                 >
@@ -1457,6 +1479,14 @@ export default function App() {
                 </button>
 
                 <button
+                  onClick={() => duplicateSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>{settings.lang === 'de' ? 'Duplizieren' : 'Duplicate'}</span>
+                </button>
+
+                <button
                   onClick={() => deleteSidebarServer(sidebarContextMenu.server)}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
                 >
@@ -1469,7 +1499,20 @@ export default function App() {
         </div>
       )}
 
-      <ConnectionModal isOpen={isConnModalOpen} onClose={() => setConnModalOpen(false)} serverToEdit={serverToEdit} onSuccess={loadServers} showToast={showToast} showDialog={showDialog} lang={settings.lang} />
+      <ConnectionModal
+        isOpen={isConnModalOpen}
+        onClose={() => {
+          setConnModalOpen(false);
+          setServerToEdit(null);
+          setConnectionDraft(null);
+        }}
+        serverToEdit={serverToEdit}
+        initialConnection={connectionDraft}
+        onSuccess={loadServers}
+        showToast={showToast}
+        showDialog={showDialog}
+        lang={settings.lang}
+      />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} setSettings={setSettings} showToast={showToast} showDialog={showDialog} />
 
       <SessionCloseDialog
