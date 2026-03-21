@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, type CSSProperties } from "re
 
 import { invoke } from "@tauri-apps/api/core"
 
-import { Columns, Folder, SplitSquareVertical, SplitSquareHorizontal, Cable, ScrollText, Search as SearchIcon, FileText } from "lucide-react"
+import { Columns, Folder, SplitSquareVertical, SplitSquareHorizontal, Cable, ScrollText, Search as SearchIcon, FileText, ArrowLeftRight, X } from "lucide-react"
 import SftpPanel from "./SftpPanel"
 import TunnelPanel from "./TunnelPanel"
 import SnippetsPanel from "./SnippetsPanel"
@@ -216,6 +216,20 @@ const iconOnlyBtnStyle: CSSProperties = {
   ...toolBtnStyle,
   width: 28,
   padding: 0
+}
+
+const paneHeaderBtnStyle: CSSProperties = {
+  width: 22,
+  height: 22,
+  borderRadius: 6,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 76%, transparent)",
+  background: "color-mix(in srgb, var(--bg-app) 76%, var(--bg-sidebar))",
+  color: "var(--text-muted, #94a3b8)",
+  cursor: "pointer",
+  transition: "background 140ms ease, color 140ms ease, border-color 140ms ease"
 }
 
 function getPaneLabel(server: any) {
@@ -489,32 +503,60 @@ export default function TerminalPane(props: any) {
   ].filter(Boolean) as { kind: "load" | "ram"; value: string }[]
 
   const closePane = useCallback((targetSessionId: string) => {
-    setPaneIds((prev) => {
-      if (prev.length <= 1) {
-        destroyTerminal(targetSessionId)
-        onClose?.()
-        return prev
-      }
-
-      const nextPaneIds = prev.filter((id) => id !== targetSessionId)
-      const removedIndex = prev.indexOf(targetSessionId)
+    if (paneIds.length <= 1) {
       destroyTerminal(targetSessionId)
+      onClose?.()
+      return
+    }
 
-      setPaneServers((prevServers) => {
-        const nextPaneServers = prevServers.filter((_, index) => index !== removedIndex)
+    const removedIndex = paneIds.indexOf(targetSessionId)
+    if (removedIndex === -1) return
 
-        props.onPaneStateChange?.({
-          paneServers: nextPaneServers,
-          paneSessionIds: nextPaneIds,
-          focusedPaneId: nextPaneIds[0] || null
-        })
+    const nextPaneIds = paneIds.filter((id) => id !== targetSessionId)
+    const nextPaneServers = paneServers.filter((_, index) => index !== removedIndex)
+    const nextFocusedPaneId =
+      focusedPaneId === targetSessionId
+        ? (nextPaneIds[0] || null)
+        : focusedPaneId
 
-        return nextPaneServers
-      })
+    destroyTerminal(targetSessionId)
+    setPaneIds(nextPaneIds)
+    setPaneServers(nextPaneServers)
+    if (nextFocusedPaneId) {
+      setFocusedPaneId(nextFocusedPaneId)
+    }
 
-      return nextPaneIds
+    props.onPaneStateChange?.({
+      paneServers: nextPaneServers,
+      paneSessionIds: nextPaneIds,
+      focusedPaneId: nextFocusedPaneId
     })
-  }, [onClose, props])
+  }, [paneIds, paneServers, focusedPaneId, onClose, props])
+
+  const swapPanes = useCallback(() => {
+    if (paneIds.length < 2 || paneServers.length < 2) return
+
+    const nextPaneIds = [paneIds[1], paneIds[0]]
+    const nextPaneServers = [paneServers[1], paneServers[0]]
+    const nextFocusedPaneId =
+      focusedPaneId === paneIds[0]
+        ? paneIds[1]
+        : focusedPaneId === paneIds[1]
+          ? paneIds[0]
+          : focusedPaneId
+
+    setPaneIds(nextPaneIds)
+    setPaneServers(nextPaneServers)
+    if (nextFocusedPaneId) {
+      setFocusedPaneId(nextFocusedPaneId)
+    }
+
+    props.onPaneStateChange?.({
+      paneServers: nextPaneServers,
+      paneSessionIds: nextPaneIds,
+      focusedPaneId: nextFocusedPaneId
+    })
+  }, [paneIds, paneServers, focusedPaneId, props])
 
   const toggleSplit = useCallback(() => {
     setPaneIds((prev) => {
@@ -924,16 +966,40 @@ export default function TerminalPane(props: any) {
                 >
                   {getPaneLabel(paneServers[0] || server)}
                 </div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    color: focusedPaneId === paneIds[0] ? "var(--accent)" : "var(--text-muted)"
-                  }}
-                >
-                  {focusedPaneId === paneIds[0] ? "Active" : "Passive"}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: focusedPaneId === paneIds[0] ? "var(--accent)" : "var(--text-muted)"
+                    }}
+                  >
+                    {focusedPaneId === paneIds[0] ? "Active" : "Passive"}
+                  </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      swapPanes()
+                    }}
+                    title="Swap panes"
+                    style={paneHeaderBtnStyle}
+                  >
+                    <ArrowLeftRight size={12} />
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closePane(paneIds[0])
+                    }}
+                    title="Close pane"
+                    style={paneHeaderBtnStyle}
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               </div>
             )}
@@ -1011,16 +1077,40 @@ export default function TerminalPane(props: any) {
                     >
                       {getPaneLabel(paneServers[1] || paneServers[0] || server)}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: focusedPaneId === paneIds[1] ? "var(--accent)" : "var(--text-muted)"
-                      }}
-                    >
-                      {focusedPaneId === paneIds[1] ? "Active" : "Passive"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: "0.08em",
+                          textTransform: "uppercase",
+                          color: focusedPaneId === paneIds[1] ? "var(--accent)" : "var(--text-muted)"
+                        }}
+                      >
+                        {focusedPaneId === paneIds[1] ? "Active" : "Passive"}
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          swapPanes()
+                        }}
+                        title="Swap panes"
+                        style={paneHeaderBtnStyle}
+                      >
+                        <ArrowLeftRight size={12} />
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closePane(paneIds[1])
+                        }}
+                        title="Close pane"
+                        style={paneHeaderBtnStyle}
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
                   </div>
                 )}
