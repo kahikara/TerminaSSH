@@ -2259,11 +2259,47 @@ fn start_quick_ssh(
     let session_id_for_exit = session_id.clone();
 
     thread::spawn(move || {
-        let mut channel = sess.channel_session().unwrap();
-        channel
-            .request_pty("xterm-256color", None, Some((cols, rows, 0, 0)))
-            .unwrap();
-        channel.shell().unwrap();
+        let mut channel = match sess.channel_session() {
+            Ok(channel) => channel,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    &event_name,
+                    format!(
+                        "\r\n\x1b[1;31m[Kanal konnte nicht geöffnet werden: {}]\x1b[0m\r\n",
+                        e
+                    ),
+                );
+                let _ = app_handle.emit(&connect_event, false);
+                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                return;
+            }
+        };
+        if let Err(e) = channel.request_pty("xterm-256color", None, Some((cols, rows, 0, 0))) {
+            let _ = app_handle.emit(
+                &event_name,
+                format!(
+                    "\r\n\x1b[1;31m[PTY konnte nicht angefordert werden: {}]\x1b[0m\r\n",
+                    e
+                ),
+            );
+            let _ = app_handle.emit(&connect_event, false);
+            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            let _ = channel.close();
+            return;
+        }
+        if let Err(e) = channel.shell() {
+            let _ = app_handle.emit(
+                &event_name,
+                format!(
+                    "\r\n\x1b[1;31m[Shell konnte nicht gestartet werden: {}]\x1b[0m\r\n",
+                    e
+                ),
+            );
+            let _ = app_handle.emit(&connect_event, false);
+            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            let _ = channel.close();
+            return;
+        }
         sess.set_blocking(false);
         let mut buf = [0; 4096];
 
@@ -2327,11 +2363,47 @@ fn start_ssh(
     let exit_sent_loop = Arc::clone(&exit_sent);
     let session_id_for_exit = session_id.clone();
     thread::spawn(move || {
-        let mut channel = sess.channel_session().unwrap();
-        channel
-            .request_pty("xterm-256color", None, Some((cols, rows, 0, 0)))
-            .unwrap();
-        channel.shell().unwrap();
+        let mut channel = match sess.channel_session() {
+            Ok(channel) => channel,
+            Err(e) => {
+                let _ = app_handle.emit(
+                    &event_name,
+                    format!(
+                        "\r\n\x1b[1;31m[Kanal konnte nicht geöffnet werden: {}]\x1b[0m\r\n",
+                        e
+                    ),
+                );
+                let _ = app_handle.emit(&connect_event, false);
+                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                return;
+            }
+        };
+        if let Err(e) = channel.request_pty("xterm-256color", None, Some((cols, rows, 0, 0))) {
+            let _ = app_handle.emit(
+                &event_name,
+                format!(
+                    "\r\n\x1b[1;31m[PTY konnte nicht angefordert werden: {}]\x1b[0m\r\n",
+                    e
+                ),
+            );
+            let _ = app_handle.emit(&connect_event, false);
+            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            let _ = channel.close();
+            return;
+        }
+        if let Err(e) = channel.shell() {
+            let _ = app_handle.emit(
+                &event_name,
+                format!(
+                    "\r\n\x1b[1;31m[Shell konnte nicht gestartet werden: {}]\x1b[0m\r\n",
+                    e
+                ),
+            );
+            let _ = app_handle.emit(&connect_event, false);
+            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            let _ = channel.close();
+            return;
+        }
         sess.set_blocking(false);
         let mut buf = [0; 4096];
         loop {
