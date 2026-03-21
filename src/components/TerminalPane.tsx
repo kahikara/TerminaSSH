@@ -273,6 +273,8 @@ export default function TerminalPane(props: any) {
 
   const dragRef = useRef(false)
   const paneIdsRef = useRef<string[]>(initialPaneSessionIds)
+  const paneServersRef = useRef<any[]>(initialPaneServers)
+  const focusedPaneIdRef = useRef(initialPaneSessionIds[0] || sessionId)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const isSplit = paneIds.length > 1
@@ -298,6 +300,14 @@ export default function TerminalPane(props: any) {
   useEffect(() => {
     paneIdsRef.current = paneIds
   }, [paneIds])
+
+  useEffect(() => {
+    paneServersRef.current = paneServers
+  }, [paneServers])
+
+  useEffect(() => {
+    focusedPaneIdRef.current = focusedPaneId
+  }, [focusedPaneId])
 
   useEffect(() => {
     if (server?.splitMode && Array.isArray(server?.paneServers) && Array.isArray(server?.paneSessionIds)) {
@@ -503,23 +513,32 @@ export default function TerminalPane(props: any) {
   ].filter(Boolean) as { kind: "load" | "ram"; value: string }[]
 
   const closePane = useCallback((targetSessionId: string) => {
-    if (paneIds.length <= 1) {
+    const currentPaneIds = paneIdsRef.current
+    const currentPaneServers = paneServersRef.current
+    const currentFocusedPaneId = focusedPaneIdRef.current
+
+    if (currentPaneIds.length <= 1) {
       destroyTerminal(targetSessionId)
       onClose?.()
       return
     }
 
-    const removedIndex = paneIds.indexOf(targetSessionId)
-    if (removedIndex === -1) return
+    const removedIndex = currentPaneIds.indexOf(targetSessionId)
+    if (removedIndex == -1) return
 
-    const nextPaneIds = paneIds.filter((id) => id !== targetSessionId)
-    const nextPaneServers = paneServers.filter((_, index) => index !== removedIndex)
+    const nextPaneIds = currentPaneIds.filter((id) => id !== targetSessionId)
+    const nextPaneServers = currentPaneServers.filter((_, index) => index !== removedIndex)
     const nextFocusedPaneId =
-      focusedPaneId === targetSessionId
+      currentFocusedPaneId === targetSessionId
         ? (nextPaneIds[0] || null)
-        : focusedPaneId
+        : currentFocusedPaneId
 
     destroyTerminal(targetSessionId)
+
+    paneIdsRef.current = nextPaneIds
+    paneServersRef.current = nextPaneServers
+    focusedPaneIdRef.current = nextFocusedPaneId || ""
+
     setPaneIds(nextPaneIds)
     setPaneServers(nextPaneServers)
     if (nextFocusedPaneId) {
@@ -531,7 +550,7 @@ export default function TerminalPane(props: any) {
       paneSessionIds: nextPaneIds,
       focusedPaneId: nextFocusedPaneId
     })
-  }, [paneIds, paneServers, focusedPaneId, onClose, props])
+  }, [onClose, props])
 
   const swapPanes = useCallback(() => {
     if (paneIds.length < 2 || paneServers.length < 2) return
