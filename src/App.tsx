@@ -17,6 +17,8 @@ import ToastStack from './components/ToastStack';
 import InputContextMenu from './components/InputContextMenu';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 
+const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections";
+
 export default function App() {
   const params = new URLSearchParams(window.location.search)
   if (params.get("editor") === "sftp") {
@@ -45,6 +47,16 @@ export default function App() {
   const [tabPointerDragging, setTabPointerDragging] = useState(false);
   const [tabGhostPos, setTabGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [connections, setConnections] = useState<any[]>([]);
+  const [recentConnectionIds, setRecentConnectionIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_CONNECTIONS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map((value) => String(value)) : [];
+    } catch {
+      return [];
+    }
+  });
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [showSidebarSearch, setShowSidebarSearch] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
@@ -90,6 +102,12 @@ export default function App() {
 
   const loadServers = async () => { try { setConnections(await invoke('get_connections')); } catch(e){} };
   useEffect(() => { loadServers(); }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RECENT_CONNECTIONS_STORAGE_KEY, JSON.stringify(recentConnectionIds));
+    } catch {}
+  }, [recentConnectionIds]);
 
   const { groups, rootServers } = useMemo(() => {
     const grps: Record<string, any[]> = {};
@@ -178,6 +196,15 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (!activeTab) return;
+    if (activeTab.isLocal) return;
+    if (activeTab.id == null) return;
+
+    const id = String(activeTab.id);
+    setRecentConnectionIds((prev) => [id, ...prev.filter((value) => value !== id)].slice(0, 12));
+  }, [activeTab]);
+
+  useEffect(() => {
     if (lastActiveConnectionId == null) return;
 
     const stillOpen = openTabs.some((tab: any) => {
@@ -200,6 +227,15 @@ export default function App() {
     () => openTabs.find((tab: any) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
   );
+
+  const recentConnectionsForDashboard = useMemo(() => {
+    if (!recentConnectionIds.length) return connections.slice(0, 6);
+
+    const order = new Map(recentConnectionIds.map((id, index) => [String(id), index]));
+    return connections
+      .filter((conn: any) => order.has(String(conn.id)))
+      .sort((a: any, b: any) => (order.get(String(a.id)) ?? 9999) - (order.get(String(b.id)) ?? 9999));
+  }, [connections, recentConnectionIds]);
 
   const handleMouseMove = (e: MouseEvent) => { if (isDragging.current) setSidebarWidth(Math.min(Math.max(e.clientX, 200), 600)); };
   const handleMouseUp = () => { isDragging.current = false; document.body.style.cursor = 'default'; };
@@ -1125,7 +1161,7 @@ export default function App() {
                 settings={settings}
                 openTerminal={openTerminal}
                 activeTabs={openTabs}
-                recentConns={connections.slice(0, 5)}
+                recentConns={recentConnectionsForDashboard}
                 activateTab={(tabId: string) => setActiveTabId(tabId)}
               />
            </div>

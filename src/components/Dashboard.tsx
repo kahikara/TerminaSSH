@@ -243,7 +243,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                       {t("recent", lang)}
                     </div>
                     <div className="text-xs text-[var(--text-muted)]">
-                      Quick access to recent hosts
+                      Quick access to recently used hosts
                     </div>
                   </div>
                 </div>
