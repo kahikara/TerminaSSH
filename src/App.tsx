@@ -661,7 +661,7 @@ export default function App() {
     setConnModalOpen(true);
   }, [closeSidebarContextMenu]);
 
-  const deleteSidebarServer = (server: any) => {
+  const deleteSidebarServer = useCallback((server: any) => {
     closeSidebarContextMenu();
     showDialog({
       type: 'confirm',
@@ -683,7 +683,7 @@ export default function App() {
         }
       }
     });
-  };
+  }, [closeSidebarContextMenu, settings.lang, showDialog, loadServers, showToast]);
 
   const closeTab = (tabId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
