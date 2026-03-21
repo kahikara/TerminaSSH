@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { t } from './lib/i18n';
@@ -107,7 +107,7 @@ export default function App() {
     settingsRef.current = settings;
   }, [settings]);
 
-  const loadServers = async () => {
+  const loadServers = useCallback(async () => {
     try {
       const items = await invoke('get_connections');
       setConnections(Array.isArray(items) ? items : []);
@@ -120,8 +120,11 @@ export default function App() {
         true
       );
     }
-  };
-  useEffect(() => { loadServers(); }, []);
+  }, [settings.lang, showToast]);
+
+  useEffect(() => {
+    loadServers();
+  }, [loadServers]);
 
   useEffect(() => {
     try {
