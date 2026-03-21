@@ -52,6 +52,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
   const [serverToEdit, setServerToEdit] = useState<any>(null);
+  const [sidebarContextMenu, setSidebarContextMenu] = useState<{ x: number; y: number; server: any; isLocal: boolean } | null>(null);
 
   const {
     dirtyEditors,
@@ -440,6 +441,51 @@ export default function App() {
     setActiveTabId(tabId);
   };
 
+  const closeSidebarContextMenu = () => {
+    setSidebarContextMenu(null);
+  };
+
+  const openSidebarContextMenu = (e: React.MouseEvent, server: any, isLocal = false) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSidebarContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      server,
+      isLocal
+    });
+  };
+
+  const editSidebarServer = (server: any) => {
+    closeSidebarContextMenu();
+    setServerToEdit(server);
+    setConnModalOpen(true);
+  };
+
+  const deleteSidebarServer = (server: any) => {
+    closeSidebarContextMenu();
+    showDialog({
+      type: 'confirm',
+      tone: 'danger',
+      title: settings.lang === 'de' ? 'Verbindung löschen' : 'Delete connection',
+      description:
+        settings.lang === 'de'
+          ? `Der gespeicherte Servereintrag "${server.name}" wird entfernt.`
+          : `This removes the saved server entry "${server.name}".`,
+      confirmLabel: settings.lang === 'de' ? 'Löschen' : 'Delete',
+      cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
+      onConfirm: async () => {
+        try {
+          await invoke('delete_connection', { id: server.id, name: server.name });
+          await loadServers();
+          showToast(settings.lang === 'de' ? 'Verbindung gelöscht' : 'Connection deleted');
+        } catch (e) {
+          showToast(String(e), true);
+        }
+      }
+    });
+  };
+
   const closeTab = (tabId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setOpenTabs(prev => {
@@ -625,6 +671,7 @@ export default function App() {
                   return (
                     <button
                       key={`${conn.id || conn.name || 'item'}_${idx}`}
+                      onContextMenu={(e) => openSidebarContextMenu(e, localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, localItem)}
                       onClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
                       onDoubleClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, { forceNewTab: true })}
                       title={conn.name}
@@ -662,6 +709,7 @@ export default function App() {
                     }`}
                   >
                     <button
+                      onContextMenu={(e) => openSidebarContextMenu(e, { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }, true)}
                       onClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
                       onDoubleClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }, { forceNewTab: true })}
                       className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
@@ -706,6 +754,7 @@ export default function App() {
                       }`}
                     >
                       <button
+                        onContextMenu={(e) => openSidebarContextMenu(e, conn)}
                         onClick={() => void openTerminal(conn)}
                         onDoubleClick={() => void openTerminal(conn, { forceNewTab: true })}
                         className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
@@ -772,8 +821,9 @@ export default function App() {
                                 }`}
                               >
                                 <button
+                                  onContextMenu={(e) => openSidebarContextMenu(e, conn)}
                                   onClick={() => void openTerminal(conn)}
-                        onDoubleClick={() => void openTerminal(conn, { forceNewTab: true })}
+                                  onDoubleClick={() => void openTerminal(conn, { forceNewTab: true })}
                                   className={`flex items-center flex-1 min-w-0 text-left px-1 py-1 rounded-xl ${
                                     active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                                   }`}
@@ -912,6 +962,64 @@ export default function App() {
            ))}
         </div>
       </div>
+
+      {sidebarContextMenu && (
+        <div className="fixed inset-0 z-[260]" onMouseDown={closeSidebarContextMenu}>
+          <div
+            className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
+            style={{
+              left: Math.max(8, Math.min(sidebarContextMenu.x, window.innerWidth - 228)),
+              top: Math.max(8, Math.min(sidebarContextMenu.y, window.innerHeight - (sidebarContextMenu.isLocal ? 108 : 176)))
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              {sidebarContextMenu.isLocal ? <TermIcon size={14} /> : <Server size={14} />}
+              <span>{settings.lang === 'de' ? 'Öffnen' : 'Open'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server, { forceNewTab: true });
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Plus size={14} />
+              <span>{settings.lang === 'de' ? 'In neuem Tab öffnen' : 'Open in new tab'}</span>
+            </button>
+
+            {!sidebarContextMenu.isLocal && (
+              <>
+                <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
+
+                <button
+                  onClick={() => editSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <SquarePen size={14} />
+                  <span>{settings.lang === 'de' ? 'Bearbeiten' : 'Edit'}</span>
+                </button>
+
+                <button
+                  onClick={() => deleteSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
+                >
+                  <X size={14} />
+                  <span>{settings.lang === 'de' ? 'Löschen' : 'Delete'}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <ConnectionModal isOpen={isConnModalOpen} onClose={() => setConnModalOpen(false)} serverToEdit={serverToEdit} onSuccess={loadServers} showToast={showToast} showDialog={showDialog} lang={settings.lang} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} setSettings={setSettings} showToast={showToast} showDialog={showDialog} />
