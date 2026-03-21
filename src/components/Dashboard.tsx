@@ -33,16 +33,21 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
 
   const handleQuickConnect = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!qc.host) return;
+
+    const host = qc.host.trim();
+    const username = qc.user.trim();
+    const port = Number.isFinite(qc.port) && qc.port > 0 && qc.port <= 65535 ? qc.port : 22;
+
+    if (!host) return;
 
     openTerminal({
       id: "qc_" + Date.now(),
       isQuickConnect: true,
       quickConnectNeedsPassword: true,
-      name: qc.host,
-      username: qc.user,
-      host: qc.host,
-      port: qc.port
+      name: host,
+      username,
+      host,
+      port
     });
   };
 
@@ -160,8 +165,16 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
               <input
                 type="number"
                 placeholder="22"
+                min="1"
+                max="65535"
                 value={qc.port}
-                onChange={(e) => setQc({ ...qc, port: parseInt(e.target.value || "22", 10) })}
+                onChange={(e) => {
+                  const parsed = parseInt(e.target.value || "22", 10);
+                  setQc({
+                    ...qc,
+                    port: Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 22
+                  });
+                }}
                 className="h-11 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-4 outline-none focus:border-[var(--accent)]"
               />
 
