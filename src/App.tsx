@@ -321,10 +321,23 @@ export default function App() {
 
     if (wantsLocal) return true;
 
+    const host = String(server?.host || '').trim();
+    const port = Number(server?.port) || 22;
+
+    if (!host) {
+      showToast(
+        settings.lang === 'de'
+          ? 'Host fehlt für die SSH Verbindung'
+          : 'Missing host for SSH connection',
+        true
+      );
+      return false;
+    }
+
     try {
       const info = await invoke('check_host_key', {
-        host: server.host,
-        port: server.port || 22
+        host,
+        port
       }) as any;
 
       if (info?.status === 'match') {
