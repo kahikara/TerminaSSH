@@ -4,8 +4,51 @@ import { invoke } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { t } from "../lib/i18n"
 
-export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSuccess, showToast, showDialog, lang }: any) {
-  const [form, setForm] = useState({
+type ToastFn = (msg: string, isErr?: boolean) => void
+
+type DialogFn = (config: Record<string, unknown>) => void
+
+type ConnectionForm = {
+  name: string
+  host: string
+  port: number
+  username: string
+  password: string
+  private_key: string
+  passphrase: string
+  group_name: string
+}
+
+type EditableConnection = Partial<ConnectionForm> & {
+  id: number | string
+  name: string
+  host?: string
+  port?: number
+  username?: string
+  private_key?: string
+  group_name?: string
+}
+
+type ConnectionModalProps = {
+  isOpen: boolean
+  onClose: () => void
+  serverToEdit: EditableConnection | null
+  onSuccess: () => void | Promise<void>
+  showToast: ToastFn
+  showDialog: DialogFn
+  lang: string
+}
+
+export default function ConnectionModal({
+  isOpen,
+  onClose,
+  serverToEdit,
+  onSuccess,
+  showToast,
+  showDialog,
+  lang
+}: ConnectionModalProps) {
+  const [form, setForm] = useState<ConnectionForm>({
     name: "",
     host: "",
     port: 22,
@@ -22,8 +65,20 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
     setClearStoredPassword(false)
     setClearStoredPassphrase(false)
 
-    if (serverToEdit) setForm({ ...serverToEdit, password: "", passphrase: "" })
-    else setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
+    if (serverToEdit) {
+      setForm({
+        name: String(serverToEdit.name || ""),
+        host: String(serverToEdit.host || ""),
+        port: Number(serverToEdit.port) || 22,
+        username: String(serverToEdit.username || ""),
+        password: "",
+        private_key: String(serverToEdit.private_key || ""),
+        passphrase: "",
+        group_name: String(serverToEdit.group_name || "")
+      })
+    } else {
+      setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
+    }
   }, [serverToEdit, isOpen])
 
   if (!isOpen) return null
@@ -102,19 +157,24 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
   }
 
   function handleDelete() {
+    if (!serverToEdit) return
+
+    const serverId = serverToEdit.id
+    const serverName = serverToEdit.name
+
     showDialog({
       type: "confirm",
       tone: "danger",
       title: lang === "de" ? "Verbindung löschen" : "Delete connection",
       description:
         lang === "de"
-          ? `Der gespeicherte Servereintrag "${serverToEdit.name}" wird entfernt.`
-          : `This removes the saved server entry "${serverToEdit.name}".`,
+          ? `Der gespeicherte Servereintrag "${serverName}" wird entfernt.`
+          : `This removes the saved server entry "${serverName}".`,
       confirmLabel: lang === "de" ? "Löschen" : "Delete",
       cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",
       onConfirm: async () => {
         try {
-          await invoke("delete_connection", { id: serverToEdit.id, name: serverToEdit.name })
+          await invoke("delete_connection", { id: serverId, name: serverName })
           onSuccess()
           onClose()
         } catch (e) {

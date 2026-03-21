@@ -24,9 +24,69 @@ import {
   syncSize
 } from "../lib/terminalSession"
 import { t } from "../lib/i18n"
+import type { AppSettings } from "../lib/types"
 import "xterm/css/xterm.css"
 
+type ToastFn = (msg: string, isErr?: boolean) => void
 
+type DialogFn = (config: Record<string, unknown>) => void
+
+type TunnelSummary = {
+  id: number
+  name?: string
+}
+
+type TerminalServer = {
+  id?: number | string
+  name?: string
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+  private_key?: string
+  passphrase?: string
+  sessionPassword?: string | null
+  group_name?: string
+  has_password?: boolean
+  isLocal?: boolean
+  isQuickConnect?: boolean
+  quickConnectNeedsPassword?: boolean
+  splitMode?: boolean
+  paneServers?: TerminalServer[]
+  paneSessionIds?: string[]
+  focusedPaneIndex?: number
+  type?: string
+  kind?: string
+  [key: string]: unknown
+}
+
+type PaneStatePayload = {
+  paneServers: TerminalServer[]
+  paneSessionIds: string[]
+  focusedPaneId?: string | null
+}
+
+type TerminalInstanceProps = {
+  server: TerminalServer
+  sessionId: string
+  settings: AppSettings
+  onClose?: () => void
+  showToast?: ToastFn
+  lang?: string
+  onFocus?: () => void
+}
+
+type TerminalPaneProps = {
+  server: TerminalServer
+  sessionId: string
+  settings: AppSettings
+  onClose?: () => void
+  onCloseTab?: () => void
+  showToast?: ToastFn
+  showDialog?: DialogFn
+  onPaneStateChange?: (payload: PaneStatePayload) => void
+  isActive?: boolean
+}
 
 function TerminalInstance({
   server,
@@ -36,15 +96,7 @@ function TerminalInstance({
   showToast,
   lang = "de",
   onFocus
-}: {
-  server: any
-  sessionId: string
-  settings: any
-  onClose?: () => void
-  showToast?: (msg: string, isErr?: boolean) => void
-  lang?: string
-  onFocus?: () => void
-}) {
+}: TerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const onCloseRef = useRef<(() => void) | undefined>(onClose)
 
@@ -232,7 +284,7 @@ const paneHeaderBtnStyle: CSSProperties = {
   transition: "background 140ms ease, color 140ms ease, border-color 140ms ease"
 }
 
-function getPaneLabel(server: any) {
+function getPaneLabel(server: TerminalServer | null | undefined) {
   if (!server) return "Unknown"
   if (isLocalServer(server)) return "Local Terminal"
   const user = server?.username || "user"
@@ -240,16 +292,16 @@ function getPaneLabel(server: any) {
   return `${user}@${host}`
 }
 
-export default function TerminalPane(props: any) {
+export default function TerminalPane(props: TerminalPaneProps) {
   const server = props.server
   const sessionId = props.sessionId
   const onClose = props.onClose || props.onCloseTab
-  const settings = props.settings || {}
-  const initialPaneServers =
+  const settings = props.settings
+  const initialPaneServers: TerminalServer[] =
     server?.splitMode && Array.isArray(server?.paneServers) && server.paneServers.length >= 2
       ? server.paneServers
       : [server]
-  const initialPaneSessionIds =
+  const initialPaneSessionIds: string[] =
     server?.splitMode && Array.isArray(server?.paneSessionIds) && server.paneSessionIds.length >= 2
       ? server.paneSessionIds
       : [sessionId]
@@ -267,13 +319,13 @@ export default function TerminalPane(props: any) {
   const [splitDirection, setSplitDirection] = useState<"vertical" | "horizontal">("vertical")
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [paneIds, setPaneIds] = useState<string[]>(initialPaneSessionIds)
-  const [paneServers, setPaneServers] = useState<any[]>(initialPaneServers)
+  const [paneServers, setPaneServers] = useState<TerminalServer[]>(initialPaneServers)
   const [splitCounter, setSplitCounter] = useState(0)
   const [focusedPaneId, setFocusedPaneId] = useState(initialPaneSessionIds[0] || sessionId)
 
   const dragRef = useRef(false)
   const paneIdsRef = useRef<string[]>(initialPaneSessionIds)
-  const paneServersRef = useRef<any[]>(initialPaneServers)
+  const paneServersRef = useRef<TerminalServer[]>(initialPaneServers)
   const focusedPaneIdRef = useRef(initialPaneSessionIds[0] || sessionId)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -311,11 +363,14 @@ export default function TerminalPane(props: any) {
   }, [focusedPaneId])
 
   useEffect(() => {
-    if (server?.splitMode && Array.isArray(server?.paneServers) && Array.isArray(server?.paneSessionIds)) {
-      setPaneServers(server.paneServers)
-      setPaneIds(server.paneSessionIds)
-      setFocusedPaneId((prev: string) =>
-        server.paneSessionIds.includes(prev) ? prev : server.paneSessionIds[0] || sessionId
+    const nextPaneServers = Array.isArray(server?.paneServers) ? server.paneServers : null
+    const nextPaneSessionIds = Array.isArray(server?.paneSessionIds) ? server.paneSessionIds : null
+
+    if (server?.splitMode && nextPaneServers && nextPaneSessionIds) {
+      setPaneServers(nextPaneServers)
+      setPaneIds(nextPaneSessionIds)
+      setFocusedPaneId((prev) =>
+        nextPaneSessionIds.includes(prev) ? prev : nextPaneSessionIds[0] || sessionId
       )
       return
     }
@@ -436,7 +491,7 @@ export default function TerminalPane(props: any) {
     const updateTunnelStatus = async () => {
       try {
         const [allTunnels, activeTunnels] = await Promise.all([
-          invoke("get_tunnels", { serverId: activePaneServer.id }) as Promise<any[]>,
+          invoke("get_tunnels", { serverId: activePaneServer.id }) as Promise<TunnelSummary[]>,
           invoke("get_active_tunnels") as Promise<{ id: number }[]>
         ])
 
