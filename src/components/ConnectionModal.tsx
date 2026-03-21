@@ -40,6 +40,16 @@ type ConnectionModalProps = {
   lang: string
 }
 
+type ConnectionTestResult = {
+  success: boolean
+  auth_ok: boolean
+  sftp_ok: boolean
+  host_key_status: string
+  key_type: string
+  fingerprint: string
+  message: string
+}
+
 export default function ConnectionModal({
   isOpen,
   onClose,
@@ -62,6 +72,7 @@ export default function ConnectionModal({
   })
   const [clearStoredPassword, setClearStoredPassword] = useState(false)
   const [clearStoredPassphrase, setClearStoredPassphrase] = useState(false)
+  const [testBusy, setTestBusy] = useState(false)
 
   useEffect(() => {
     setClearStoredPassword(false)
@@ -115,26 +126,97 @@ export default function ConnectionModal({
     }
   }
 
-  async function handleSave() {
-    const normalizedForm = buildNormalizedForm()
-
+  function getValidationError(normalizedForm: ConnectionForm) {
     if (!normalizedForm.name) {
-      showToast(lang === "de" ? "Name fehlt" : "Name is required", true)
-      return
+      return lang === "de" ? "Name fehlt" : "Name is required"
     }
 
     if (!normalizedForm.host) {
-      showToast(lang === "de" ? "Host fehlt" : "Host is required", true)
-      return
+      return lang === "de" ? "Host fehlt" : "Host is required"
     }
 
     if (!normalizedForm.username) {
-      showToast(lang === "de" ? "Benutzername fehlt" : "Username is required", true)
-      return
+      return lang === "de" ? "Benutzername fehlt" : "Username is required"
     }
 
     if (!Number.isInteger(normalizedForm.port) || normalizedForm.port < 1 || normalizedForm.port > 65535) {
-      showToast(lang === "de" ? "Port muss zwischen 1 und 65535 liegen" : "Port must be between 1 and 65535", true)
+      return lang === "de" ? "Port muss zwischen 1 und 65535 liegen" : "Port must be between 1 and 65535"
+    }
+
+    return ""
+  }
+
+  function formatHostKeyStatus(status: string) {
+    if (lang === "de") {
+      if (status === "match") return "bekannt und passend"
+      if (status === "not_found") return "neu oder noch nicht gespeichert"
+      if (status === "mismatch") return "geändert"
+      return "unbekannt"
+    }
+
+    if (status === "match") return "known and matching"
+    if (status === "not_found") return "new or not stored yet"
+    if (status === "mismatch") return "changed"
+    return "unknown"
+  }
+
+  async function handleTestConnection() {
+    const normalizedForm = buildNormalizedForm()
+    const validationError = getValidationError(normalizedForm)
+
+    if (validationError) {
+      showToast(validationError, true)
+      return
+    }
+
+    setTestBusy(true)
+
+    try {
+      const result = await invoke("test_connection", {
+        connection: normalizedForm,
+        checkSftp: true
+      }) as ConnectionTestResult
+
+      const okText = lang === "de" ? "OK" : "OK"
+      const failText = lang === "de" ? "Fehlgeschlagen" : "Failed"
+
+      showDialog({
+        type: "alert",
+        title: result.success
+          ? (lang === "de" ? "Verbindungstest erfolgreich" : "Connection test successful")
+          : (lang === "de" ? "Verbindungstest fehlgeschlagen" : "Connection test failed"),
+        description: [
+          result.message,
+          "",
+          `Host: ${normalizedForm.host}:${normalizedForm.port}`,
+          `${lang === "de" ? "Benutzer" : "User"}: ${normalizedForm.username}`,
+          `${lang === "de" ? "Host Key Status" : "Host key status"}: ${formatHostKeyStatus(result.host_key_status)}`,
+          `${lang === "de" ? "Typ" : "Type"}: ${result.key_type}`,
+          `Fingerprint: ${result.fingerprint}`,
+          `${lang === "de" ? "Authentifizierung" : "Authentication"}: ${result.auth_ok ? okText : failText}`,
+          `SFTP: ${result.sftp_ok ? okText : failText}`
+        ].join("\n"),
+        confirmLabel: "OK",
+        onConfirm: () => {}
+      })
+    } catch (e) {
+      showToast(
+        lang === "de"
+          ? `Verbindungstest fehlgeschlagen: ${String(e)}`
+          : `Connection test failed: ${String(e)}`,
+        true
+      )
+    } finally {
+      setTestBusy(false)
+    }
+  }
+
+  async function handleSave() {
+    const normalizedForm = buildNormalizedForm()
+    const validationError = getValidationError(normalizedForm)
+
+    if (validationError) {
+      showToast(validationError, true)
       return
     }
 
@@ -386,11 +468,20 @@ export default function ConnectionModal({
               {t("cancel", lang)}
             </button>
             <button
+              onClick={() => void handleTestConnection()}
+              className="ui-btn-ghost"
+              disabled={!canSave || testBusy}
+              aria-disabled={!canSave || testBusy}
+              style={!canSave || testBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+            >
+              {testBusy ? (lang === "de" ? "Teste..." : "Testing...") : (lang === "de" ? "Testen" : "Test")}
+            </button>
+            <button
               onClick={handleSave}
               className="ui-btn-primary"
-              disabled={!canSave}
-              aria-disabled={!canSave}
-              style={!canSave ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+              disabled={!canSave || testBusy}
+              aria-disabled={!canSave || testBusy}
+              style={!canSave || testBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
               {t("save", lang)}
             </button>

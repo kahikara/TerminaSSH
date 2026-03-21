@@ -214,6 +214,17 @@ pub struct HostKeyCheckInfo {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ConnectionTestResult {
+    success: bool,
+    auth_ok: bool,
+    sftp_ok: bool,
+    host_key_status: String,
+    key_type: String,
+    fingerprint: String,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct LinuxWindowModeInfo {
     wayland_undecorated: bool,
 }
@@ -428,6 +439,26 @@ fn remove_known_host_entry_with_ssh_keygen(host: &str, port: u16, path: &Path) {
             .args(["-R", host, "-f", &path_str])
             .output();
     }
+}
+
+fn check_known_host_status_for_session(
+    sess: &Session,
+    host: &str,
+    port: u16,
+    key: &[u8],
+) -> Result<String, String> {
+    let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
+    let known_hosts_path = get_known_hosts_path()?;
+    read_known_hosts_file(&mut known_hosts, &known_hosts_path)?;
+
+    let status = match known_hosts.check_port(host, port, key) {
+        CheckResult::Match => "match",
+        CheckResult::NotFound => "not_found",
+        CheckResult::Mismatch => "mismatch",
+        CheckResult::Failure => "failure",
+    };
+
+    Ok(status.to_string())
 }
 
 fn probe_host_key(
@@ -1985,6 +2016,72 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
 }
 
 #[tauri::command]
+fn test_connection(
+    mut connection: SshConnection,
+    check_sftp: Option<bool>,
+) -> Result<ConnectionTestResult, String> {
+    normalize_connection_fields(&mut connection);
+    validate_connection(&connection)?;
+
+    let host = connection.host.clone();
+    let port = connection.port;
+    let username = connection.username.clone();
+
+    let (sess, key, key_type, fingerprint) = probe_host_key(&host, port)?;
+    let host_key_status = check_known_host_status_for_session(&sess, &host, port, &key)?;
+    let key_type_label = host_key_type_label(key_type);
+
+    let auth_ok = authenticate_session(
+        &sess,
+        &connection.username,
+        &connection.password,
+        &connection.private_key,
+        &connection.passphrase,
+    );
+
+    if !auth_ok {
+        return Ok(ConnectionTestResult {
+            success: false,
+            auth_ok: false,
+            sftp_ok: false,
+            host_key_status,
+            key_type: key_type_label,
+            fingerprint,
+            message: format!("Authentication failed for {}", username),
+        });
+    }
+
+    let wants_sftp = check_sftp.unwrap_or(true);
+    let sftp_ok = if wants_sftp {
+        sess.sftp().is_ok()
+    } else {
+        false
+    };
+
+    if wants_sftp && !sftp_ok {
+        return Ok(ConnectionTestResult {
+            success: false,
+            auth_ok: true,
+            sftp_ok: false,
+            host_key_status,
+            key_type: key_type_label,
+            fingerprint,
+            message: "SSH login succeeded, but SFTP could not be opened".to_string(),
+        });
+    }
+
+    Ok(ConnectionTestResult {
+        success: true,
+        auth_ok: true,
+        sftp_ok,
+        host_key_status,
+        key_type: key_type_label,
+        fingerprint,
+        message: "Connection test succeeded".to_string(),
+    })
+}
+
+#[tauri::command]
 fn check_host_key(host: String, port: u16) -> Result<HostKeyCheckInfo, String> {
     let (sess, key, key_type, fingerprint) = probe_host_key(&host, port)?;
     let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
@@ -3059,6 +3156,7 @@ pub fn run() {
             save_connection,
             get_connections,
             update_connection,
+            test_connection,
             set_connection_password,
             delete_connection,
             start_ssh,
