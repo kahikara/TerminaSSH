@@ -698,7 +698,7 @@ export default function App() {
     });
   }, []);
 
-  const updateTabFromPaneState = (
+  const updateTabFromPaneState = useCallback((
     tabId: string,
     payload: {
       paneServers: any[];
@@ -743,7 +743,7 @@ export default function App() {
         };
       })
     );
-  };
+  }, []);
 
   const clearTabPointerState = useCallback(() => {
     setTabDragId(null);
