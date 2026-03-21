@@ -741,7 +741,7 @@ export default function App() {
     );
   };
 
-  const clearTabPointerState = () => {
+  const clearTabPointerState = useCallback(() => {
     setTabDragId(null);
     setTabDropId(null);
     setTabPointerDragging(false);
@@ -749,9 +749,9 @@ export default function App() {
     tabDragStartXRef.current = null;
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
-  };
+  }, []);
 
-  const handleTabPointerStart = (e: any, tabId: string) => {
+  const handleTabPointerStart = useCallback((e: any, tabId: string) => {
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement | null;
@@ -763,14 +763,14 @@ export default function App() {
     setTabGhostPos({ x: e.clientX, y: e.clientY });
     tabDragStartXRef.current = e.clientX;
     document.body.style.userSelect = 'none';
-  };
+  }, []);
 
-  const handleTabPointerEnter = (tabId: string) => {
+  const handleTabPointerEnter = useCallback((tabId: string) => {
     if (!tabDragId) return;
     if (!tabPointerDragging) return;
     if (tabId === tabDragId) return;
     setTabDropId(tabId);
-  };
+  }, [tabDragId, tabPointerDragging]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -814,7 +814,7 @@ export default function App() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [tabDragId, tabDropId, tabPointerDragging]);
+  }, [tabDragId, tabDropId, tabPointerDragging, clearTabPointerState]);
 
     
 
