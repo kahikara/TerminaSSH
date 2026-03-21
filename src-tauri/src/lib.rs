@@ -27,6 +27,7 @@ use aes_gcm::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SshConnection {
@@ -2789,6 +2790,20 @@ fn window_start_dragging(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn save_window_state_all(app: AppHandle) -> Result<(), String> {
+    app.save_window_state(StateFlags::all())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_close_main(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     const STATUS_SPLIT_MARKER: &str = "--TERMSSH--";
 
@@ -2880,6 +2895,8 @@ pub fn run() {
             window_toggle_maximize,
             window_is_maximized,
             window_start_dragging,
+            save_window_state_all,
+            window_close_main,
             get_status_bar_info,
             cancel_transfer,
             write_clipboard,

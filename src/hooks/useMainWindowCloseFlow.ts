@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 
 export type EditorWindowInfo = {
@@ -47,6 +48,10 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
   const finalizeMainClose = useCallback(async () => {
     if (mainClosingRef.current) return
     mainClosingRef.current = true
+    try {
+      await invoke("save_window_state_all")
+    } catch {}
+
     const win = getCurrentWindow()
     await win.close()
   }, [])
