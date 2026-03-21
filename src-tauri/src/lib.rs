@@ -2674,8 +2674,13 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // FIX: X11 wieder erzwungen!
-    std::env::set_var("GDK_BACKEND", "x11");
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("GDK_BACKEND").is_none() {
+            std::env::set_var("GDK_BACKEND", "x11");
+        }
+    }
+
     init_db();
 
     tauri::Builder::default()
