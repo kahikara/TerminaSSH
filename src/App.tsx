@@ -100,7 +100,20 @@ export default function App() {
     settingsRef.current = settings;
   }, [settings]);
 
-  const loadServers = async () => { try { setConnections(await invoke('get_connections')); } catch(e){} };
+  const loadServers = async () => {
+    try {
+      const items = await invoke('get_connections');
+      setConnections(Array.isArray(items) ? items : []);
+    } catch (e) {
+      setConnections([]);
+      showToast(
+        settings.lang === 'de'
+          ? `Verbindungen konnten nicht geladen werden: ${String(e)}`
+          : `Could not load connections: ${String(e)}`,
+        true
+      );
+    }
+  };
   useEffect(() => { loadServers(); }, []);
 
   useEffect(() => {
