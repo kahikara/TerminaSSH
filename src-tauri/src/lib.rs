@@ -790,8 +790,39 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     }
     Ok(res)
 }
+fn normalize_connection_fields(connection: &mut SshConnection) {
+    connection.name = connection.name.trim().to_string();
+    connection.host = connection.host.trim().to_string();
+    connection.username = connection.username.trim().to_string();
+    connection.private_key = connection.private_key.trim().to_string();
+    connection.group_name = connection.group_name.trim().to_string();
+}
+
+fn validate_connection(connection: &SshConnection) -> Result<(), String> {
+    if connection.name.is_empty() {
+        return Err("Connection name is required".to_string());
+    }
+
+    if connection.host.is_empty() {
+        return Err("Host is required".to_string());
+    }
+
+    if connection.username.is_empty() {
+        return Err("Username is required".to_string());
+    }
+
+    if connection.port == 0 {
+        return Err("Port must be between 1 and 65535".to_string());
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
-fn save_connection(connection: SshConnection, app: AppHandle) -> Result<String, String> {
+fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<String, String> {
+    normalize_connection_fields(&mut connection);
+    validate_connection(&connection)?;
+
     let enc_pw = encrypt_pw(&connection.password);
     let enc_passphrase = encrypt_pw(&connection.passphrase);
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
@@ -815,15 +846,19 @@ fn save_connection(connection: SshConnection, app: AppHandle) -> Result<String, 
         connection.name
     ))
 }
+
 #[tauri::command]
 fn update_connection(
     id: i32,
     old_name: String,
-    connection: SshConnection,
+    mut connection: SshConnection,
     clear_password: bool,
     clear_passphrase: bool,
     app: AppHandle,
 ) -> Result<String, String> {
+    normalize_connection_fields(&mut connection);
+    validate_connection(&connection)?;
+
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     let pw_to_save = if clear_password {
         String::new()
@@ -864,6 +899,7 @@ fn update_connection(
     let _ = app.emit("connection-saved", ());
     Ok(format!("Verbindung '{}' aktualisiert!", connection.name))
 }
+
 #[tauri::command]
 fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<(), String> {
     let enc_pw = encrypt_pw(&password);
