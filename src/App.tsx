@@ -312,9 +312,7 @@ export default function App() {
           const tabId = Math.random().toString(36).substring(7);
           const newTab = {
             ...server,
-            isQuickConnect: true,
-            password: pwd,
-            quickConnectNeedsPassword: false,
+            sessionPassword: pwd,
             tabId,
             sessionId: tabId
           };

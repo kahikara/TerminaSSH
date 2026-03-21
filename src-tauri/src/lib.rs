@@ -1729,7 +1729,10 @@ fn connect_quick_session(
     Ok(sess)
 }
 
-fn connect_ssh_session(id: i32) -> Result<Session, String> {
+fn connect_ssh_session_with_password_override(
+    id: i32,
+    password_override: Option<String>,
+) -> Result<Session, String> {
     let conn_db = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     let mut stmt = conn_db.prepare("SELECT host, port, username, password, private_key, passphrase FROM connections WHERE id = ?1").map_err(|e| e.to_string())?;
     let mut rows = stmt.query([&id]).map_err(|e| e.to_string())?;
@@ -1744,7 +1747,11 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
     let enc_pw: String = row.get(3).unwrap();
     let private_key: String = row.get(4).unwrap();
     let enc_passphrase: String = row.get(5).unwrap();
-    let password = decrypt_pw(&enc_pw)?;
+
+    let password = match password_override {
+        Some(value) if !value.is_empty() => value,
+        _ => decrypt_pw(&enc_pw)?,
+    };
     let passphrase = decrypt_pw(&enc_passphrase)?;
 
     let tcp = TcpStream::connect(format!("{}:{}", host, port))
@@ -1758,6 +1765,10 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
         return Err("Authentifizierung fehlgeschlagen!".to_string());
     }
     Ok(sess)
+}
+
+fn connect_ssh_session(id: i32) -> Result<Session, String> {
+    connect_ssh_session_with_password_override(id, None)
 }
 
 #[tauri::command]
@@ -2050,10 +2061,11 @@ fn start_ssh(
     session_id: String,
     cols: u32,
     rows: u32,
+    password_override: Option<String>,
     app_handle: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    let sess = connect_ssh_session(id)?;
+    let sess = connect_ssh_session_with_password_override(id, password_override)?;
     let (tx, rx) = channel::<SshMessage>();
     state.txs.lock().unwrap().insert(session_id.clone(), tx);
     let event_name = format!("term-output-{}", session_id);

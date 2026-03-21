@@ -175,7 +175,13 @@ export async function startIfNeeded(server: any, sessionId: string, entry: Store
         rows
       })
     } else {
-      await invoke("start_ssh", { id: server.id, sessionId, cols, rows })
+      await invoke("start_ssh", {
+        id: server.id,
+        sessionId,
+        cols,
+        rows,
+        passwordOverride: server.sessionPassword || null
+      })
     }
 
     entry.started = true
