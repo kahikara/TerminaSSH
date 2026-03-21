@@ -11,7 +11,7 @@ import {
 import { t } from "../lib/i18n";
 
 export default function Dashboard({ lang, settings, openTerminal, activeTabs, recentConns, activateTab }: any) {
-  const [qc, setQc] = useState({ user: "root", host: "", port: 22 });
+  const [qc, setQc] = useState({ user: "", host: "", port: 22 });
 
   const activeCount = activeTabs?.length || 0;
   const recentCount = recentConns?.length || 0;
