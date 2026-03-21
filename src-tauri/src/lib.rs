@@ -680,21 +680,21 @@ fn get_snippets() -> Result<Vec<SnippetItem>, String> {
                 command: row.get(2)?,
             })
         })
-        .unwrap();
+        .map_err(|e| e.to_string())?;
     let mut res = Vec::new();
-    for c in iter {
-        res.push(c.unwrap());
+    for item in iter {
+        res.push(item.map_err(|e| e.to_string())?);
     }
     Ok(res)
 }
 #[tauri::command]
 fn add_snippet(name: String, command: String, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO snippets (name, command) VALUES (?1, ?2)",
         (&name, &command),
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
     Ok("Snippet gespeichert!".to_string())
 }
@@ -705,20 +705,20 @@ fn update_snippet(
     command: String,
     app: AppHandle,
 ) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.execute(
         "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
         (&name, &command, &id),
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
     Ok("Snippet aktualisiert!".to_string())
 }
 #[tauri::command]
 fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
-        .unwrap();
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
     Ok("Snippet gelöscht!".to_string())
 }
