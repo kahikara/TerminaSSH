@@ -805,10 +805,14 @@ fn update_connection(
     id: i32,
     old_name: String,
     connection: SshConnection,
+    clear_password: bool,
+    clear_passphrase: bool,
     app: AppHandle,
 ) -> Result<String, String> {
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
-    let pw_to_save = if connection.password.is_empty() {
+    let pw_to_save = if clear_password {
+        String::new()
+    } else if connection.password.is_empty() {
         let mut stmt = conn
             .prepare("SELECT password FROM connections WHERE id = ?1")
             .map_err(|e| e.to_string())?;
@@ -816,7 +820,9 @@ fn update_connection(
     } else {
         encrypt_pw(&connection.password)
     };
-    let passphrase_to_save = if connection.passphrase.is_empty() {
+    let passphrase_to_save = if clear_passphrase {
+        String::new()
+    } else if connection.passphrase.is_empty() {
         let mut stmt = conn
             .prepare("SELECT passphrase FROM connections WHERE id = ?1")
             .map_err(|e| e.to_string())?;

@@ -15,8 +15,13 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
     passphrase: "",
     group_name: ""
   })
+  const [clearStoredPassword, setClearStoredPassword] = useState(false)
+  const [clearStoredPassphrase, setClearStoredPassphrase] = useState(false)
 
   useEffect(() => {
+    setClearStoredPassword(false)
+    setClearStoredPassphrase(false)
+
     if (serverToEdit) setForm({ ...serverToEdit, password: "", passphrase: "" })
     else setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
   }, [serverToEdit, isOpen])
@@ -29,7 +34,9 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
         await invoke("update_connection", {
           id: serverToEdit.id,
           oldName: serverToEdit.name,
-          connection: form
+          connection: form,
+          clearPassword: clearStoredPassword,
+          clearPassphrase: clearStoredPassphrase
         })
       } else {
         await invoke("save_connection", { connection: form })
@@ -160,9 +167,29 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
                 <input
                   type="password"
                   value={form.password}
-                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  onChange={e => {
+                    setClearStoredPassword(false)
+                    setForm({ ...form, password: e.target.value })
+                  }}
                   className={fieldClass}
                 />
+                {serverToEdit && (
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-[var(--text-muted)]">
+                    <span>{lang === "de" ? "Leer lassen = behalten" : "Leave empty = keep current"}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm({ ...form, password: "" })
+                        setClearStoredPassword((prev) => !prev)
+                      }}
+                      className="text-[var(--accent)] hover:text-[var(--text-main)] transition-colors"
+                    >
+                      {clearStoredPassword
+                        ? (lang === "de" ? "Löschen aktiv" : "Clear active")
+                        : (lang === "de" ? "Gespeichertes Passwort löschen" : "Clear saved password")}
+                    </button>
+                  </div>
+                )}
               </label>
             </div>
           </div>
@@ -189,9 +216,29 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
               <input
                 type="password"
                 value={form.passphrase}
-                onChange={e => setForm({ ...form, passphrase: e.target.value })}
+                onChange={e => {
+                  setClearStoredPassphrase(false)
+                  setForm({ ...form, passphrase: e.target.value })
+                }}
                 className={fieldClass}
               />
+              {serverToEdit && (
+                <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-[var(--text-muted)]">
+                  <span>{lang === "de" ? "Leer lassen = behalten" : "Leave empty = keep current"}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ ...form, passphrase: "" })
+                      setClearStoredPassphrase((prev) => !prev)
+                    }}
+                    className="text-[var(--accent)] hover:text-[var(--text-main)] transition-colors"
+                  >
+                    {clearStoredPassphrase
+                      ? (lang === "de" ? "Löschen aktiv" : "Clear active")
+                      : (lang === "de" ? "Gespeicherte Passphrase löschen" : "Clear saved passphrase")}
+                  </button>
+                </div>
+              )}
             </label>
           </div>
         </div>
