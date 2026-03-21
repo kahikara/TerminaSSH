@@ -521,9 +521,9 @@ export default function App() {
     setActiveTabId(tabId);
   };
 
-  const closeSidebarContextMenu = () => {
+  const closeSidebarContextMenu = useCallback(() => {
     setSidebarContextMenu(null);
-  };
+  }, []);
 
   const buildSplitTabFromServers = (leftServer: any, rightServer: any, existingTabId?: string) => {
     const tabId = existingTabId || Math.random().toString(36).substring(7);
@@ -644,7 +644,7 @@ export default function App() {
     setActiveTabId(activeTabId);
   };
 
-  const openSidebarContextMenu = (e: React.MouseEvent, server: any, isLocal = false) => {
+  const openSidebarContextMenu = useCallback((e: React.MouseEvent, server: any, isLocal = false) => {
     e.preventDefault();
     e.stopPropagation();
     setSidebarContextMenu({
@@ -653,13 +653,13 @@ export default function App() {
       server,
       isLocal
     });
-  };
+  }, []);
 
-  const editSidebarServer = (server: any) => {
+  const editSidebarServer = useCallback((server: any) => {
     closeSidebarContextMenu();
     setServerToEdit(server);
     setConnModalOpen(true);
-  };
+  }, [closeSidebarContextMenu]);
 
   const deleteSidebarServer = (server: any) => {
     closeSidebarContextMenu();
