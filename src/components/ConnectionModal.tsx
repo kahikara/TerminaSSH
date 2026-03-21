@@ -28,18 +28,55 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
 
   if (!isOpen) return null
 
+  function buildNormalizedForm() {
+    const normalizedPort = Number(form.port)
+
+    return {
+      ...form,
+      name: String(form.name || "").trim(),
+      host: String(form.host || "").trim(),
+      port: Number.isFinite(normalizedPort) ? normalizedPort : 22,
+      username: String(form.username || "").trim(),
+      private_key: String(form.private_key || "").trim(),
+      passphrase: String(form.passphrase || ""),
+      group_name: String(form.group_name || "").trim()
+    }
+  }
+
   async function handleSave() {
+    const normalizedForm = buildNormalizedForm()
+
+    if (!normalizedForm.name) {
+      showToast(lang === "de" ? "Name fehlt" : "Name is required", true)
+      return
+    }
+
+    if (!normalizedForm.host) {
+      showToast(lang === "de" ? "Host fehlt" : "Host is required", true)
+      return
+    }
+
+    if (!normalizedForm.username) {
+      showToast(lang === "de" ? "Benutzername fehlt" : "Username is required", true)
+      return
+    }
+
+    if (!Number.isInteger(normalizedForm.port) || normalizedForm.port < 1 || normalizedForm.port > 65535) {
+      showToast(lang === "de" ? "Port muss zwischen 1 und 65535 liegen" : "Port must be between 1 and 65535", true)
+      return
+    }
+
     try {
       if (serverToEdit) {
         await invoke("update_connection", {
           id: serverToEdit.id,
           oldName: serverToEdit.name,
-          connection: form,
+          connection: normalizedForm,
           clearPassword: clearStoredPassword,
           clearPassphrase: clearStoredPassphrase
         })
       } else {
-        await invoke("save_connection", { connection: form })
+        await invoke("save_connection", { connection: normalizedForm })
       }
       onSuccess()
       onClose()
