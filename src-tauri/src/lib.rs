@@ -2641,7 +2641,7 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     let sess = connect_ssh_session(server_id)?;
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
     channel
-        .exec("sh -lc 'cat /proc/loadavg && printf \"\\n--TERMSSH--\\n\" && cat /proc/meminfo'")
+        .exec("sh -lc 'if [ -r /proc/loadavg ] && [ -r /proc/meminfo ]; then cat /proc/loadavg && printf \"\\n--TERMSSH--\\n\" && cat /proc/meminfo; else printf \"--TERMSSH--\\n\"; fi'")
         .map_err(|e| e.to_string())?;
 
     let mut output = String::new();
@@ -2650,7 +2650,8 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
         .map_err(|e| e.to_string())?;
     let _ = channel.wait_close();
 
-    let mut parts = output.split("\n--TERMSSH--\n");
+    let normalized_output = output.replace("\r\n", "\n");
+    let mut parts = normalized_output.split("\n--TERMSSH--\n");
     let load_part = parts.next().unwrap_or_default();
     let mem_part = parts.next().unwrap_or_default();
 
