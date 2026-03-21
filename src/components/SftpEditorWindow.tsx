@@ -11,6 +11,11 @@ function qp(name: string) {
 type EditorStatus = "idle" | "saved" | "modified"
 type PendingAction = null | "reload" | "close"
 
+const EDITOR_FONT_SIZE = 13
+const EDITOR_LINE_HEIGHT = 1.45
+const EDITOR_PADDING_Y = 16
+const EDITOR_PADDING_X = 16
+
 type CursorInfo = {
   line: number
   column: number
@@ -202,6 +207,16 @@ export default function SftpEditorWindow() {
     const gutter = gutterRef.current
     if (!ta || !gutter) return
     gutter.scrollTop = ta.scrollTop
+  }
+
+  function handleGutterWheel(e: React.WheelEvent<HTMLDivElement>) {
+    const ta = textareaRef.current
+    if (!ta) return
+
+    e.preventDefault()
+    ta.scrollTop += e.deltaY
+    ta.scrollLeft += e.deltaX
+    syncGutterScroll()
   }
 
   function setEditorContent(next: string) {
@@ -890,6 +905,7 @@ export default function SftpEditorWindow() {
             {showLineNumbers && (
               <div
                 ref={gutterRef}
+                onWheel={handleGutterWheel}
                 style={{
                   width: gutterWidth,
                   overflow: "hidden",
@@ -897,9 +913,9 @@ export default function SftpEditorWindow() {
                   background: "color-mix(in srgb, var(--bg-sidebar, #0f172a) 90%, var(--bg-app))",
                   color: "var(--text-muted, #94a3b8)",
                   fontFamily: "JetBrains Mono, monospace",
-                  fontSize: 13,
-                  lineHeight: 1.45,
-                  padding: "14px 6px 14px 0",
+                  fontSize: EDITOR_FONT_SIZE,
+                  lineHeight: EDITOR_LINE_HEIGHT,
+                  padding: `${EDITOR_PADDING_Y}px 6px ${EDITOR_PADDING_Y}px 0`,
                   textAlign: "right",
                   userSelect: "none",
                   whiteSpace: "pre"
@@ -920,6 +936,7 @@ export default function SftpEditorWindow() {
 
             <textarea
               ref={textareaRef}
+              wrap="off"
               value={content}
               onChange={(e) => {
                 setEditorContent(e.target.value)
@@ -942,10 +959,12 @@ export default function SftpEditorWindow() {
                 outline: "none",
                 background: "color-mix(in srgb, var(--bg-app) 96%, black)",
                 color: "var(--text-main, #e5e7eb)",
-                padding: 16,
+                padding: `${EDITOR_PADDING_Y}px ${EDITOR_PADDING_X}px`,
                 fontFamily: "JetBrains Mono, monospace",
-                fontSize: 13,
-                lineHeight: 1.45
+                fontSize: EDITOR_FONT_SIZE,
+                lineHeight: EDITOR_LINE_HEIGHT,
+                whiteSpace: "pre",
+                overflow: "auto"
               }}
             />
           </>
