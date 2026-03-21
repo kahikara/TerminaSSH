@@ -2962,6 +2962,7 @@ pub fn run() {
                         }
                     }
                     "tray_quit" => {
+                        let _ = app.save_window_state(StateFlags::all());
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.unminimize();
