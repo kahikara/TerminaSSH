@@ -20,7 +20,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
   const recentSubtitle =
     lang === "de"
       ? "Schnellzugriff auf zuletzt verwendete Hosts"
-      : "{recentSubtitle}";
+      : "Quick access to recently used hosts";
 
   const showQuickConnect = settings?.showDashboardQuickConnect !== false;
   const showWorkflow = settings?.showDashboardWorkflow !== false;
