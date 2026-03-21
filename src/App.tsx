@@ -353,7 +353,10 @@ export default function App() {
     return server?.has_password === false && !server?.private_key;
   };
 
-  const openTerminal = async (server: any, options: { forceNewTab?: boolean } = {}) => {
+  const openTerminal = async (
+    server: any,
+    options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
+  ) => {
     const findExistingTabId = () => {
       if (options.forceNewTab) return null;
       if (server?.isQuickConnect) return null;
@@ -376,6 +379,11 @@ export default function App() {
 
       return null;
     };
+
+    if (options.openInSplit) {
+      await openServerInSplit(server);
+      return;
+    }
 
     const existingTabId = findExistingTabId();
     if (existingTabId) {
@@ -445,6 +453,125 @@ export default function App() {
     setSidebarContextMenu(null);
   };
 
+  const buildSplitTabFromServers = (leftServer: any, rightServer: any, existingTabId?: string) => {
+    const tabId = existingTabId || Math.random().toString(36).substring(7);
+    const leftSessionId = `${tabId}__pane_0`;
+    const rightSessionId = `${tabId}__pane_1`;
+
+    return {
+      ...leftServer,
+      tabId,
+      sessionId: leftSessionId,
+      splitMode: true,
+      paneServers: [leftServer, rightServer],
+      paneSessionIds: [leftSessionId, rightSessionId],
+      focusedPaneIndex: 1,
+      name: `${leftServer?.name || leftServer?.host || "Left"} | ${rightServer?.name || rightServer?.host || "Right"}`
+    };
+  };
+
+  const openServerInSplit = async (server: any) => {
+    if (!activeTabId) {
+      await openTerminal(server);
+      return;
+    }
+
+    const currentTab = openTabs.find((tab: any) => tab.tabId === activeTabId);
+    if (!currentTab) {
+      await openTerminal(server);
+      return;
+    }
+
+    const wantsLocal =
+      !!server?.isLocal ||
+      server?.id === 'local' ||
+      server?.name === 'Local Terminal' ||
+      server?.host === 'localhost';
+
+    if (!wantsLocal) {
+      if (!(await ensureHostKeyTrusted(server))) {
+        return;
+      }
+    }
+
+    if (needsSessionPasswordPrompt(server)) {
+      showDialog({
+        type: "prompt",
+        title:
+          settings.lang === "de"
+            ? `Passwort für ${server?.name || server?.host || "SSH Verbindung"}`
+            : `Password for ${server?.name || server?.host || "SSH connection"}`,
+        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
+        isPassword: true,
+        onConfirm: (pwd: string) => {
+          if (!pwd) return;
+
+          const rightServer = {
+            ...server,
+            sessionPassword: pwd
+          };
+
+          setOpenTabs(prev => {
+            const next = [...prev];
+            const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
+            if (idx === -1) return prev;
+
+            const baseTab = next[idx];
+            const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
+            next[idx] = buildSplitTabFromServers(leftServer, rightServer, activeTabId);
+            return next;
+          });
+
+          setActiveTabId(activeTabId);
+        }
+      });
+      return;
+    }
+
+    if (server?.isQuickConnect && server?.quickConnectNeedsPassword) {
+      showDialog({
+        type: "prompt",
+        title: settings.lang === "de" ? "Passwort für Quick Connect" : "Password for Quick Connect",
+        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
+        isPassword: true,
+        onConfirm: (pwd: string) => {
+          const rightServer = {
+            ...server,
+            password: pwd || "",
+            quickConnectNeedsPassword: false
+          };
+
+          setOpenTabs(prev => {
+            const next = [...prev];
+            const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
+            if (idx === -1) return prev;
+
+            const baseTab = next[idx];
+            const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
+            next[idx] = buildSplitTabFromServers(leftServer, rightServer, activeTabId);
+            return next;
+          });
+
+          setActiveTabId(activeTabId);
+        }
+      });
+      return;
+    }
+
+    setOpenTabs(prev => {
+      const next = [...prev];
+      const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
+      if (idx === -1) return prev;
+
+      const baseTab = next[idx];
+      const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
+      next[idx] = buildSplitTabFromServers(leftServer, server, activeTabId);
+      return next;
+    });
+
+    setActiveTabId(activeTabId);
+  };
+
   const openSidebarContextMenu = (e: React.MouseEvent, server: any, isLocal = false) => {
     e.preventDefault();
     e.stopPropagation();
@@ -493,6 +620,53 @@ export default function App() {
       if (activeTabId === tabId) setActiveTabId(newTabs.length > 0 ? newTabs[newTabs.length - 1].tabId : null);
       return newTabs;
     });
+  };
+
+  const updateTabFromPaneState = (
+    tabId: string,
+    payload: {
+      paneServers: any[];
+      paneSessionIds: string[];
+      focusedPaneId?: string | null;
+    }
+  ) => {
+    setOpenTabs((prev) =>
+      prev.map((tab: any) => {
+        if (tab.tabId !== tabId) return tab;
+
+        const paneServers = Array.isArray(payload.paneServers) ? payload.paneServers.filter(Boolean) : [];
+        const paneSessionIds = Array.isArray(payload.paneSessionIds) ? payload.paneSessionIds.filter(Boolean) : [];
+
+        if (paneServers.length <= 1) {
+          const singleServer = paneServers[0] || tab.paneServers?.[0] || tab;
+          const singleSessionId = paneSessionIds[0] || tab.paneSessionIds?.[0] || tab.sessionId || tab.tabId;
+
+          return {
+            ...singleServer,
+            tabId,
+            sessionId: singleSessionId
+          };
+        }
+
+        const leftServer = paneServers[0];
+        const rightServer = paneServers[1];
+
+        return {
+          ...leftServer,
+          tabId,
+          sessionId: paneSessionIds[0] || `${tabId}__pane_0`,
+          splitMode: true,
+          paneServers: [leftServer, rightServer],
+          paneSessionIds: [
+            paneSessionIds[0] || `${tabId}__pane_0`,
+            paneSessionIds[1] || `${tabId}__pane_1`
+          ],
+          focusedPaneIndex:
+            payload.focusedPaneId && paneSessionIds[1] === payload.focusedPaneId ? 1 : 0,
+          name: `${leftServer?.name || leftServer?.host || 'Left'} | ${rightServer?.name || rightServer?.host || 'Right'}`
+        };
+      })
+    );
   };
 
   const clearTabPointerState = () => {
@@ -957,7 +1131,16 @@ export default function App() {
            </div>
            {openTabs.map(tab => (
               <div key={tab.tabId} className={`absolute inset-0 ${activeTabId === tab.tabId ? 'block' : 'hidden'}`}>
-                 <TerminalPane server={tab} sessionId={tab.sessionId} settings={settings} showToast={showToast} onCloseTab={() => closeTab(tab.tabId)} isActive={activeTabId === tab.tabId} showDialog={showDialog} />
+                 <TerminalPane
+                   server={tab}
+                   sessionId={tab.sessionId}
+                   settings={settings}
+                   showToast={showToast}
+                   onCloseTab={() => closeTab(tab.tabId)}
+                   onPaneStateChange={(payload: any) => updateTabFromPaneState(tab.tabId, payload)}
+                   isActive={activeTabId === tab.tabId}
+                   showDialog={showDialog}
+                 />
               </div>
            ))}
         </div>
@@ -994,6 +1177,17 @@ export default function App() {
             >
               <Plus size={14} />
               <span>{settings.lang === 'de' ? 'In neuem Tab öffnen' : 'Open in new tab'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server, { openInSplit: true });
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Folder size={14} />
+              <span>{settings.lang === 'de' ? 'Im Split öffnen' : 'Open in split'}</span>
             </button>
 
             {!sidebarContextMenu.isLocal && (

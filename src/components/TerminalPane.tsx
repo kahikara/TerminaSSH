@@ -500,13 +500,21 @@ export default function TerminalPane(props: any) {
       const removedIndex = prev.indexOf(targetSessionId)
       destroyTerminal(targetSessionId)
 
-      setPaneServers((prevServers) =>
-        prevServers.filter((_, index) => index !== removedIndex)
-      )
+      setPaneServers((prevServers) => {
+        const nextPaneServers = prevServers.filter((_, index) => index !== removedIndex)
+
+        props.onPaneStateChange?.({
+          paneServers: nextPaneServers,
+          paneSessionIds: nextPaneIds,
+          focusedPaneId: nextPaneIds[0] || null
+        })
+
+        return nextPaneServers
+      })
 
       return nextPaneIds
     })
-  }, [onClose])
+  }, [onClose, props])
 
   const toggleSplit = useCallback(() => {
     setPaneIds((prev) => {
@@ -1061,7 +1069,7 @@ export default function TerminalPane(props: any) {
           visible={showSnippets}
           onClose={() => setShowSnippets(false)}
           onExecute={async (command: string) => {
-            const targetSessionId = paneIds[0] || sessionId
+            const targetSessionId = getSearchTargetSessionId()
             try {
               await invoke("write_to_pty", {
                 sessionId: targetSessionId,

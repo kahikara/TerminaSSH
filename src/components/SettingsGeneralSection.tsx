@@ -54,6 +54,7 @@ export default function SettingsGeneralSection({
             <option value="catppuccin">Catppuccin</option>
             <option value="nord">Nord</option>
             <option value="pitch-black">Pitch Black</option>
+            <option value="light">Light</option>
           </select>
         </FieldRow>
 

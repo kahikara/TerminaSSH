@@ -1,4 +1,4 @@
-export type ThemeName = "catppuccin" | "nord" | "pitch-black"
+export type ThemeName = "catppuccin" | "nord" | "pitch-black" | "light"
 export type CursorStyleName = "block" | "bar" | "underline"
 export type SftpSortName = "folders" | "name" | "size" | "type"
 
