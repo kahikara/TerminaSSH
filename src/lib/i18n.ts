@@ -158,6 +158,10 @@ export const translations: Record<string, Record<string, string>> = {
     emptyFolderHint: "Lade Dateien hoch oder erstelle einen neuen Ordner.",
     noFilesVisible: "Keine sichtbaren Dateien",
     noFilesVisibleHint: "Aktiviere versteckte Dateien oder wechsle den Ordner.",
+    binaryFileDetectedTitle: "Binärdatei erkannt",
+    binaryFileDetected: "Diese Datei scheint keine normale Textdatei zu sein. Sie enthält Binärdaten und kann im Editor unleserlich wirken oder beim Bearbeiten Probleme machen.",
+    binaryFileDetectedHint: "Diese Datei wirkt nicht wie normaler Text. Wenn du sie trotzdem im Editor öffnest, kann der Inhalt unleserlich sein oder sich nur eingeschränkt bearbeiten lassen.",
+    openAnyway: "Trotzdem öffnen",
     sidebarHint: "Wähle eine Verbindung oder lege eine neue an."
   },
   en: {
@@ -319,6 +323,10 @@ export const translations: Record<string, Record<string, string>> = {
     emptyFolderHint: "Upload files or create a new folder.",
     noFilesVisible: "No visible files",
     noFilesVisibleHint: "Enable hidden files or change the folder.",
+    binaryFileDetectedTitle: "Binary file detected",
+    binaryFileDetected: "This file does not appear to be a normal text file. It contains binary data and may look unreadable in the editor or behave poorly when edited.",
+    binaryFileDetectedHint: "This file does not look like normal text. If you still open it in the editor, the content may be unreadable or only partially editable.",
+    openAnyway: "Open anyway",
     sidebarHint: "Choose a connection or create a new one."
   }
 };

@@ -18,6 +18,62 @@ type CursorInfo = {
   chars: number
 }
 
+type BinaryCheckResult = {
+  isBinary: boolean
+  reason: string
+}
+
+function detectBinaryContent(text: string): BinaryCheckResult {
+  if (!text) {
+    return { isBinary: false, reason: "" }
+  }
+
+  const sample = text.slice(0, 200000)
+
+  let nullBytes = 0
+  let replacementChars = 0
+  let suspiciousControls = 0
+
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i)
+
+    if (code === 0) {
+      nullBytes++
+      continue
+    }
+
+    if (code === 0xfffd) {
+      replacementChars++
+      continue
+    }
+
+    const isAllowedControl =
+      code === 9 || code === 10 || code === 13
+
+    if (!isAllowedControl && code < 32) {
+      suspiciousControls++
+    }
+  }
+
+  const len = sample.length || 1
+  const replacementRatio = replacementChars / len
+  const controlRatio = suspiciousControls / len
+
+  if (nullBytes > 0) {
+    return { isBinary: true, reason: "null-bytes" }
+  }
+
+  if (replacementChars >= 8 && replacementRatio > 0.002) {
+    return { isBinary: true, reason: "replacement-chars" }
+  }
+
+  if (suspiciousControls >= 12 && controlRatio > 0.01) {
+    return { isBinary: true, reason: "control-chars" }
+  }
+
+  return { isBinary: false, reason: "" }
+}
+
 function getCursorInfo(text: string, cursor: number): CursorInfo {
   const safeCursor = Math.max(0, Math.min(cursor, text.length))
   const before = text.slice(0, safeCursor)
@@ -104,6 +160,9 @@ export default function SftpEditorWindow() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmText, setConfirmText] = useState("")
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
+  const [binaryPromptOpen, setBinaryPromptOpen] = useState(false)
+  const [binaryPromptText, setBinaryPromptText] = useState("")
+  const [pendingBinaryText, setPendingBinaryText] = useState<string | null>(null)
 
   const dirtyRef = useRef(false)
   const closingRef = useRef(false)
@@ -204,6 +263,7 @@ export default function SftpEditorWindow() {
         return
       }
 
+      closeBinaryPrompt()
       setErrorText("")
       setLoading(true)
 
@@ -211,6 +271,17 @@ export default function SftpEditorWindow() {
         id: serverId,
         path: remotePath
       }) as string
+
+      const binaryCheck = detectBinaryContent(text)
+
+      if (binaryCheck.isBinary) {
+        openBinaryPrompt(text, binaryCheck.reason)
+        setStatus("idle")
+        setSearchInfo("")
+        setCursorInfo(getCursorInfo("", 0))
+        evaluateLargeFileNotice("")
+        return
+      }
 
       setEditorContent(text)
       setEditorOriginal(text)
@@ -404,6 +475,41 @@ export default function SftpEditorWindow() {
     confirmOpenRef.current = false
   }
 
+  function openBinaryPrompt(text: string, reason: string) {
+    setPendingBinaryText(text)
+    setBinaryPromptText(
+      reason === "null-bytes"
+        ? t("binaryFileDetected", lang)
+        : t("binaryFileDetectedHint", lang)
+    )
+    setBinaryPromptOpen(true)
+  }
+
+  function closeBinaryPrompt() {
+    setBinaryPromptOpen(false)
+    setBinaryPromptText("")
+    setPendingBinaryText(null)
+  }
+
+  function confirmBinaryOpen() {
+    const text = pendingBinaryText
+    closeBinaryPrompt()
+
+    if (text == null) return
+
+    setEditorContent(text)
+    setEditorOriginal(text)
+    setStatus("idle")
+    setSearchInfo("")
+    setCursorInfo(getCursorInfo(text, 0))
+    evaluateLargeFileNotice(text)
+
+    setTimeout(() => {
+      updateCursor()
+      syncGutterScroll()
+    }, 0)
+  }
+
   async function reallyClose() {
     if (closingRef.current) return
     closingRef.current = true
@@ -555,6 +661,12 @@ export default function SftpEditorWindow() {
       }
 
       if (e.key === "Escape") {
+        if (binaryPromptOpen) {
+          e.preventDefault()
+          e.stopPropagation()
+          closeBinaryPrompt()
+          return
+        }
         if (confirmOpen) {
           e.preventDefault()
           e.stopPropagation()
@@ -578,7 +690,7 @@ export default function SftpEditorWindow() {
 
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [searchOpen, replaceOpen, searchText, confirmOpen, loading, saving])
+  }, [searchOpen, replaceOpen, searchText, confirmOpen, binaryPromptOpen, loading, saving])
 
   const lineNumbers = useMemo(() => {
     return Array.from({ length: Math.max(cursorInfo.lines, 1) }, (_, i) => i + 1)
@@ -866,6 +978,61 @@ export default function SftpEditorWindow() {
           <span>{showLineNumbers ? t("linesOn", lang) : t("linesOff", lang)}</span>
         </div>
       </div>
+
+      {binaryPromptOpen && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 51,
+            padding: 18
+          }}
+        >
+          <div
+            style={{
+              width: 420,
+              maxWidth: "100%",
+              borderRadius: 16,
+              border: "1px solid rgba(245,158,11,0.25)",
+              background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+              color: "var(--text-main, #e5e7eb)",
+              boxShadow: "0 18px 60px rgba(0,0,0,0.38)",
+              padding: 16
+            }}
+          >
+            <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, marginBottom: 8 }}>
+              {t("binaryFileDetectedTitle", lang)}
+            </div>
+
+            <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--text-muted, #94a3b8)", marginBottom: 14, whiteSpace: "pre-line" }}>
+              {binaryPromptText}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                style={btn}
+                onClick={() => {
+                  closeBinaryPrompt()
+                  requestClose()
+                }}
+              >
+                {t("cancel", lang)}
+              </button>
+              <button
+                style={{ ...btn, background: "var(--accent)", color: "black", border: "1px solid transparent" }}
+                onClick={confirmBinaryOpen}
+              >
+                {t("openAnyway", lang)}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmOpen && (
         <div
