@@ -850,6 +850,19 @@ fn update_connection(
     Ok(format!("Verbindung '{}' aktualisiert!", connection.name))
 }
 #[tauri::command]
+fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<(), String> {
+    let enc_pw = encrypt_pw(&password);
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE connections SET password = ?1 WHERE id = ?2",
+        (&enc_pw, &id),
+    )
+    .map_err(|e| e.to_string())?;
+    let _ = app.emit("connection-saved", ());
+    Ok(())
+}
+
+#[tauri::command]
 fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, String> {
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
@@ -2879,6 +2892,7 @@ pub fn run() {
             save_connection,
             get_connections,
             update_connection,
+            set_connection_password,
             delete_connection,
             start_ssh,
             start_quick_ssh,

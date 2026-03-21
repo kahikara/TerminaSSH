@@ -532,8 +532,27 @@ export default function App() {
             : `Password for ${server?.name || server?.host || "SSH connection"}`,
         placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
         isPassword: true,
-        onConfirm: (pwd: string) => {
+        checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
+        onConfirm: async (pwd: string, meta?: any) => {
           if (!pwd) return;
+
+          if (meta?.checked && server?.id != null) {
+            try {
+              await invoke("set_connection_password", {
+                id: server.id,
+                password: pwd
+              });
+              await loadServers();
+              showToast(settings.lang === "de" ? "Passwort gespeichert" : "Password saved");
+            } catch (e) {
+              showToast(
+                settings.lang === "de"
+                  ? `Passwort konnte nicht gespeichert werden: ${String(e)}`
+                  : `Could not save password: ${String(e)}`,
+                true
+              );
+            }
+          }
 
           const tabId = Math.random().toString(36).substring(7);
           const newTab = {
@@ -631,8 +650,27 @@ export default function App() {
             : `Password for ${server?.name || server?.host || "SSH connection"}`,
         placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
         isPassword: true,
-        onConfirm: (pwd: string) => {
+        checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
+        onConfirm: async (pwd: string, meta?: any) => {
           if (!pwd) return;
+
+          if (meta?.checked && server?.id != null) {
+            try {
+              await invoke("set_connection_password", {
+                id: server.id,
+                password: pwd
+              });
+              await loadServers();
+              showToast(settings.lang === "de" ? "Passwort gespeichert" : "Password saved");
+            } catch (e) {
+              showToast(
+                settings.lang === "de"
+                  ? `Passwort konnte nicht gespeichert werden: ${String(e)}`
+                  : `Could not save password: ${String(e)}`,
+                true
+              );
+            }
+          }
 
           const rightServer = {
             ...server,
@@ -944,7 +982,9 @@ export default function App() {
               <button
                 data-window-control="true"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => window.close()}
+                onClick={() => {
+                  void invoke('window_close_main').catch(() => {})
+                }}
                 className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
                 title={settings.lang === 'de' ? 'Schließen' : 'Close'}
               >

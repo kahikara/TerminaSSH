@@ -4,11 +4,13 @@ import { X } from "lucide-react"
 export default function GlobalDialog({ dialog, onClose }: any) {
   const [val, setVal] = useState("")
   const [confirmVal, setConfirmVal] = useState("")
+  const [checkVal, setCheckVal] = useState(false)
 
   useEffect(() => {
     if (dialog.isOpen) {
       setVal(dialog.defaultValue || "")
       setConfirmVal(dialog.defaultConfirmValue || "")
+      setCheckVal(Boolean(dialog.checkboxDefaultChecked))
     }
   }, [dialog.isOpen, dialog.defaultValue, dialog.defaultConfirmValue])
 
@@ -26,6 +28,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
 
     const needsDoubleInput = dialog.type === "prompt" && dialog.requireConfirm === true
     const confirmPlaceholder = dialog.confirmPlaceholder || ""
+    const checkboxLabel = dialog.checkboxLabel || ""
 
     const validationError =
     dialog.type === "prompt" && dialog.validate
@@ -50,9 +53,17 @@ export default function GlobalDialog({ dialog, onClose }: any) {
 
         if (dialog.type === "prompt") {
           if (needsDoubleInput) {
-            dialog.onConfirm(val, confirmVal)
+            if (checkboxLabel) {
+              dialog.onConfirm(val, confirmVal, { checked: checkVal })
+            } else {
+              dialog.onConfirm(val, confirmVal)
+            }
           } else {
-            dialog.onConfirm(val)
+            if (checkboxLabel) {
+              dialog.onConfirm(val, { checked: checkVal })
+            } else {
+              dialog.onConfirm(val)
+            }
           }
         } else {
           dialog.onConfirm(val)
@@ -111,6 +122,18 @@ export default function GlobalDialog({ dialog, onClose }: any) {
           className="w-full h-9 px-3 rounded-[10px] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border border-[var(--border-subtle)] outline-none focus:border-[var(--accent)] text-[13px] text-[var(--text-main)]"
           />
         )}
+
+        {checkboxLabel ? (
+          <label className="flex items-center gap-2 text-[12px] text-[var(--text-muted)] select-none">
+            <input
+              type="checkbox"
+              checked={checkVal}
+              onChange={e => setCheckVal(e.target.checked)}
+              className="h-4 w-4 rounded border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))]"
+            />
+            <span>{checkboxLabel}</span>
+          </label>
+        ) : null}
 
         {validationError ? (
           <div className="text-[12px] leading-[1.4] text-[var(--danger)]">
