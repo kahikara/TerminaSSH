@@ -743,10 +743,10 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
                 has_password: !encrypted_password.trim().is_empty(),
             })
         })
-        .unwrap();
+        .map_err(|e| e.to_string())?;
     let mut res = Vec::new();
-    for c in iter {
-        res.push(c.unwrap());
+    for item in iter {
+        res.push(item.map_err(|e| e.to_string())?);
     }
     Ok(res)
 }
