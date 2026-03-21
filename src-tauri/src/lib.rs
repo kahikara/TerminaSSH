@@ -754,8 +754,21 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
 fn save_connection(connection: SshConnection, app: AppHandle) -> Result<String, String> {
     let enc_pw = encrypt_pw(&connection.password);
     let enc_passphrase = encrypt_pw(&connection.passphrase);
-    let conn = Connection::open(get_db_path()).unwrap();
-    conn.execute("INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", (&connection.name, &connection.host, &connection.port, &connection.username, &enc_pw, &connection.private_key, &enc_passphrase, &connection.group_name)).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        (
+            &connection.name,
+            &connection.host,
+            &connection.port,
+            &connection.username,
+            &enc_pw,
+            &connection.private_key,
+            &enc_passphrase,
+            &connection.group_name,
+        ),
+    )
+    .map_err(|e| e.to_string())?;
     let _ = app.emit("connection-saved", ());
     Ok(format!(
         "Verbindung '{}' sicher gespeichert!",
@@ -769,33 +782,49 @@ fn update_connection(
     connection: SshConnection,
     app: AppHandle,
 ) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     let pw_to_save = if connection.password.is_empty() {
         let mut stmt = conn
             .prepare("SELECT password FROM connections WHERE id = ?1")
-            .unwrap();
-        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
+            .map_err(|e| e.to_string())?;
+        stmt.query_row([&id], |row| row.get(0))
+            .unwrap_or_default()
     } else {
         encrypt_pw(&connection.password)
     };
     let passphrase_to_save = if connection.passphrase.is_empty() {
         let mut stmt = conn
             .prepare("SELECT passphrase FROM connections WHERE id = ?1")
-            .unwrap();
-        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
+            .map_err(|e| e.to_string())?;
+        stmt.query_row([&id], |row| row.get(0))
+            .unwrap_or_default()
     } else {
         encrypt_pw(&connection.passphrase)
     };
-    conn.execute("UPDATE connections SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8 WHERE id = ?9", (&connection.name, &connection.host, &connection.port, &connection.username, &pw_to_save, &connection.private_key, &passphrase_to_save, &connection.group_name, &id)).unwrap();
+    conn.execute(
+        "UPDATE connections SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8 WHERE id = ?9",
+        (
+            &connection.name,
+            &connection.host,
+            &connection.port,
+            &connection.username,
+            &pw_to_save,
+            &connection.private_key,
+            &passphrase_to_save,
+            &connection.group_name,
+            &id,
+        ),
+    )
+    .map_err(|e| e.to_string())?;
     let _ = old_name;
     let _ = app.emit("connection-saved", ());
     Ok(format!("Verbindung '{}' aktualisiert!", connection.name))
 }
 #[tauri::command]
 fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).unwrap();
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
-        .unwrap();
+        .map_err(|e| e.to_string())?;
     let _ = app.emit("connection-saved", ());
     Ok(format!("Verbindung '{}' gelöscht!", name))
 }
