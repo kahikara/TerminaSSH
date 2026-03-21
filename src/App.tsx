@@ -352,8 +352,9 @@ export default function App() {
     return server?.has_password === false && !server?.private_key;
   };
 
-  const openTerminal = async (server: any) => {
+  const openTerminal = async (server: any, options: { forceNewTab?: boolean } = {}) => {
     const findExistingTabId = () => {
+      if (options.forceNewTab) return null;
       if (server?.isQuickConnect) return null;
 
       const wantsLocal =
@@ -624,7 +625,8 @@ export default function App() {
                   return (
                     <button
                       key={`${conn.id || conn.name || 'item'}_${idx}`}
-                      onClick={() => openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
+                      onClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
+                      onDoubleClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, { forceNewTab: true })}
                       title={conn.name}
                       className={`group/item flex items-center justify-center w-full h-9 rounded-xl border transition-all ${
                         active
@@ -660,7 +662,8 @@ export default function App() {
                     }`}
                   >
                     <button
-                      onClick={() => openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
+                      onClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
+                      onDoubleClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }, { forceNewTab: true })}
                       className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
                         isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
@@ -703,7 +706,8 @@ export default function App() {
                       }`}
                     >
                       <button
-                        onClick={() => openTerminal(conn)}
+                        onClick={() => void openTerminal(conn)}
+                        onDoubleClick={() => void openTerminal(conn, { forceNewTab: true })}
                         className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
                           active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                         }`}
@@ -768,7 +772,8 @@ export default function App() {
                                 }`}
                               >
                                 <button
-                                  onClick={() => openTerminal(conn)}
+                                  onClick={() => void openTerminal(conn)}
+                        onDoubleClick={() => void openTerminal(conn, { forceNewTab: true })}
                                   className={`flex items-center flex-1 min-w-0 text-left px-1 py-1 rounded-xl ${
                                     active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                                   }`}
