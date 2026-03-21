@@ -255,6 +255,90 @@ export default function App() {
     setSidebarSearchQuery("");
   }, [isSidebarCollapsed]);
 
+  const ensureHostKeyTrusted = async (server: any) => {
+    const wantsLocal =
+      !!server?.isLocal ||
+      server?.id === 'local' ||
+      server?.name === 'Local Terminal' ||
+      server?.host === 'localhost';
+
+    if (wantsLocal) return true;
+
+    try {
+      const info = await invoke('check_host_key', {
+        host: server.host,
+        port: server.port || 22
+      }) as any;
+
+      if (info?.status === 'match') {
+        return true;
+      }
+
+      if (info?.status !== 'not_found' && info?.status !== 'mismatch') {
+        showToast(
+          settings.lang === 'de'
+            ? 'Host-Fingerprint konnte nicht geprüft werden'
+            : 'Could not verify host fingerprint',
+          true
+        );
+        return false;
+      }
+
+      const isMismatch = info.status === 'mismatch';
+
+      return await new Promise<boolean>((resolve) => {
+        showDialog({
+          type: 'confirm',
+          tone: isMismatch ? 'danger' : undefined,
+          title: isMismatch
+            ? (settings.lang === 'de' ? 'SSH Host Key geändert' : 'SSH host key changed')
+            : (settings.lang === 'de' ? 'Unbekannter SSH Host' : 'Unknown SSH host'),
+          description: isMismatch
+            ? (
+                settings.lang === 'de'
+                  ? `Der gespeicherte Host-Fingerprint für ${info.display_host} hat sich geändert.\n\nTyp: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nDas kann harmlos sein, kann aber auch auf einen Man-in-the-Middle-Angriff hindeuten. Nur fortfahren, wenn du der Änderung wirklich vertraust.`
+                  : `The stored host fingerprint for ${info.display_host} has changed.\n\nType: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nThis can be harmless, but it can also indicate a man-in-the-middle attack. Only continue if you really trust this change.`
+              )
+            : (
+                settings.lang === 'de'
+                  ? `Dieser Host ist noch nicht in known_hosts gespeichert.\n\nHost: ${info.display_host}\nTyp: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nWenn du vertraust, wird der Host in ~/.ssh/known_hosts gespeichert.`
+                  : `This host is not stored in known_hosts yet.\n\nHost: ${info.display_host}\nType: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nIf you trust it, the host will be stored in ~/.ssh/known_hosts.`
+              ),
+          confirmLabel: isMismatch
+            ? (settings.lang === 'de' ? 'Ersetzen und verbinden' : 'Replace and connect')
+            : (settings.lang === 'de' ? 'Vertrauen und verbinden' : 'Trust and connect'),
+          cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
+          onConfirm: async () => {
+            try {
+              await invoke('trust_host_key', {
+                host: info.host,
+                port: info.port
+              });
+              resolve(true);
+            } catch (e) {
+              showToast(
+                settings.lang === 'de'
+                  ? `Host-Fingerprint konnte nicht gespeichert werden: ${String(e)}`
+                  : `Could not store host fingerprint: ${String(e)}`,
+                true
+              );
+              resolve(false);
+            }
+          },
+          onCancel: () => resolve(false)
+        });
+      });
+    } catch (e) {
+      showToast(
+        settings.lang === 'de'
+          ? `Host-Fingerprint Prüfung fehlgeschlagen: ${String(e)}`
+          : `Host fingerprint check failed: ${String(e)}`,
+        true
+      );
+      return false;
+    }
+  };
+
   const needsSessionPasswordPrompt = (server: any) => {
     const wantsLocal =
       !!server?.isLocal ||
@@ -268,7 +352,7 @@ export default function App() {
     return server?.has_password === false && !server?.private_key;
   };
 
-  const openTerminal = (server: any) => {
+  const openTerminal = async (server: any) => {
     const findExistingTabId = () => {
       if (server?.isQuickConnect) return null;
 
@@ -294,6 +378,10 @@ export default function App() {
     const existingTabId = findExistingTabId();
     if (existingTabId) {
       setActiveTabId(existingTabId);
+      return;
+    }
+
+    if (!(await ensureHostKeyTrusted(server))) {
       return;
     }
 

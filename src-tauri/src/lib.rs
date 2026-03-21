@@ -1,7 +1,7 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use ssh2::Session;
+use ssh2::{CheckResult, HashType, HostKeyType, KnownHostFileKind, KnownHostKeyFormat, Session};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -194,6 +194,17 @@ pub struct StatusBarInfo {
     ram: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HostKeyCheckInfo {
+    host: String,
+    port: u16,
+    display_host: String,
+    key_type: String,
+    fingerprint: String,
+    status: String,
+    known_hosts_path: String,
+}
+
 pub enum SshMessage {
     Input(String),
     Resize(u32, u32),
@@ -332,6 +343,89 @@ fn get_keys_dir() -> String {
     let dir = format!("{}/keys", get_app_dir());
     let _ = fs::create_dir_all(&dir);
     dir
+}
+
+fn get_known_hosts_path() -> Result<PathBuf, String> {
+    let home = home_dir().ok_or("Could not determine home directory".to_string())?;
+    let ssh_dir = home.join(".ssh");
+    fs::create_dir_all(&ssh_dir).map_err(|e| e.to_string())?;
+    Ok(ssh_dir.join("known_hosts"))
+}
+
+fn format_known_host_name(host: &str, port: u16) -> String {
+    if port == 22 {
+        host.to_string()
+    } else {
+        format!("[{}]:{}", host, port)
+    }
+}
+
+fn host_key_type_label(kind: HostKeyType) -> String {
+    match kind {
+        HostKeyType::Rsa => "RSA".to_string(),
+        HostKeyType::Dss => "DSA".to_string(),
+        HostKeyType::Ecdsa256 => "ECDSA-256".to_string(),
+        HostKeyType::Ecdsa384 => "ECDSA-384".to_string(),
+        HostKeyType::Ecdsa521 => "ECDSA-521".to_string(),
+        HostKeyType::Ed25519 => "ED25519".to_string(),
+        HostKeyType::Unknown => "UNKNOWN".to_string(),
+    }
+}
+
+fn host_key_sha256_fingerprint(sess: &Session) -> String {
+    match sess.host_key_hash(HashType::Sha256) {
+        Some(bytes) => {
+            let encoded = STANDARD.encode(bytes);
+            format!("SHA256:{}", encoded.trim_end_matches('='))
+        }
+        None => "unknown".to_string(),
+    }
+}
+
+fn read_known_hosts_file(known_hosts: &mut ssh2::KnownHosts, path: &Path) -> Result<(), String> {
+    if path.exists() {
+        known_hosts
+            .read_file(path, KnownHostFileKind::OpenSSH)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+
+fn remove_known_host_entry_with_ssh_keygen(host: &str, port: u16, path: &Path) {
+    let path_str = path.to_string_lossy().to_string();
+    let target = format_known_host_name(host, port);
+
+    let _ = Command::new("ssh-keygen")
+        .args(["-R", &target, "-f", &path_str])
+        .output();
+
+    if port == 22 {
+        let _ = Command::new("ssh-keygen")
+            .args(["-R", host, "-f", &path_str])
+            .output();
+    }
+}
+
+fn probe_host_key(host: &str, port: u16) -> Result<(Session, Vec<u8>, HostKeyType, String), String> {
+    let tcp = TcpStream::connect(format!("{}:{}", host, port))
+        .map_err(|e| format!("TCP Error: {}", e))?;
+
+    let mut sess = Session::new().map_err(|e| e.to_string())?;
+    sess.set_tcp_stream(tcp);
+    sess.handshake()
+        .map_err(|e| format!("Handshake Error: {}", e))?;
+
+    let (key_bytes, key_type) = {
+        let (key, key_type) = sess
+            .host_key()
+            .ok_or("Could not read remote host key".to_string())?;
+        (key.to_vec(), key_type)
+    };
+
+    let fingerprint = host_key_sha256_fingerprint(&sess);
+
+    Ok((sess, key_bytes, key_type, fingerprint))
 }
 
 fn get_or_create_key() -> [u8; 32] {
@@ -1772,6 +1866,56 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
 }
 
 #[tauri::command]
+fn check_host_key(host: String, port: u16) -> Result<HostKeyCheckInfo, String> {
+    let (sess, key, key_type, fingerprint) = probe_host_key(&host, port)?;
+    let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
+    let known_hosts_path = get_known_hosts_path()?;
+    read_known_hosts_file(&mut known_hosts, &known_hosts_path)?;
+
+    let status = match known_hosts.check_port(&host, port, &key) {
+        CheckResult::Match => "match",
+        CheckResult::NotFound => "not_found",
+        CheckResult::Mismatch => "mismatch",
+        CheckResult::Failure => "failure",
+    }
+    .to_string();
+
+    Ok(HostKeyCheckInfo {
+        host: host.clone(),
+        port,
+        display_host: format_known_host_name(&host, port),
+        key_type: host_key_type_label(key_type),
+        fingerprint,
+        status,
+        known_hosts_path: known_hosts_path.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+fn trust_host_key(host: String, port: u16) -> Result<(), String> {
+    let (sess, key, key_type, _) = probe_host_key(&host, port)?;
+    let known_hosts_path = get_known_hosts_path()?;
+
+    remove_known_host_entry_with_ssh_keygen(&host, port, &known_hosts_path);
+
+    let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
+    read_known_hosts_file(&mut known_hosts, &known_hosts_path)?;
+
+    let host_name = format_known_host_name(&host, port);
+    let key_format: KnownHostKeyFormat = key_type.into();
+
+    known_hosts
+        .add(&host_name, &key, "", key_format)
+        .map_err(|e| e.to_string())?;
+
+    known_hosts
+        .write_file(&known_hosts_path, KnownHostFileKind::OpenSSH)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn get_active_tunnels(state: State<'_, SshState>) -> Result<Vec<ActiveTunnelItem>, String> {
     let map = state
         .tunnel_runtime
@@ -2574,7 +2718,9 @@ pub fn run() {
             set_tray_visible,
             start_tunnel,
             stop_tunnel,
-            get_active_tunnels
+            get_active_tunnels,
+            check_host_key,
+            trust_host_key
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
