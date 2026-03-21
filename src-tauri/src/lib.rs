@@ -633,10 +633,16 @@ fn decrypt_pw(encoded: &str) -> Result<String, String> {
     String::from_utf8(plaintext).map_err(|_| "UTF8 Fehler".to_string())
 }
 
-fn init_db() {
+fn init_db() -> Result<(), String> {
     let db_path = get_db_path();
-    let conn = Connection::open(&db_path).unwrap();
-    conn.execute("CREATE TABLE IF NOT EXISTS connections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL, username TEXT NOT NULL)", []).unwrap();
+    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS connections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL, username TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     let _ = conn.execute(
         "ALTER TABLE connections ADD COLUMN password TEXT NOT NULL DEFAULT ''",
         [],
@@ -653,7 +659,13 @@ fn init_db() {
         "ALTER TABLE connections ADD COLUMN group_name TEXT NOT NULL DEFAULT ''",
         [],
     );
-    conn.execute("CREATE TABLE IF NOT EXISTS snippets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, command TEXT NOT NULL)", []).unwrap();
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snippets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, command TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ssh_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -665,7 +677,8 @@ fn init_db() {
         )",
         [],
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ssh_tunnels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -679,7 +692,9 @@ fn init_db() {
         )",
         [],
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -2954,7 +2969,9 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    init_db();
+    if let Err(e) = init_db() {
+        eprintln!("Database init failed: {}", e);
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init()) // <--- DIESE ZEILE FIXT DEN BACKUP ERROR
