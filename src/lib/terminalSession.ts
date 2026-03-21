@@ -77,6 +77,8 @@ export function formatSessionDuration(totalSeconds: number) {
 }
 
 function createTerminalOptions(settings: any) {
+  const isLight = settings?.theme === "light"
+
   return {
     fontFamily: "JetBrains Mono, monospace",
     fontSize: Number(settings?.fontSize) || 13,
@@ -84,7 +86,32 @@ function createTerminalOptions(settings: any) {
     cursorBlink: settings?.cursorBlink !== false,
     cursorStyle: settings?.cursorStyle || "bar",
     allowTransparency: true,
-    convertEol: false
+    convertEol: false,
+    theme: isLight
+      ? {
+          background: "#f8fafc",
+          foreground: "#0f172a",
+          cursor: "#0f766e",
+          cursorAccent: "#f8fafc",
+          selectionBackground: "#cbd5e1",
+          black: "#1e293b",
+          red: "#dc2626",
+          green: "#15803d",
+          yellow: "#a16207",
+          blue: "#0369a1",
+          magenta: "#7c3aed",
+          cyan: "#0f766e",
+          white: "#e2e8f0",
+          brightBlack: "#475569",
+          brightRed: "#ef4444",
+          brightGreen: "#16a34a",
+          brightYellow: "#ca8a04",
+          brightBlue: "#0284c7",
+          brightMagenta: "#8b5cf6",
+          brightCyan: "#0d9488",
+          brightWhite: "#0f172a"
+        }
+      : undefined
   } as const
 }
 

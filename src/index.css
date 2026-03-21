@@ -45,6 +45,20 @@
     --success: #55ff55;
   }
 
+  [data-theme='light'] {
+    color-scheme: light;
+    --bg-app: #f8fafc;
+    --bg-sidebar: #eef2f7;
+    --bg-hover: #e2e8f0;
+    --border-subtle: #cbd5e1;
+    --text-main: #0f172a;
+    --text-muted: #475569;
+    --text-category: #1e293b;
+    --accent: #0f766e;
+    --danger: #dc2626;
+    --success: #15803d;
+  }
+
   body {
     background-color: var(--bg-app);
     color: var(--text-main);
