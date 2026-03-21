@@ -14,9 +14,13 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
   const [qc, setQc] = useState({ user: "", host: "", port: 22 });
 
   const activeCount = activeTabs?.length || 0;
-  const recentCount = recentConns?.length || 0;
-
   const recentItems = useMemo(() => (recentConns || []).slice(0, 6), [recentConns]);
+  const recentCount = recentItems.length;
+  const recentTitle = lang === "de" ? "Zuletzt genutzt" : "Recently used";
+  const recentSubtitle =
+    lang === "de"
+      ? "Schnellzugriff auf zuletzt verwendete Hosts"
+      : "{recentSubtitle}";
 
   const showQuickConnect = settings?.showDashboardQuickConnect !== false;
   const showWorkflow = settings?.showDashboardWorkflow !== false;
@@ -108,7 +112,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                     </div>
                     <div>
                       <div className="text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] font-bold">
-                        {t("recent", lang)}
+                        {recentTitle}
                       </div>
                       <div className="text-2xl font-bold text-[var(--text-main)]">
                         {recentCount}
@@ -240,10 +244,10 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                   </div>
                   <div>
                     <div className="text-sm font-bold text-[var(--text-main)]">
-                      {t("recent", lang)}
+                      {recentTitle}
                     </div>
                     <div className="text-xs text-[var(--text-muted)]">
-                      Quick access to recently used hosts
+                      {recentSubtitle}
                     </div>
                   </div>
                 </div>
