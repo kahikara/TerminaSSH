@@ -257,14 +257,18 @@ export default function SftpEditorWindow() {
   function evaluateLargeFileNotice(text: string) {
     const chars = text.length
     const lines = text ? text.split("\n").length : 1
+    const isVeryLarge = chars >= 500000 || lines >= 12000
+    const isLarge = chars >= 200000 || lines >= 5000
 
-    if (chars >= 500000 || lines >= 12000) {
+    if (isVeryLarge) {
       setLargeFileNotice(t("largeFileDetected", lang))
+      setShowLineNumbers(false)
       return
     }
 
-    if (chars >= 200000 || lines >= 5000) {
+    if (isLarge) {
       setLargeFileNotice(t("largeFileHint", lang))
+      setShowLineNumbers(false)
       return
     }
 
