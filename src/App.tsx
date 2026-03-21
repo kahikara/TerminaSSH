@@ -278,12 +278,12 @@ export default function App() {
     setIsSidebarCollapsed(true);
   };
 
-  const closeSidebarSearch = () => {
+  const closeSidebarSearch = useCallback(() => {
     setShowSidebarSearch(false);
     setSidebarSearchQuery("");
-  };
+  }, []);
 
-  const toggleSidebarSearch = () => {
+  const toggleSidebarSearch = useCallback(() => {
     if (showSidebarSearch) {
       closeSidebarSearch();
       return;
@@ -294,7 +294,7 @@ export default function App() {
       sidebarSearchInputRef.current?.focus();
       sidebarSearchInputRef.current?.select();
     }, 0);
-  };
+  }, [showSidebarSearch, closeSidebarSearch]);
 
   useEffect(() => {
     if (!showSidebarSearch) return;
@@ -306,7 +306,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [showSidebarSearch]);
+  }, [showSidebarSearch, closeSidebarSearch]);
 
   useEffect(() => {
     if (!isSidebarCollapsed) return;
