@@ -2557,8 +2557,10 @@ fn sftp_write_file(id: i32, path: String, content_base64: String) -> Result<Stri
 
 #[tauri::command]
 fn cancel_transfer(session_id: String, state: State<'_, SshState>) {
-    if let Some(flag) = state.transfers.lock().unwrap().get(&session_id) {
-        flag.store(true, Ordering::Relaxed);
+    if let Ok(transfers) = state.transfers.lock() {
+        if let Some(flag) = transfers.get(&session_id) {
+            flag.store(true, Ordering::Relaxed);
+        }
     }
 }
 
@@ -2649,7 +2651,7 @@ async fn sftp_upload(
     state
         .transfers
         .lock()
-        .unwrap()
+        .map_err(|_| "SFTP transfer state lock failed".to_string())?
         .insert(session_id.clone(), Arc::clone(&cancel_flag));
     let s_id = session_id.clone();
     let inner_result = tauri::async_runtime::spawn_blocking(move || {
@@ -2670,7 +2672,11 @@ async fn sftp_upload(
     })
     .await
     .map_err(|_| "Thread Error".to_string())?;
-    state.transfers.lock().unwrap().remove(&session_id);
+    state
+        .transfers
+        .lock()
+        .map_err(|_| "SFTP transfer state lock failed".to_string())?
+        .remove(&session_id);
     inner_result
 }
 
@@ -2768,7 +2774,7 @@ async fn sftp_download(
     state
         .transfers
         .lock()
-        .unwrap()
+        .map_err(|_| "SFTP transfer state lock failed".to_string())?
         .insert(session_id.clone(), Arc::clone(&cancel_flag));
     let s_id = session_id.clone();
     let inner_result = tauri::async_runtime::spawn_blocking(move || {
@@ -2789,7 +2795,11 @@ async fn sftp_download(
     })
     .await
     .map_err(|_| "Thread Error".to_string())?;
-    state.transfers.lock().unwrap().remove(&session_id);
+    state
+        .transfers
+        .lock()
+        .map_err(|_| "SFTP transfer state lock failed".to_string())?
+        .remove(&session_id);
     inner_result
 }
 
