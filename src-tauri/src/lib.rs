@@ -2809,7 +2809,12 @@ fn write_to_pty(
     input: String,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    if let Some(tx) = state.txs.lock().unwrap().get(&session_id) {
+    if let Some(tx) = state
+        .txs
+        .lock()
+        .map_err(|_| "PTY state lock failed".to_string())?
+        .get(&session_id)
+    {
         let _ = tx.send(SshMessage::Input(input));
     }
     Ok(())
@@ -2821,14 +2826,21 @@ fn resize_pty(
     rows: u32,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    if let Some(tx) = state.txs.lock().unwrap().get(&session_id) {
+    if let Some(tx) = state
+        .txs
+        .lock()
+        .map_err(|_| "PTY state lock failed".to_string())?
+        .get(&session_id)
+    {
         let _ = tx.send(SshMessage::Resize(cols, rows));
     }
     Ok(())
 }
 #[tauri::command]
 fn close_session(session_id: String, state: State<'_, SshState>) {
-    state.txs.lock().unwrap().remove(&session_id);
+    if let Ok(mut txs) = state.txs.lock() {
+        txs.remove(&session_id);
+    }
 }
 #[tauri::command]
 fn ping_host(host: String, port: u16) -> Result<u128, String> {
