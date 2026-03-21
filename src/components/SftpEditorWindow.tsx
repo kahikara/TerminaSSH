@@ -10,6 +10,7 @@ function qp(name: string) {
 
 type EditorStatus = "idle" | "saved" | "modified"
 type PendingAction = null | "reload" | "close"
+type ReadOnlyReason = "" | "binary" | "invalid-utf8"
 
 const EDITOR_FONT_SIZE = 13
 const EDITOR_LINE_HEIGHT = 1.45
@@ -177,6 +178,7 @@ export default function SftpEditorWindow() {
   const [errorText, setErrorText] = useState("")
   const [largeFileNotice, setLargeFileNotice] = useState("")
   const [utf8Unsafe, setUtf8Unsafe] = useState(false)
+  const [editorReadOnlyReason, setEditorReadOnlyReason] = useState<ReadOnlyReason>("")
   const [showLineNumbers, setShowLineNumbers] = useState(true)
   const [cursorInfo, setCursorInfo] = useState<CursorInfo>({
     line: 1,
@@ -197,6 +199,7 @@ export default function SftpEditorWindow() {
   const [binaryPromptOpen, setBinaryPromptOpen] = useState(false)
   const [binaryPromptText, setBinaryPromptText] = useState("")
   const [pendingBinaryText, setPendingBinaryText] = useState<string | null>(null)
+  const [pendingBinaryReason, setPendingBinaryReason] = useState<ReadOnlyReason>("")
 
   const dirtyRef = useRef(false)
   const closingRef = useRef(false)
@@ -315,6 +318,7 @@ export default function SftpEditorWindow() {
       setErrorText("")
       setLoading(true)
       setUtf8Unsafe(false)
+      setEditorReadOnlyReason("")
 
       const payload = await invoke("sftp_read_file", {
         id: serverId,
@@ -376,6 +380,24 @@ export default function SftpEditorWindow() {
   async function saveFile() {
     try {
       const nextContent = contentRef.current
+
+      if (editorReadOnlyReason === "invalid-utf8") {
+        setErrorText(
+          lang === "de"
+            ? "Diese Datei enthält ungültiges UTF 8 und ist deshalb nur lesbar geöffnet. Speichern bleibt gesperrt, damit keine Daten beschädigt werden."
+            : "This file contains invalid UTF 8 and was opened as read only. Saving stays blocked to avoid corrupting the file."
+        )
+        return
+      }
+
+      if (editorReadOnlyReason === "binary") {
+        setErrorText(
+          lang === "de"
+            ? "Diese Datei wurde als potenziell binär erkannt und deshalb nur lesbar geöffnet. Speichern bleibt gesperrt."
+            : "This file was detected as potentially binary and opened as read only. Saving stays blocked."
+        )
+        return
+      }
 
       if (utf8Unsafe) {
         setErrorText(
@@ -559,16 +581,25 @@ export default function SftpEditorWindow() {
 
   function openBinaryPrompt(text: string, reason: string) {
     setPendingBinaryText(text)
+    setPendingBinaryReason(reason === "invalid-utf8" ? "invalid-utf8" : "binary")
     setBinaryPromptText(
       reason === "null-bytes"
-        ? t("binaryFileDetected", lang)
+        ? (
+            lang === "de"
+              ? "Diese Datei enthält Null Bytes und wirkt nicht wie normaler Text. Du kannst sie zur Ansicht öffnen, sie bleibt dann aber nur lesbar."
+              : "This file contains null bytes and does not look like normal text. You can open it for inspection, but it will stay read only."
+          )
         : reason === "invalid-utf8"
           ? (
               lang === "de"
-                ? "Die Datei enthält ungültiges UTF 8. Du kannst sie ansehen, aber Speichern bleibt gesperrt, damit keine Daten beschädigt werden."
-                : "The file contains invalid UTF 8. You can view it, but saving stays blocked to avoid corrupting the file."
+                ? "Die Datei enthält ungültiges UTF 8. Du kannst sie ansehen, sie wird aber nur lesbar geöffnet und Speichern bleibt gesperrt, damit keine Daten beschädigt werden."
+                : "The file contains invalid UTF 8. You can view it, but it will open as read only and saving stays blocked to avoid corrupting the file."
             )
-          : t("binaryFileDetectedHint", lang)
+          : (
+              lang === "de"
+                ? "Diese Datei wirkt nicht wie normaler Text. Du kannst sie zur Ansicht öffnen, sie bleibt dann aber nur lesbar."
+                : "This file does not look like normal text. You can open it for inspection, but it will stay read only."
+            )
     )
     setBinaryPromptOpen(true)
   }
@@ -577,14 +608,17 @@ export default function SftpEditorWindow() {
     setBinaryPromptOpen(false)
     setBinaryPromptText("")
     setPendingBinaryText(null)
+    setPendingBinaryReason("")
   }
 
   function confirmBinaryOpen() {
     const text = pendingBinaryText
+    const reason = pendingBinaryReason
     closeBinaryPrompt()
 
     if (text == null) return
 
+    setEditorReadOnlyReason(reason || "binary")
     setEditorContent(text)
     setEditorOriginal(text)
     setStatus("idle")
@@ -789,6 +823,28 @@ export default function SftpEditorWindow() {
     return Math.max(36, 20 + digits * 8)
   }, [cursorInfo.lines])
 
+  const readOnlyBadge =
+    editorReadOnlyReason === "invalid-utf8"
+      ? (lang === "de" ? "Nur lesen · Ungültiges UTF 8" : "Read only · Invalid UTF 8")
+      : editorReadOnlyReason === "binary"
+        ? (lang === "de" ? "Nur lesen · Binär oder unsicher" : "Read only · Binary or unsafe")
+        : ""
+
+  const readOnlyNotice =
+    editorReadOnlyReason === "invalid-utf8"
+      ? (
+          lang === "de"
+            ? "Diese Datei wurde nur lesbar geöffnet, weil sie ungültiges UTF 8 enthält. Speichern bleibt gesperrt, damit keine Daten beschädigt werden."
+            : "This file was opened as read only because it contains invalid UTF 8. Saving stays blocked to avoid corrupting the file."
+        )
+      : editorReadOnlyReason === "binary"
+        ? (
+            lang === "de"
+              ? "Diese Datei wurde nur lesbar geöffnet, weil sie nicht wie normaler Text wirkt. Speichern bleibt vorsorglich gesperrt."
+              : "This file was opened as read only because it does not look like normal text. Saving stays blocked as a safety measure."
+          )
+        : ""
+
   return (
     <div
       style={{
@@ -834,6 +890,7 @@ export default function SftpEditorWindow() {
                 : status === "modified"
                   ? t("unsavedChanges", lang)
                   : t("ready", lang)}
+            {readOnlyBadge ? ` · ${readOnlyBadge}` : ""}
           </div>
         </div>
 
@@ -854,7 +911,7 @@ export default function SftpEditorWindow() {
             <RotateCcw size={14} />
             <span>{t("refresh", lang)}</span>
           </button>
-          <button style={btn} onClick={() => void saveFile()} disabled={loading || saving || utf8Unsafe}>
+          <button style={btn} onClick={() => void saveFile()} disabled={loading || saving || utf8Unsafe || Boolean(editorReadOnlyReason)}>
             <Save size={14} />
             <span>{saving ? t("save", lang) + "..." : t("save", lang)}</span>
           </button>
@@ -882,6 +939,21 @@ export default function SftpEditorWindow() {
         >
           <span style={{ flex: 1 }}>{errorText}</span>
           <button style={btn} onClick={() => setErrorText("")}>{t("dismiss", lang)}</button>
+        </div>
+      )}
+
+      {readOnlyNotice && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(245,158,11,0.25)",
+            background: "rgba(120,53,15,0.18)",
+            color: "#fde68a",
+            fontSize: 12,
+            lineHeight: 1.4
+          }}
+        >
+          {readOnlyNotice}
         </div>
       )}
 
@@ -1010,6 +1082,7 @@ export default function SftpEditorWindow() {
             <textarea
               ref={textareaRef}
               wrap="off"
+              readOnly={Boolean(editorReadOnlyReason)}
               value={content}
               onChange={(e) => {
                 setEditorContent(e.target.value)
@@ -1063,6 +1136,7 @@ export default function SftpEditorWindow() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, whiteSpace: "nowrap", flexWrap: "wrap" }}>
           <span>{status === "modified" ? t("dirty", lang) : status === "saved" ? t("savedState", lang) : t("ready", lang)}</span>
+          {readOnlyBadge ? <span>{readOnlyBadge}</span> : null}
           <span>{t("utf8", lang)}</span>
           <span>Ln {cursorInfo.line}, Col {cursorInfo.column}</span>
           <span>{cursorInfo.lines} {t("lines", lang)}</span>
@@ -1119,7 +1193,7 @@ export default function SftpEditorWindow() {
                 style={{ ...btn, background: "var(--accent)", color: "black", border: "1px solid transparent" }}
                 onClick={confirmBinaryOpen}
               >
-                {t("openAnyway", lang)}
+                {lang === "de" ? "Nur lesbar öffnen" : "Open read only"}
               </button>
             </div>
           </div>
