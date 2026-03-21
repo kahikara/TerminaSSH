@@ -28,6 +28,34 @@ type BinaryCheckResult = {
   reason: string
 }
 
+type SftpReadFilePayload = {
+  content_base64?: string
+  contentBase64?: string
+}
+
+function base64ToBytes(value: string) {
+  const binary = atob(value)
+  const bytes = new Uint8Array(binary.length)
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+
+  return bytes
+}
+
+function utf8ToBase64(value: string) {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ""
+  const chunkSize = 0x8000
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+
+  return btoa(binary)
+}
+
 function detectBinaryContent(text: string): BinaryCheckResult {
   if (!text) {
     return { isBinary: false, reason: "" }
@@ -148,6 +176,7 @@ export default function SftpEditorWindow() {
   const [status, setStatus] = useState<EditorStatus>("idle")
   const [errorText, setErrorText] = useState("")
   const [largeFileNotice, setLargeFileNotice] = useState("")
+  const [utf8Unsafe, setUtf8Unsafe] = useState(false)
   const [showLineNumbers, setShowLineNumbers] = useState(true)
   const [cursorInfo, setCursorInfo] = useState<CursorInfo>({
     line: 1,
@@ -285,13 +314,38 @@ export default function SftpEditorWindow() {
       closeBinaryPrompt()
       setErrorText("")
       setLoading(true)
+      setUtf8Unsafe(false)
 
-      const text = await invoke("sftp_read_file", {
+      const payload = await invoke("sftp_read_file", {
         id: serverId,
         path: remotePath
-      }) as string
+      }) as SftpReadFilePayload
+
+      const contentBase64 = String(payload?.content_base64 || payload?.contentBase64 || "")
+      const bytes = base64ToBytes(contentBase64)
+
+      let text = ""
+      let utf8Valid = true
+
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      } catch {
+        utf8Valid = false
+        text = new TextDecoder("utf-8").decode(bytes)
+      }
+
+      setUtf8Unsafe(!utf8Valid)
 
       const binaryCheck = detectBinaryContent(text)
+
+      if (!utf8Valid) {
+        openBinaryPrompt(text, "invalid-utf8")
+        setStatus("idle")
+        setSearchInfo("")
+        setCursorInfo(getCursorInfo("", 0))
+        evaluateLargeFileNotice("")
+        return
+      }
 
       if (binaryCheck.isBinary) {
         openBinaryPrompt(text, binaryCheck.reason)
@@ -323,13 +377,22 @@ export default function SftpEditorWindow() {
     try {
       const nextContent = contentRef.current
 
+      if (utf8Unsafe) {
+        setErrorText(
+          lang === "de"
+            ? "Diese Datei ist kein sauberes UTF 8. Speichern ist blockiert, damit keine Daten beschädigt werden."
+            : "This file is not valid UTF 8. Saving is blocked to avoid corrupting the file."
+        )
+        return
+      }
+
       setErrorText("")
       setSaving(true)
 
       await invoke("sftp_write_file", {
         id: serverId,
         path: remotePath,
-        content: nextContent
+        contentBase64: utf8ToBase64(nextContent)
       })
 
       setEditorOriginal(nextContent)
@@ -499,7 +562,13 @@ export default function SftpEditorWindow() {
     setBinaryPromptText(
       reason === "null-bytes"
         ? t("binaryFileDetected", lang)
-        : t("binaryFileDetectedHint", lang)
+        : reason === "invalid-utf8"
+          ? (
+              lang === "de"
+                ? "Die Datei enthält ungültiges UTF 8. Du kannst sie ansehen, aber Speichern bleibt gesperrt, damit keine Daten beschädigt werden."
+                : "The file contains invalid UTF 8. You can view it, but saving stays blocked to avoid corrupting the file."
+            )
+          : t("binaryFileDetectedHint", lang)
     )
     setBinaryPromptOpen(true)
   }
@@ -785,7 +854,7 @@ export default function SftpEditorWindow() {
             <RotateCcw size={14} />
             <span>{t("refresh", lang)}</span>
           </button>
-          <button style={btn} onClick={() => void saveFile()} disabled={loading || saving}>
+          <button style={btn} onClick={() => void saveFile()} disabled={loading || saving || utf8Unsafe}>
             <Save size={14} />
             <span>{saving ? t("save", lang) + "..." : t("save", lang)}</span>
           </button>

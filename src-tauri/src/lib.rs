@@ -56,6 +56,12 @@ pub struct FileItem {
     is_dir: bool,
     size: u64,
 }
+
+#[derive(Debug, Serialize)]
+pub struct SftpReadFilePayload {
+    content_base64: String,
+}
+
 #[derive(Clone, Serialize)]
 pub struct SftpProgress {
     transferred: u64,
@@ -220,6 +226,12 @@ pub struct SshState {
 pub struct TunnelRuntimeEntry {
     stop_flag: Arc<AtomicBool>,
     _handle: JoinHandle<()>,
+}
+
+fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBool>) {
+    if !sent.swap(true, Ordering::Relaxed) {
+        let _ = app.emit(&format!("term-exit-{}", session_id), true);
+    }
 }
 
 const APP_DIR_NAME: &str = "terminassh";
@@ -392,7 +404,6 @@ fn read_known_hosts_file(known_hosts: &mut ssh2::KnownHosts, path: &Path) -> Res
     Ok(())
 }
 
-
 fn remove_known_host_entry_with_ssh_keygen(host: &str, port: u16, path: &Path) {
     let path_str = path.to_string_lossy().to_string();
     let target = format_known_host_name(host, port);
@@ -408,7 +419,10 @@ fn remove_known_host_entry_with_ssh_keygen(host: &str, port: u16, path: &Path) {
     }
 }
 
-fn probe_host_key(host: &str, port: u16) -> Result<(Session, Vec<u8>, HostKeyType, String), String> {
+fn probe_host_key(
+    host: &str,
+    port: u16,
+) -> Result<(Session, Vec<u8>, HostKeyType, String), String> {
     let tcp = TcpStream::connect(format!("{}:{}", host, port))
         .map_err(|e| format!("TCP Error: {}", e))?;
 
@@ -787,8 +801,7 @@ fn update_connection(
         let mut stmt = conn
             .prepare("SELECT password FROM connections WHERE id = ?1")
             .map_err(|e| e.to_string())?;
-        stmt.query_row([&id], |row| row.get(0))
-            .unwrap_or_default()
+        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
     } else {
         encrypt_pw(&connection.password)
     };
@@ -796,8 +809,7 @@ fn update_connection(
         let mut stmt = conn
             .prepare("SELECT passphrase FROM connections WHERE id = ?1")
             .map_err(|e| e.to_string())?;
-        stmt.query_row([&id], |row| row.get(0))
-            .unwrap_or_default()
+        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
     } else {
         encrypt_pw(&connection.passphrase)
     };
@@ -2094,7 +2106,8 @@ fn start_local_pty(
     {
         cmd.arg("-i");
 
-        if shell_name.contains("bash") || shell_name.contains("zsh") || shell_name.contains("fish") {
+        if shell_name.contains("bash") || shell_name.contains("zsh") || shell_name.contains("fish")
+        {
             cmd.arg("-l");
         }
 
@@ -2104,7 +2117,11 @@ fn start_local_pty(
 
     #[cfg(target_os = "windows")]
     {
-        if shell_name == "powershell.exe" || shell_name == "pwsh.exe" || shell_name == "powershell" || shell_name == "pwsh" {
+        if shell_name == "powershell.exe"
+            || shell_name == "pwsh.exe"
+            || shell_name == "powershell"
+            || shell_name == "pwsh"
+        {
             cmd.arg("-NoLogo");
         }
     }
@@ -2129,6 +2146,12 @@ fn start_local_pty(
 
     let event_name = format!("term-output-{}", session_id);
     let app_for_reader = app_handle.clone();
+    let exit_sent = Arc::new(AtomicBool::new(false));
+    let exit_sent_reader = Arc::clone(&exit_sent);
+    let session_id_reader = session_id.clone();
+    let app_for_wait = app_handle.clone();
+    let exit_sent_wait = Arc::clone(&exit_sent);
+    let session_id_wait = session_id.clone();
 
     thread::spawn(move || {
         let mut buf = [0u8; 4096];
@@ -2141,11 +2164,13 @@ fn start_local_pty(
                 Ok(_) => {
                     let _ = app_for_reader
                         .emit(&event_name, "\r\n[Lokale Shell beendet]\r\n".to_string());
+                    emit_session_exit_once(&app_for_reader, &session_id_reader, &exit_sent_reader);
                     break;
                 }
                 Err(_) => {
                     let _ = app_for_reader
                         .emit(&event_name, "\r\n[Lokale Shell beendet]\r\n".to_string());
+                    emit_session_exit_once(&app_for_reader, &session_id_reader, &exit_sent_reader);
                     break;
                 }
             }
@@ -2172,6 +2197,7 @@ fn start_local_pty(
         }
         let _ = child.kill();
         let _ = child.wait();
+        emit_session_exit_once(&app_for_wait, &session_id_wait, &exit_sent_wait);
     });
 
     Ok(())
@@ -2198,6 +2224,9 @@ fn start_quick_ssh(
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
     let _ = app_handle.emit(&connect_event, true);
+    let exit_sent = Arc::new(AtomicBool::new(false));
+    let exit_sent_loop = Arc::clone(&exit_sent);
+    let session_id_for_exit = session_id.clone();
 
     thread::spawn(move || {
         let mut channel = sess.channel_session().unwrap();
@@ -2214,14 +2243,7 @@ fn start_quick_ssh(
                     let _ = app_handle
                         .emit(&event_name, String::from_utf8_lossy(&buf[..n]).to_string());
                 }
-                Ok(_) => {
-                    let _ = app_handle.emit(
-                        &event_name,
-                        "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
-                    );
-                    let _ = app_handle.emit(&connect_event, false);
-                    break;
-                }
+                Ok(_) => {}
                 Err(_) => {}
             }
 
@@ -2235,6 +2257,17 @@ fn start_quick_ssh(
                         let _ = channel.request_pty_size(c, r, None, None);
                     }
                 }
+            }
+
+            if channel.eof() {
+                let _ = app_handle.emit(
+                    &event_name,
+                    "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
+                );
+                let _ = app_handle.emit(&connect_event, false);
+                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                let _ = channel.wait_close();
+                break;
             }
 
             thread::sleep(Duration::from_millis(10));
@@ -2260,6 +2293,9 @@ fn start_ssh(
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
     let _ = app_handle.emit(&connect_event, true);
+    let exit_sent = Arc::new(AtomicBool::new(false));
+    let exit_sent_loop = Arc::clone(&exit_sent);
+    let session_id_for_exit = session_id.clone();
     thread::spawn(move || {
         let mut channel = sess.channel_session().unwrap();
         channel
@@ -2274,14 +2310,7 @@ fn start_ssh(
                     let _ = app_handle
                         .emit(&event_name, String::from_utf8_lossy(&buf[..n]).to_string());
                 }
-                Ok(_) => {
-                    let _ = app_handle.emit(
-                        &event_name,
-                        "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
-                    );
-                    let _ = app_handle.emit(&connect_event, false);
-                    break;
-                }
+                Ok(_) => {}
                 Err(_) => {}
             }
             while let Ok(msg) = rx.try_recv() {
@@ -2294,6 +2323,16 @@ fn start_ssh(
                         let _ = channel.request_pty_size(c, r, None, None);
                     }
                 }
+            }
+            if channel.eof() {
+                let _ = app_handle.emit(
+                    &event_name,
+                    "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
+                );
+                let _ = app_handle.emit(&connect_event, false);
+                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                let _ = channel.wait_close();
+                break;
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -2356,22 +2395,26 @@ fn sftp_delete(id: i32, path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn sftp_read_file(id: i32, path: String) -> Result<String, String> {
+fn sftp_read_file(id: i32, path: String) -> Result<SftpReadFilePayload, String> {
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     let mut file = sftp.open(Path::new(&path)).map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).map_err(|e| e.to_string())?;
-    Ok(String::from_utf8_lossy(&buf).to_string())
+    Ok(SftpReadFilePayload {
+        content_base64: STANDARD.encode(&buf),
+    })
 }
 
 #[tauri::command]
-fn sftp_write_file(id: i32, path: String, content: String) -> Result<String, String> {
+fn sftp_write_file(id: i32, path: String, content_base64: String) -> Result<String, String> {
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
+    let bytes = STANDARD
+        .decode(content_base64.as_bytes())
+        .map_err(|e| format!("Invalid base64 content: {}", e))?;
     let mut file = sftp.create(Path::new(&path)).map_err(|e| e.to_string())?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| e.to_string())?;
+    file.write_all(&bytes).map_err(|e| e.to_string())?;
     Ok("Gespeichert".to_string())
 }
 
@@ -2684,7 +2727,9 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     let normalized_output = output.replace("\r\n", "\n");
     let marker_with_newlines = format!("\n{}\n", STATUS_SPLIT_MARKER);
 
-    let (load_part, mem_part) = if let Some((left, right)) = normalized_output.split_once(&marker_with_newlines) {
+    let (load_part, mem_part) = if let Some((left, right)) =
+        normalized_output.split_once(&marker_with_newlines)
+    {
         (left, right)
     } else if let Some(rest) = normalized_output.strip_prefix(&format!("{STATUS_SPLIT_MARKER}\n")) {
         ("", rest)
