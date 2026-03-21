@@ -426,18 +426,60 @@ fn read_known_hosts_file(known_hosts: &mut ssh2::KnownHosts, path: &Path) -> Res
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn windows_openssh_ssh_keygen_path() -> Option<PathBuf> {
+    let system_root = std::env::var_os("SystemRoot")?;
+    let candidate = PathBuf::from(system_root)
+        .join("System32")
+        .join("OpenSSH")
+        .join("ssh-keygen.exe");
+
+    if candidate.exists() {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+fn run_ssh_keygen(args: &[&str]) -> Result<std::process::Output, String> {
+    match Command::new("ssh-keygen").args(args).output() {
+        Ok(output) => Ok(output),
+        Err(err) => {
+            #[cfg(target_os = "windows")]
+            {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    if let Some(path) = windows_openssh_ssh_keygen_path() {
+                        return Command::new(path)
+                            .args(args)
+                            .output()
+                            .map_err(|fallback_err| {
+                                format!(
+                                    "ssh-keygen could not be started from PATH or Windows OpenSSH path: {}",
+                                    fallback_err
+                                )
+                            });
+                    }
+
+                    return Err(
+                        "ssh-keygen was not found. Install the Windows OpenSSH Client or add ssh-keygen to PATH."
+                            .to_string(),
+                    );
+                }
+            }
+
+            Err(format!("failed to start ssh-keygen: {}", err))
+        }
+    }
+}
+
 fn remove_known_host_entry_with_ssh_keygen(host: &str, port: u16, path: &Path) {
     let path_str = path.to_string_lossy().to_string();
     let target = format_known_host_name(host, port);
 
-    let _ = Command::new("ssh-keygen")
-        .args(["-R", &target, "-f", &path_str])
-        .output();
+    let _ = run_ssh_keygen(&["-R", &target, "-f", &path_str]);
 
     if port == 22 {
-        let _ = Command::new("ssh-keygen")
-            .args(["-R", host, "-f", &path_str])
-            .output();
+        let _ = run_ssh_keygen(&["-R", host, "-f", &path_str]);
     }
 }
 
@@ -962,7 +1004,7 @@ fn read_public_key_for_path(private_key_path: &str) -> String {
 }
 
 fn fingerprint_for_pubkey_path(pub_path: &str) -> String {
-    match Command::new("ssh-keygen").args(["-lf", pub_path]).output() {
+    match run_ssh_keygen(&["-lf", pub_path]) {
         Ok(out) if out.status.success() => {
             let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -1745,19 +1787,16 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
         return Err("A key with that file name already exists".to_string());
     }
 
-    let output = Command::new("ssh-keygen")
-        .args([
-            "-t",
-            key_type_final,
-            "-f",
-            &private_path,
-            "-N",
-            "",
-            "-C",
-            clean_name,
-        ])
-        .output()
-        .map_err(|e| format!("ssh-keygen failed to start: {}", e))?;
+    let output = run_ssh_keygen(&[
+        "-t",
+        key_type_final,
+        "-f",
+        &private_path,
+        "-N",
+        "",
+        "-C",
+        clean_name,
+    ])?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
