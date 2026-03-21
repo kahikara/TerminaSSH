@@ -417,38 +417,102 @@ export default function App() {
       const isMismatch = info.status === 'mismatch';
 
       return await new Promise<boolean>((resolve) => {
+        const statusLabel = isMismatch
+          ? (settings.lang === 'de' ? 'Geändert' : 'Changed')
+          : (settings.lang === 'de' ? 'Neu' : 'New');
+
+        const title = isMismatch
+          ? (settings.lang === 'de' ? 'SSH Host Key geändert' : 'SSH host key changed')
+          : (settings.lang === 'de' ? 'Neuer SSH Host' : 'New SSH host');
+
+        const description = isMismatch
+          ? [
+              settings.lang === 'de'
+                ? 'Der gespeicherte SSH Host Key stimmt nicht mehr mit dem aktuellen Server überein.'
+                : 'The stored SSH host key no longer matches the current server.',
+              '',
+              settings.lang === 'de'
+                ? 'Das kann nach einer Neuinstallation oder einem Serverwechsel normal sein. Es kann aber auch auf einen Man in the Middle Angriff hindeuten.'
+                : 'This can be normal after a reinstall or server migration. It can also indicate a man in the middle attack.',
+              '',
+              `Host: ${info.display_host}`,
+              `${settings.lang === 'de' ? 'Status' : 'Status'}: ${statusLabel}`,
+              `${settings.lang === 'de' ? 'Typ' : 'Type'}: ${info.key_type}`,
+              `Fingerprint: ${info.fingerprint}`,
+              `known_hosts: ${info.known_hosts_path}`,
+              '',
+              settings.lang === 'de'
+                ? 'Nur fortfahren, wenn du diese Änderung wirklich erwartest und dem Zielsystem vertraust.'
+                : 'Only continue if you truly expect this change and trust the target system.'
+            ].join('\n')
+          : [
+              settings.lang === 'de'
+                ? 'Dieser SSH Host ist noch nicht in known_hosts gespeichert.'
+                : 'This SSH host is not stored in known_hosts yet.',
+              '',
+              settings.lang === 'de'
+                ? 'Wenn du fortfährst, wird der aktuelle Host Key lokal gespeichert und künftig wiedererkannt.'
+                : 'If you continue, the current host key will be stored locally and recognized in future connections.',
+              '',
+              `Host: ${info.display_host}`,
+              `${settings.lang === 'de' ? 'Status' : 'Status'}: ${statusLabel}`,
+              `${settings.lang === 'de' ? 'Typ' : 'Type'}: ${info.key_type}`,
+              `Fingerprint: ${info.fingerprint}`,
+              `known_hosts: ${info.known_hosts_path}`
+            ].join('\n');
+
         showDialog({
           type: 'confirm',
           tone: isMismatch ? 'danger' : undefined,
-          title: isMismatch
-            ? (settings.lang === 'de' ? 'SSH Host Key geändert' : 'SSH host key changed')
-            : (settings.lang === 'de' ? 'Unbekannter SSH Host' : 'Unknown SSH host'),
-          description: isMismatch
-            ? (
-                settings.lang === 'de'
-                  ? `Der gespeicherte Host-Fingerprint für ${info.display_host} hat sich geändert.\n\nTyp: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nDas kann harmlos sein, kann aber auch auf einen Man-in-the-Middle-Angriff hindeuten. Nur fortfahren, wenn du der Änderung wirklich vertraust.`
-                  : `The stored host fingerprint for ${info.display_host} has changed.\n\nType: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nThis can be harmless, but it can also indicate a man-in-the-middle attack. Only continue if you really trust this change.`
-              )
-            : (
-                settings.lang === 'de'
-                  ? `Dieser Host ist noch nicht in known_hosts gespeichert.\n\nHost: ${info.display_host}\nTyp: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nWenn du vertraust, wird der Host in ~/.ssh/known_hosts gespeichert.`
-                  : `This host is not stored in known_hosts yet.\n\nHost: ${info.display_host}\nType: ${info.key_type}\nFingerprint: ${info.fingerprint}\n\nIf you trust it, the host will be stored in ~/.ssh/known_hosts.`
-              ),
+          title,
+          description,
           confirmLabel: isMismatch
             ? (settings.lang === 'de' ? 'Ersetzen und verbinden' : 'Replace and connect')
             : (settings.lang === 'de' ? 'Vertrauen und verbinden' : 'Trust and connect'),
           cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
+          secondaryLabel: settings.lang === 'de' ? 'Fingerprint kopieren' : 'Copy fingerprint',
+          tertiaryLabel: settings.lang === 'de' ? 'known_hosts öffnen' : 'Open known_hosts',
+          onSecondary: async () => {
+            try {
+              await invoke('copy_text_to_clipboard', { text: String(info.fingerprint || '') });
+              showToast(settings.lang === 'de' ? 'Fingerprint kopiert' : 'Fingerprint copied');
+            } catch (e) {
+              showToast(
+                settings.lang === 'de'
+                  ? `Fingerprint konnte nicht kopiert werden: ${String(e)}`
+                  : `Could not copy fingerprint: ${String(e)}`,
+                true
+              );
+            }
+          },
+          onTertiary: async () => {
+            try {
+              await invoke('reveal_path_in_file_manager', { path: String(info.known_hosts_path || '') });
+            } catch (e) {
+              showToast(
+                settings.lang === 'de'
+                  ? `known_hosts konnte nicht geöffnet werden: ${String(e)}`
+                  : `Could not open known_hosts: ${String(e)}`,
+                true
+              );
+            }
+          },
           onConfirm: async () => {
             try {
               await invoke('trust_host_key', {
                 host: info.host,
                 port: info.port
               });
+              showToast(
+                isMismatch
+                  ? (settings.lang === 'de' ? 'Host Key ersetzt und gespeichert' : 'Host key replaced and stored')
+                  : (settings.lang === 'de' ? 'Host Key gespeichert' : 'Host key stored')
+              );
               resolve(true);
             } catch (e) {
               showToast(
                 settings.lang === 'de'
-                  ? `Host-Fingerprint konnte nicht gespeichert werden: ${String(e)}`
+                  ? `Host Fingerprint konnte nicht gespeichert werden: ${String(e)}`
                   : `Could not store host fingerprint: ${String(e)}`,
                 true
               );
