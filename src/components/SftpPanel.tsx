@@ -93,6 +93,7 @@ const SFTP_PANEL_WIDTH_KEY = "termina_sftp_panel_width"
 const SFTP_PANEL_MIN_WIDTH = 300
 const SFTP_PANEL_MAX_WIDTH = 720
 const SFTP_PANEL_DEFAULT_WIDTH = 352
+const SFTP_EDITOR_WINDOW_STATE_KEY = "termina_sftp_editor_window_state"
 
 function clampSftpPanelWidth(value: number) {
   return Math.max(SFTP_PANEL_MIN_WIDTH, Math.min(SFTP_PANEL_MAX_WIDTH, value))
@@ -114,6 +115,27 @@ function persistSftpPanelWidth(value: number) {
   try {
     localStorage.setItem(SFTP_PANEL_WIDTH_KEY, String(clampSftpPanelWidth(value)))
   } catch {}
+}
+
+function readStoredEditorWindowState() {
+  try {
+    const raw = localStorage.getItem(SFTP_EDITOR_WINDOW_STATE_KEY)
+    if (!raw) {
+      return { width: 1100, height: 760, maximized: false }
+    }
+
+    const parsed = JSON.parse(raw)
+    const width = Number(parsed?.width)
+    const height = Number(parsed?.height)
+
+    return {
+      width: Number.isFinite(width) ? Math.max(760, Math.min(2400, width)) : 1100,
+      height: Number.isFinite(height) ? Math.max(520, Math.min(1600, height)) : 760,
+      maximized: Boolean(parsed?.maximized)
+    }
+  } catch {
+    return { width: 1100, height: 760, maximized: false }
+  }
 }
 
 function readTerminaSettings() {
@@ -502,17 +524,30 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       })
 
       const editorUrl = `${window.location.origin}/?${qs.toString()}`
+      const editorWindowState = readStoredEditorWindowState()
+
+      const linuxWindowMode = await invoke("get_linux_window_mode")
+        .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
       const win = new WebviewWindow(label, {
         title: `Edit: ${file.name}`,
         url: editorUrl,
-        width: 1100,
-        height: 760,
+        width: editorWindowState.width,
+        height: editorWindowState.height,
         minWidth: 760,
         minHeight: 520,
-        center: true,
-        resizable: true
+        center: !editorWindowState.maximized,
+        resizable: true,
+        decorations: !Boolean(linuxWindowMode?.wayland_undecorated)
       })
+
+      if (editorWindowState.maximized) {
+        win.once("tauri://created", () => {
+          void win.maximize().catch((e) => {
+            console.error("editor maximize restore failed", e)
+          })
+        })
+      }
 
       win.once("tauri://error", (e) => {
         console.error("editor window error", e)
@@ -521,6 +556,9 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       console.error(e)
     }
   }
+
+
+
 
   async function download(file: FileItem) {
     try {

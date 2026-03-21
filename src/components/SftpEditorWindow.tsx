@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { RotateCcw, Save, X, Search, Replace, List } from "lucide-react"
+import { RotateCcw, Save, X, Search, Replace, List, Minus, Square } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { t } from "../lib/i18n"
 
@@ -16,6 +16,7 @@ const EDITOR_FONT_SIZE = 13
 const EDITOR_LINE_HEIGHT = 1.45
 const EDITOR_PADDING_Y = 16
 const EDITOR_PADDING_X = 16
+const SFTP_EDITOR_WINDOW_STATE_KEY = "termina_sftp_editor_window_state"
 
 type CursorInfo = {
   line: number
@@ -32,6 +33,40 @@ type BinaryCheckResult = {
 type SftpReadFilePayload = {
   content_base64?: string
   contentBase64?: string
+}
+
+type StoredEditorWindowState = {
+  width?: number
+  height?: number
+  maximized?: boolean
+}
+
+function readStoredEditorWindowState(): StoredEditorWindowState {
+  try {
+    const raw = localStorage.getItem(SFTP_EDITOR_WINDOW_STATE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    const width = Number(parsed?.width)
+    const height = Number(parsed?.height)
+
+    return {
+      width: Number.isFinite(width) ? width : undefined,
+      height: Number.isFinite(height) ? height : undefined,
+      maximized: Boolean(parsed?.maximized)
+    }
+  } catch {
+    return {}
+  }
+}
+
+function persistEditorWindowState(patch: StoredEditorWindowState) {
+  try {
+    const current = readStoredEditorWindowState()
+    localStorage.setItem(
+      SFTP_EDITOR_WINDOW_STATE_KEY,
+      JSON.stringify({ ...current, ...patch })
+    )
+  } catch {}
 }
 
 function base64ToBytes(value: string) {
@@ -170,6 +205,9 @@ export default function SftpEditorWindow() {
 
   const lang = initialSettings?.lang || "de"
 
+  const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(false)
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false)
+
   const [content, setContent] = useState("")
   const [original, setOriginal] = useState("")
   const [loading, setLoading] = useState(true)
@@ -267,6 +305,37 @@ export default function SftpEditorWindow() {
     console.error(message, error)
     const detail = error instanceof Error ? error.message : String(error)
     setErrorText(`${message}${detail ? ` ${detail}` : ""}`)
+  }
+
+  async function syncWindowChromeState() {
+    try {
+      const linuxWindowMode = await invoke("get_linux_window_mode")
+        .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
+
+      setUseCustomWindowChrome(Boolean(linuxWindowMode?.wayland_undecorated))
+    } catch {
+      setUseCustomWindowChrome(false)
+    }
+
+    try {
+      const win = getCurrentWindow()
+      const maximized = await win.isMaximized().catch(() => false)
+      setIsWindowMaximized(Boolean(maximized))
+      persistEditorWindowState({ maximized: Boolean(maximized) })
+
+      if (!maximized) {
+        persistEditorWindowState({
+          width: window.innerWidth,
+          height: window.innerHeight
+        })
+      }
+    } catch {}
+  }
+
+  function startWindowDrag() {
+    void getCurrentWindow().startDragging().catch((e) => {
+      console.error("editor drag failed", e)
+    })
   }
 
   function publishEditorState() {
@@ -674,6 +743,20 @@ export default function SftpEditorWindow() {
   }, [])
 
   useEffect(() => {
+    void syncWindowChromeState()
+
+    const onResize = () => {
+      void syncWindowChromeState()
+    }
+
+    window.addEventListener("resize", onResize)
+
+    return () => {
+      window.removeEventListener("resize", onResize)
+    }
+  }, [])
+
+  useEffect(() => {
     const channel = new BroadcastChannel("termina-editor-sync")
     channelRef.current = channel
 
@@ -854,9 +937,176 @@ export default function SftpEditorWindow() {
         flexDirection: "column",
         background: "var(--bg-app, #020617)",
         color: "var(--text-main, #e5e7eb)",
-        position: "relative"
+        position: "relative",
+        boxSizing: "border-box",
+        border: useCustomWindowChrome
+          ? "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 88%, transparent)"
+          : undefined,
+        boxShadow: useCustomWindowChrome
+          ? "0 0 0 1px rgba(255,255,255,0.02) inset"
+          : undefined
       }}
     >
+      <div
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          if (!useCustomWindowChrome) return
+          if ((e.target as HTMLElement).closest("button, input, textarea, select, a")) return
+          startWindowDrag()
+        }}
+        style={{
+          minHeight: 30,
+          height: 30,
+          padding: "0 10px",
+          borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          background: "color-mix(in srgb, var(--bg-sidebar) 96%, var(--bg-app))",
+          userSelect: "none",
+          cursor: useCustomWindowChrome ? "grab" : "default"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <img
+            src="/app-icon.svg"
+            alt="logo"
+            style={{ width: 16, height: 16, objectFit: "contain", flexShrink: 0 }}
+            onError={(e) => {
+              const target = e.currentTarget
+              target.style.display = "none"
+            }}
+          />
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--text-main, #e5e7eb)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            Termina SSH · {fileName || "Editor"}
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--text-muted, #94a3b8)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            textAlign: "right",
+            minWidth: 0,
+            flex: 1,
+            marginLeft: 10
+          }}
+        >
+          {loading
+            ? t("loading", lang)
+            : status === "saved"
+              ? t("savedState", lang)
+              : status === "modified"
+                ? t("unsavedChanges", lang)
+                : t("ready", lang)}
+          {readOnlyBadge ? ` · ${readOnlyBadge}` : ""}
+        </div>
+
+        {useCustomWindowChrome && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                void getCurrentWindow().minimize().catch((e) => {
+                  console.error("editor minimize failed", e)
+                })
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+                flexShrink: 0
+              }}
+              title={lang === "de" ? "Minimieren" : "Minimize"}
+            >
+              <Minus size={12} />
+            </button>
+
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                const win = getCurrentWindow()
+                void (async () => {
+                  try {
+                    const maximized = await win.isMaximized().catch(() => false)
+                    if (maximized) {
+                      await win.unmaximize()
+                      setIsWindowMaximized(false)
+                      persistEditorWindowState({ maximized: false })
+                    } else {
+                      await win.maximize()
+                      setIsWindowMaximized(true)
+                      persistEditorWindowState({ maximized: true })
+                    }
+                  } catch (e) {
+                    console.error("editor maximize toggle failed", e)
+                  }
+                })()
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+                flexShrink: 0
+              }}
+              title={isWindowMaximized
+                ? (lang === "de" ? "Wiederherstellen" : "Restore")
+                : (lang === "de" ? "Maximieren" : "Maximize")}
+            >
+              <Square size={10.5} />
+            </button>
+
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={requestClose}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+                color: "var(--text-muted, #94a3b8)",
+                cursor: "pointer",
+                flexShrink: 0
+              }}
+              title={lang === "de" ? "Schließen" : "Close"}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           minHeight: 52,
@@ -883,14 +1133,7 @@ export default function SftpEditorWindow() {
             {fileName}
           </div>
           <div style={{ fontSize: 11, color: "var(--text-muted, #94a3b8)" }}>
-            {loading
-              ? t("loading", lang)
-              : status === "saved"
-                ? t("savedState", lang)
-                : status === "modified"
-                  ? t("unsavedChanges", lang)
-                  : t("ready", lang)}
-            {readOnlyBadge ? ` · ${readOnlyBadge}` : ""}
+            {remotePath}
           </div>
         </div>
 
