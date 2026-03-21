@@ -2276,7 +2276,11 @@ fn start_quick_ssh(
 ) -> Result<(), String> {
     let sess = connect_quick_session(host, port, username, password, private_key, passphrase)?;
     let (tx, rx) = channel::<SshMessage>();
-    state.txs.lock().unwrap().insert(session_id.clone(), tx);
+    state
+        .txs
+        .lock()
+        .map_err(|_| "SSH state lock failed".to_string())?
+        .insert(session_id.clone(), tx);
 
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
@@ -2382,7 +2386,11 @@ fn start_ssh(
 ) -> Result<(), String> {
     let sess = connect_ssh_session_with_password_override(id, password_override)?;
     let (tx, rx) = channel::<SshMessage>();
-    state.txs.lock().unwrap().insert(session_id.clone(), tx);
+    state
+        .txs
+        .lock()
+        .map_err(|_| "SSH state lock failed".to_string())?
+        .insert(session_id.clone(), tx);
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
     let _ = app_handle.emit(&connect_event, true);
