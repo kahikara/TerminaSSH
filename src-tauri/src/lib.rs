@@ -2638,6 +2638,8 @@ fn parse_meminfo_value_kib(source: &str, key: &str) -> Option<u64> {
 
 #[tauri::command]
 fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
+    const STATUS_SPLIT_MARKER: &str = "--TERMSSH--";
+
     let sess = connect_ssh_session(server_id)?;
     let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
     channel
@@ -2651,11 +2653,21 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     let _ = channel.wait_close();
 
     let normalized_output = output.replace("\r\n", "\n");
-    let mut parts = normalized_output.split("\n--TERMSSH--\n");
-    let load_part = parts.next().unwrap_or_default();
-    let mem_part = parts.next().unwrap_or_default();
+    let marker_with_newlines = format!("\n{}\n", STATUS_SPLIT_MARKER);
 
-    let load = load_part.split_whitespace().next().map(|s| s.to_string());
+    let (load_part, mem_part) = if let Some((left, right)) = normalized_output.split_once(&marker_with_newlines) {
+        (left, right)
+    } else if let Some(rest) = normalized_output.strip_prefix(&format!("{STATUS_SPLIT_MARKER}\n")) {
+        ("", rest)
+    } else {
+        (normalized_output.as_str(), "")
+    };
+
+    let load = load_part
+        .split_whitespace()
+        .next()
+        .filter(|value| *value != STATUS_SPLIT_MARKER)
+        .map(|s| s.to_string());
 
     let mem_total_kib = parse_meminfo_value_kib(mem_part, "MemTotal");
     let mem_available_kib = parse_meminfo_value_kib(mem_part, "MemAvailable");
