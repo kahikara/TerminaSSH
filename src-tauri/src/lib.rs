@@ -2195,7 +2195,11 @@ fn start_local_pty(
         .map_err(|e| format!("Writer Fehler: {}", e))?;
 
     let (tx, rx) = channel::<SshMessage>();
-    state.txs.lock().unwrap().insert(session_id.clone(), tx);
+    state
+        .txs
+        .lock()
+        .map_err(|_| "PTY state lock failed".to_string())?
+        .insert(session_id.clone(), tx);
 
     let event_name = format!("term-output-{}", session_id);
     let app_for_reader = app_handle.clone();
