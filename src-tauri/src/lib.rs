@@ -1888,19 +1888,27 @@ fn connect_ssh_session_with_password_override(
     password_override: Option<String>,
 ) -> Result<Session, String> {
     let conn_db = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
-    let mut stmt = conn_db.prepare("SELECT host, port, username, password, private_key, passphrase FROM connections WHERE id = ?1").map_err(|e| e.to_string())?;
-    let mut rows = stmt.query([&id]).map_err(|e| e.to_string())?;
-    let row = rows
-        .next()
-        .map_err(|e| e.to_string())?
-        .ok_or("Verbindung nicht gefunden")?;
+    let row_data: (String, u16, String, String, String, String) = conn_db
+        .query_row(
+            "SELECT host, port, username, password, private_key, passphrase FROM connections WHERE id = ?1",
+            [&id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "Verbindung nicht gefunden".to_string(),
+            _ => e.to_string(),
+        })?;
 
-    let host: String = row.get(0).unwrap();
-    let port: u16 = row.get(1).unwrap();
-    let username: String = row.get(2).unwrap();
-    let enc_pw: String = row.get(3).unwrap();
-    let private_key: String = row.get(4).unwrap();
-    let enc_passphrase: String = row.get(5).unwrap();
+    let (host, port, username, enc_pw, private_key, enc_passphrase) = row_data;
 
     let password = match password_override {
         Some(value) if !value.is_empty() => value,
