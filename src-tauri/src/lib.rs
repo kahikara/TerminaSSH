@@ -3085,6 +3085,34 @@ fn window_close_main(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn current_window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn current_window_toggle_maximize(window: tauri::WebviewWindow) -> Result<bool, String> {
+    let is_maximized = window.is_maximized().map_err(|e| e.to_string())?;
+
+    if is_maximized {
+        window.unmaximize().map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn current_window_is_maximized(window: tauri::WebviewWindow) -> Result<bool, String> {
+    window.is_maximized().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn current_window_start_dragging(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     const STATUS_SPLIT_MARKER: &str = "--TERMSSH--";
 
@@ -3180,6 +3208,10 @@ pub fn run() {
             window_toggle_maximize,
             window_is_maximized,
             window_start_dragging,
+            current_window_minimize,
+            current_window_toggle_maximize,
+            current_window_is_maximized,
+            current_window_start_dragging,
             save_window_state_all,
             window_close_main,
             get_status_bar_info,

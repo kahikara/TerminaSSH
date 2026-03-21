@@ -318,8 +318,7 @@ export default function SftpEditorWindow() {
     }
 
     try {
-      const win = getCurrentWindow()
-      const maximized = await win.isMaximized().catch(() => false)
+      const maximized = await invoke("current_window_is_maximized") as boolean
       setIsWindowMaximized(Boolean(maximized))
       persistEditorWindowState({ maximized: Boolean(maximized) })
 
@@ -333,9 +332,51 @@ export default function SftpEditorWindow() {
   }
 
   function startWindowDrag() {
-    void getCurrentWindow().startDragging().catch((e) => {
+    void invoke("current_window_start_dragging").catch((e) => {
       console.error("editor drag failed", e)
     })
+  }
+
+  async function copySelectedText() {
+    const ta = textareaRef.current
+    if (!ta) return
+
+    const start = ta.selectionStart ?? 0
+    const end = ta.selectionEnd ?? 0
+    if (end <= start) return
+
+    const selected = contentRef.current.slice(start, end)
+    if (!selected) return
+
+    await invoke("write_clipboard", { text: selected })
+  }
+
+  async function pasteFromClipboard() {
+    const ta = textareaRef.current
+    if (!ta) return
+    if (editorReadOnlyReason) return
+
+    const clip = await invoke("read_clipboard") as string
+    if (!clip) return
+
+    const start = ta.selectionStart ?? 0
+    const end = ta.selectionEnd ?? 0
+
+    const next =
+      contentRef.current.slice(0, start) +
+      clip +
+      contentRef.current.slice(end)
+
+    setEditorContent(next)
+
+    setTimeout(() => {
+      const pos = start + clip.length
+      ta.focus()
+      ta.setSelectionRange(pos, pos)
+      updateCursor()
+      syncGutterScroll()
+      evaluateLargeFileNotice(next)
+    }, 0)
   }
 
   function publishEditorState() {
@@ -849,6 +890,27 @@ export default function SftpEditorWindow() {
         return
       }
 
+      if (mod && e.shiftKey && key === "c") {
+        e.preventDefault()
+        e.stopPropagation()
+        void copySelectedText().catch(console.error)
+        return
+      }
+
+      if (mod && e.shiftKey && key === "v") {
+        e.preventDefault()
+        e.stopPropagation()
+        void pasteFromClipboard().catch(console.error)
+        return
+      }
+
+      if (!mod && e.shiftKey && key === "insert") {
+        e.preventDefault()
+        e.stopPropagation()
+        void pasteFromClipboard().catch(console.error)
+        return
+      }
+
       if (mod && key === "s") {
         e.preventDefault()
         e.stopPropagation()
@@ -935,7 +997,7 @@ export default function SftpEditorWindow() {
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "var(--bg-app, #020617)",
+        background: "color-mix(in srgb, var(--bg-app, #020617) 80%, #4a4d52)",
         color: "var(--text-main, #e5e7eb)",
         position: "relative",
         boxSizing: "border-box",
@@ -963,7 +1025,7 @@ export default function SftpEditorWindow() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 10,
-          background: "color-mix(in srgb, var(--bg-sidebar) 96%, var(--bg-app))",
+          background: "color-mix(in srgb, var(--bg-sidebar, #111827) 72%, #565a61)",
           userSelect: "none",
           cursor: useCustomWindowChrome ? "grab" : "default"
         }}
@@ -1020,7 +1082,7 @@ export default function SftpEditorWindow() {
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
-                void getCurrentWindow().minimize().catch((e) => {
+                void invoke("current_window_minimize").catch((e) => {
                   console.error("editor minimize failed", e)
                 })
               }}
@@ -1045,19 +1107,11 @@ export default function SftpEditorWindow() {
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
-                const win = getCurrentWindow()
                 void (async () => {
                   try {
-                    const maximized = await win.isMaximized().catch(() => false)
-                    if (maximized) {
-                      await win.unmaximize()
-                      setIsWindowMaximized(false)
-                      persistEditorWindowState({ maximized: false })
-                    } else {
-                      await win.maximize()
-                      setIsWindowMaximized(true)
-                      persistEditorWindowState({ maximized: true })
-                    }
+                    const maximized = await invoke("current_window_toggle_maximize") as boolean
+                    setIsWindowMaximized(Boolean(maximized))
+                    persistEditorWindowState({ maximized: Boolean(maximized) })
                   } catch (e) {
                     console.error("editor maximize toggle failed", e)
                   }
@@ -1116,7 +1170,7 @@ export default function SftpEditorWindow() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 10,
-          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))"
+          background: "color-mix(in srgb, var(--bg-sidebar, #111827) 76%, #4e535a)"
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -1220,7 +1274,7 @@ export default function SftpEditorWindow() {
           style={{
             padding: "10px 12px",
             borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-            background: "color-mix(in srgb, var(--bg-app) 92%, var(--bg-sidebar))",
+            background: "color-mix(in srgb, var(--bg-app, #020617) 78%, #4c5057)",
             display: "flex",
             flexDirection: "column",
             gap: 8
@@ -1298,7 +1352,7 @@ export default function SftpEditorWindow() {
                   width: gutterWidth,
                   overflow: "hidden",
                   borderRight: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-                  background: "color-mix(in srgb, var(--bg-sidebar, #0f172a) 90%, var(--bg-app))",
+                  background: "color-mix(in srgb, var(--bg-sidebar, #0f172a) 72%, #50545b)",
                   color: "var(--text-muted, #94a3b8)",
                   fontFamily: "JetBrains Mono, monospace",
                   fontSize: EDITOR_FONT_SIZE,
@@ -1346,7 +1400,7 @@ export default function SftpEditorWindow() {
                 boxSizing: "border-box",
                 border: "none",
                 outline: "none",
-                background: "color-mix(in srgb, var(--bg-app) 96%, black)",
+                background: "color-mix(in srgb, var(--bg-app, #020617) 74%, #3b3f45)",
                 color: "var(--text-main, #e5e7eb)",
                 padding: `${EDITOR_PADDING_Y}px ${EDITOR_PADDING_X}px`,
                 fontFamily: "JetBrains Mono, monospace",
