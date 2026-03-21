@@ -218,11 +218,27 @@ const iconOnlyBtnStyle: CSSProperties = {
   padding: 0
 }
 
+function getPaneLabel(server: any) {
+  if (!server) return "Unknown"
+  if (isLocalServer(server)) return "Local Terminal"
+  const user = server?.username || "user"
+  const host = server?.host || server?.name || "host"
+  return `${user}@${host}`
+}
+
 export default function TerminalPane(props: any) {
   const server = props.server
   const sessionId = props.sessionId
   const onClose = props.onClose || props.onCloseTab
   const settings = props.settings || {}
+  const initialPaneServers =
+    server?.splitMode && Array.isArray(server?.paneServers) && server.paneServers.length >= 2
+      ? server.paneServers
+      : [server]
+  const initialPaneSessionIds =
+    server?.splitMode && Array.isArray(server?.paneSessionIds) && server.paneSessionIds.length >= 2
+      ? server.paneSessionIds
+      : [sessionId]
 
   const [showSftp, setShowSftp] = useState(false)
   const [showTunnels, setShowTunnels] = useState(false)
@@ -236,16 +252,23 @@ export default function TerminalPane(props: any) {
   const [statusMetrics, setStatusMetrics] = useState<{ load?: string; ram?: string }>({})
   const [splitDirection, setSplitDirection] = useState<"vertical" | "horizontal">("vertical")
   const [splitRatio, setSplitRatio] = useState(0.5)
-  const [paneIds, setPaneIds] = useState<string[]>([sessionId])
+  const [paneIds, setPaneIds] = useState<string[]>(initialPaneSessionIds)
+  const [paneServers, setPaneServers] = useState<any[]>(initialPaneServers)
   const [splitCounter, setSplitCounter] = useState(0)
-  const [focusedPaneId, setFocusedPaneId] = useState(sessionId)
+  const [focusedPaneId, setFocusedPaneId] = useState(initialPaneSessionIds[0] || sessionId)
 
   const dragRef = useRef(false)
-  const paneIdsRef = useRef<string[]>([sessionId])
+  const paneIdsRef = useRef<string[]>(initialPaneSessionIds)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const isSplit = paneIds.length > 1
-  const showSplit = settings.showSplit !== false
+  const isMultiServerSplit = Boolean(server?.splitMode && paneServers.length > 1)
+  const focusedPaneIndex = Math.max(0, paneIds.indexOf(focusedPaneId))
+  const activePaneServer =
+    paneServers[focusedPaneIndex] ||
+    paneServers[0] ||
+    server
+  const showSplit = settings.showSplit !== false && !isMultiServerSplit
   const showSftpBtn = settings.showSftp !== false && !isLocalServer(server)
   const showTunnelsBtn = settings.showTunnels !== false && !isLocalServer(server)
   const showSnippetsBtn = settings.showSnippets !== false && !isLocalServer(server)
@@ -263,13 +286,45 @@ export default function TerminalPane(props: any) {
   }, [paneIds])
 
   useEffect(() => {
+    if (server?.splitMode && Array.isArray(server?.paneServers) && Array.isArray(server?.paneSessionIds)) {
+      setPaneServers(server.paneServers)
+      setPaneIds(server.paneSessionIds)
+      setFocusedPaneId((prev: string) =>
+        server.paneSessionIds.includes(prev) ? prev : server.paneSessionIds[0] || sessionId
+      )
+      return
+    }
+
+    setPaneServers([server])
+    setPaneIds([sessionId])
+    setFocusedPaneId(sessionId)
+  }, [server, sessionId])
+
+  useEffect(() => {
     if (!paneIds.includes(focusedPaneId)) {
       setFocusedPaneId(paneIds[0] || sessionId)
     }
   }, [paneIds, focusedPaneId, sessionId])
 
   useEffect(() => {
-    if (isLocalServer(server)) {
+    if (paneServers.length > paneIds.length) {
+      setPaneServers((prev) => prev.slice(0, paneIds.length))
+      return
+    }
+
+    if (paneIds.length > paneServers.length) {
+      setPaneServers((prev) => {
+        const next = [...prev]
+        while (next.length < paneIds.length) {
+          next.push(server)
+        }
+        return next
+      })
+    }
+  }, [paneIds, paneServers.length, server])
+
+  useEffect(() => {
+    if (isLocalServer(activePaneServer)) {
       setPingMs("local")
       return
     }
@@ -279,8 +334,8 @@ export default function TerminalPane(props: any) {
     const updatePing = async () => {
       try {
         const ms = await invoke("ping_host", {
-          host: server.host,
-          port: server.port || 22
+          host: activePaneServer.host,
+          port: activePaneServer.port || 22
         })
         if (alive) setPingMs(String(ms))
       } catch {
@@ -295,7 +350,7 @@ export default function TerminalPane(props: any) {
       alive = false
       clearInterval(id)
     }
-  }, [server])
+  }, [activePaneServer])
 
   useEffect(() => {
     setSessionSeconds(0)
@@ -308,7 +363,7 @@ export default function TerminalPane(props: any) {
   }, [sessionId])
 
   useEffect(() => {
-    if (isLocalServer(server) || (!showStatusBarLoad && !showStatusBarRam) || !server?.id) {
+    if (isLocalServer(activePaneServer) || (!showStatusBarLoad && !showStatusBarRam) || !activePaneServer?.id) {
       setStatusMetrics({})
       return
     }
@@ -317,7 +372,7 @@ export default function TerminalPane(props: any) {
 
     const updateStatusMetrics = async () => {
       try {
-        const info = await invoke("get_status_bar_info", { serverId: server.id }) as { load?: string; ram?: string }
+        const info = await invoke("get_status_bar_info", { serverId: activePaneServer.id }) as { load?: string; ram?: string }
 
         if (!alive) return
 
@@ -337,10 +392,10 @@ export default function TerminalPane(props: any) {
       alive = false
       clearInterval(id)
     }
-  }, [server?.id, showStatusBarLoad, showStatusBarRam])
+  }, [activePaneServer?.id, showStatusBarLoad, showStatusBarRam])
 
   useEffect(() => {
-    if (isLocalServer(server) || !showStatusBarTunnel || !server?.id) {
+    if (isLocalServer(activePaneServer) || !showStatusBarTunnel || !activePaneServer?.id) {
       setActiveTunnelLabel("")
       return
     }
@@ -350,7 +405,7 @@ export default function TerminalPane(props: any) {
     const updateTunnelStatus = async () => {
       try {
         const [allTunnels, activeTunnels] = await Promise.all([
-          invoke("get_tunnels", { serverId: server.id }) as Promise<any[]>,
+          invoke("get_tunnels", { serverId: activePaneServer.id }) as Promise<any[]>,
           invoke("get_active_tunnels") as Promise<{ id: number }[]>
         ])
 
@@ -383,7 +438,7 @@ export default function TerminalPane(props: any) {
       alive = false
       clearInterval(id)
     }
-  }, [server?.id, showStatusBarTunnel, statusLang])
+  }, [activePaneServer?.id, showStatusBarTunnel, statusLang])
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -441,8 +496,15 @@ export default function TerminalPane(props: any) {
         return prev
       }
 
+      const nextPaneIds = prev.filter((id) => id !== targetSessionId)
+      const removedIndex = prev.indexOf(targetSessionId)
       destroyTerminal(targetSessionId)
-      return prev.filter((id) => id !== targetSessionId)
+
+      setPaneServers((prevServers) =>
+        prevServers.filter((_, index) => index !== removedIndex)
+      )
+
+      return nextPaneIds
     })
   }, [onClose])
 
@@ -451,14 +513,16 @@ export default function TerminalPane(props: any) {
       if (prev.length > 1) {
         const [, second] = prev
         if (second) destroyTerminal(second)
+        setPaneServers((prevServers) => [prevServers[0] || server])
         return [prev[0]]
       }
 
       const newSessionId = `${sessionId}__split_${splitCounter + 1}`
       setSplitCounter((v) => v + 1)
+      setPaneServers((prevServers) => [prevServers[0] || server, prevServers[0] || server])
       return [prev[0], newSessionId]
     })
-  }, [sessionId, splitCounter])
+  }, [sessionId, splitCounter, server])
 
   const mainPaneStyle: CSSProperties =
     splitDirection === "vertical"
@@ -600,10 +664,10 @@ export default function TerminalPane(props: any) {
               textOverflow: "ellipsis"
             }}
           >
-            {isLocalServer(server) ? "Local Session" : `${server?.username || ""}@${server?.host || ""}`}
+            {isLocalServer(activePaneServer) ? "Local Session" : `${activePaneServer?.username || ""}@${activePaneServer?.host || ""}`}
           </div>
 
-          {!isLocalServer(server) && (
+          {!isLocalServer(activePaneServer) && (
             <div
               style={{
                 display: "inline-flex",
@@ -806,17 +870,79 @@ export default function TerminalPane(props: any) {
           background: "var(--bg-app, #000)"
         }}
       >
-        <div style={isSplit ? mainPaneStyle : { flex: 1, minWidth: 0, minHeight: 0 }}>
-          <TerminalInstance
-            key={paneIds[0]}
-            server={server}
-            sessionId={paneIds[0]}
-            settings={settings}
-            onClose={() => closePane(paneIds[0])}
-            showToast={props.showToast}
-            lang={settings?.lang || "en"}
-            onFocus={() => setFocusedPaneId(paneIds[0])}
-          />
+        <div
+          style={isSplit ? mainPaneStyle : { flex: 1, minWidth: 0, minHeight: 0 }}
+          onMouseDown={() => setFocusedPaneId(paneIds[0])}
+        >
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              minWidth: 0,
+              minHeight: 0,
+              border: isMultiServerSplit && focusedPaneId === paneIds[0]
+                ? "1px solid color-mix(in srgb, var(--accent) 42%, var(--border-subtle))"
+                : "1px solid transparent",
+              borderRadius: 10,
+              overflow: "hidden"
+            }}
+          >
+            {isMultiServerSplit && (
+              <div
+                style={{
+                  height: 30,
+                  minHeight: 30,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0 10px",
+                  borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+                  background: focusedPaneId === paneIds[0]
+                    ? "color-mix(in srgb, var(--accent) 12%, var(--bg-sidebar))"
+                    : "color-mix(in srgb, var(--bg-sidebar) 92%, var(--bg-app))"
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: focusedPaneId === paneIds[0] ? "var(--text-main)" : "var(--text-muted)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}
+                >
+                  {getPaneLabel(paneServers[0] || server)}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: focusedPaneId === paneIds[0] ? "var(--accent)" : "var(--text-muted)"
+                  }}
+                >
+                  {focusedPaneId === paneIds[0] ? "Active" : "Passive"}
+                </div>
+              </div>
+            )}
+
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+              <TerminalInstance
+                key={paneIds[0]}
+                server={paneServers[0] || server}
+                sessionId={paneIds[0]}
+                settings={settings}
+                onClose={() => closePane(paneIds[0])}
+                showToast={props.showToast}
+                lang={settings?.lang || "en"}
+                onFocus={() => setFocusedPaneId(paneIds[0])}
+              />
+            </div>
+          </div>
         </div>
 
         {isSplit && paneIds[1] && (
@@ -834,17 +960,76 @@ export default function TerminalPane(props: any) {
               }
             />
 
-            <div style={splitPaneStyle}>
-              <TerminalInstance
-                key={paneIds[1]}
-                server={server}
-                sessionId={paneIds[1]}
-                settings={settings}
-                onClose={() => closePane(paneIds[1])}
-                showToast={props.showToast}
-                lang={settings?.lang || "en"}
-                onFocus={() => setFocusedPaneId(paneIds[1])}
-              />
+            <div style={splitPaneStyle} onMouseDown={() => setFocusedPaneId(paneIds[1])}>
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: 0,
+                  minHeight: 0,
+                  border: isMultiServerSplit && focusedPaneId === paneIds[1]
+                    ? "1px solid color-mix(in srgb, var(--accent) 42%, var(--border-subtle))"
+                    : "1px solid transparent",
+                  borderRadius: 10,
+                  overflow: "hidden"
+                }}
+              >
+                {isMultiServerSplit && (
+                  <div
+                    style={{
+                      height: 30,
+                      minHeight: 30,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "0 10px",
+                      borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+                      background: focusedPaneId === paneIds[1]
+                        ? "color-mix(in srgb, var(--accent) 12%, var(--bg-sidebar))"
+                        : "color-mix(in srgb, var(--bg-sidebar) 92%, var(--bg-app))"
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: focusedPaneId === paneIds[1] ? "var(--text-main)" : "var(--text-muted)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis"
+                      }}
+                    >
+                      {getPaneLabel(paneServers[1] || paneServers[0] || server)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: focusedPaneId === paneIds[1] ? "var(--accent)" : "var(--text-muted)"
+                      }}
+                    >
+                      {focusedPaneId === paneIds[1] ? "Active" : "Passive"}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+                  <TerminalInstance
+                    key={paneIds[1]}
+                    server={paneServers[1] || paneServers[0] || server}
+                    sessionId={paneIds[1]}
+                    settings={settings}
+                    onClose={() => closePane(paneIds[1])}
+                    showToast={props.showToast}
+                    lang={settings?.lang || "en"}
+                    onFocus={() => setFocusedPaneId(paneIds[1])}
+                  />
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -860,16 +1045,16 @@ export default function TerminalPane(props: any) {
         />
       )}
 
-      {!isLocalServer(server) && (
+      {!isLocalServer(activePaneServer) && (
         <SftpPanel
-          server={server}
+          server={activePaneServer}
           lang={settings?.lang || "en"}
           visible={showSftp}
           onClose={() => setShowSftp(false)}
         />
       )}
 
-      {!isLocalServer(server) && (
+      {!isLocalServer(activePaneServer) && (
         <SnippetsPanel
           lang={settings?.lang || "en"}
           showDialog={props.showDialog}
@@ -889,18 +1074,18 @@ export default function TerminalPane(props: any) {
         />
       )}
 
-      {!isLocalServer(server) && (
+      {!isLocalServer(activePaneServer) && (
         <TunnelPanel
-          server={server}
+          server={activePaneServer}
           visible={showTunnels}
           onClose={() => setShowTunnels(false)}
           showToast={props.showToast}
         />
       )}
 
-      {!isLocalServer(server) && (
+      {!isLocalServer(activePaneServer) && (
         <NotesPanel
-          server={server}
+          server={activePaneServer}
           lang={settings?.lang || "en"}
           visible={showNotes}
           onClose={() => setShowNotes(false)}
