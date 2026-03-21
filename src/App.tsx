@@ -255,6 +255,19 @@ export default function App() {
     setSidebarSearchQuery("");
   }, [isSidebarCollapsed]);
 
+  const needsSessionPasswordPrompt = (server: any) => {
+    const wantsLocal =
+      !!server?.isLocal ||
+      server?.id === 'local' ||
+      server?.name === 'Local Terminal' ||
+      server?.host === 'localhost';
+
+    if (wantsLocal) return false;
+    if (server?.isQuickConnect) return !!server?.quickConnectNeedsPassword;
+
+    return server?.has_password === false && !server?.private_key;
+  };
+
   const openTerminal = (server: any) => {
     const findExistingTabId = () => {
       if (server?.isQuickConnect) return null;
@@ -281,6 +294,34 @@ export default function App() {
     const existingTabId = findExistingTabId();
     if (existingTabId) {
       setActiveTabId(existingTabId);
+      return;
+    }
+
+    if (needsSessionPasswordPrompt(server)) {
+      showDialog({
+        type: "prompt",
+        title:
+          settings.lang === "de"
+            ? `Passwort für ${server?.name || server?.host || "SSH Verbindung"}`
+            : `Password for ${server?.name || server?.host || "SSH connection"}`,
+        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
+        isPassword: true,
+        onConfirm: (pwd: string) => {
+          if (!pwd) return;
+
+          const tabId = Math.random().toString(36).substring(7);
+          const newTab = {
+            ...server,
+            isQuickConnect: true,
+            password: pwd,
+            quickConnectNeedsPassword: false,
+            tabId,
+            sessionId: tabId
+          };
+          setOpenTabs(prev => [...prev, newTab]);
+          setActiveTabId(tabId);
+        }
+      });
       return;
     }
 

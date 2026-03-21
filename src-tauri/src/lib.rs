@@ -47,6 +47,7 @@ pub struct ConnectionItem {
     username: String,
     private_key: String,
     group_name: String,
+    has_password: bool,
 }
 #[derive(Debug, Serialize)]
 pub struct FileItem {
@@ -643,10 +644,11 @@ fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
 fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, name, host, port, username, private_key, group_name FROM connections")
+        .prepare("SELECT id, name, host, port, username, private_key, group_name, password FROM connections")
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map([], |row| {
+            let encrypted_password: String = row.get(7)?;
             Ok(ConnectionItem {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -655,6 +657,7 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
                 username: row.get(4)?,
                 private_key: row.get(5)?,
                 group_name: row.get(6)?,
+                has_password: !encrypted_password.trim().is_empty(),
             })
         })
         .unwrap();
