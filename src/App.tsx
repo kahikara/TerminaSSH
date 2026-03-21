@@ -685,14 +685,18 @@ export default function App() {
     });
   }, [closeSidebarContextMenu, settings.lang, showDialog, loadServers, showToast]);
 
-  const closeTab = (tabId: string, e?: React.MouseEvent) => {
+  const closeTab = useCallback((tabId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setOpenTabs(prev => {
       const newTabs = prev.filter(t => t.tabId !== tabId);
-      if (activeTabId === tabId) setActiveTabId(newTabs.length > 0 ? newTabs[newTabs.length - 1].tabId : null);
+      setActiveTabId(current => (
+        current === tabId
+          ? (newTabs.length > 0 ? newTabs[newTabs.length - 1].tabId : null)
+          : current
+      ));
       return newTabs;
     });
-  };
+  }, []);
 
   const updateTabFromPaneState = (
     tabId: string,
