@@ -28,10 +28,6 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { settings, setSettings } = useAppSettings();
-
-  useEffect(() => {
-    invoke("set_tray_visible", { visible: Boolean(settings.closeToTray) }).catch(() => {});
-  }, [settings.closeToTray]);
   
   useEffect(() => {
     if (!isSidebarCollapsed) {
@@ -81,6 +77,17 @@ export default function App() {
   })
 
   const { toasts, showToast } = useToasts();
+
+  useEffect(() => {
+    invoke("set_tray_visible", { visible: Boolean(settings.closeToTray) }).catch((e) => {
+      showToast(
+        settings.lang === 'de'
+          ? `Tray konnte nicht aktualisiert werden: ${String(e)}`
+          : `Could not update tray visibility: ${String(e)}`,
+        true
+      );
+    });
+  }, [settings.closeToTray, settings.lang, showToast]);
 
   const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', title: '', placeholder: '', defaultValue: '', isPassword: false, onConfirm: (_v:any)=>{}, onCancel: ()=>{} });
   const showDialog = (config: any) => setDialog(prev => ({ ...prev, isOpen: true, ...config }));
