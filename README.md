@@ -116,8 +116,8 @@ Want to build Termina SSH from source or contribute?
 
 ### Clone and run
 
-    git clone https://github.com/kahikara/TerminaSSH.git ssh-manager
-    cd ssh-manager
+    git clone https://github.com/kahikara/TerminaSSH.git TerminaSSH
+    cd TerminaSSH
     npm install
     npm run tauri dev
 

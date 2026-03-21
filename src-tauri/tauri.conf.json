@@ -1,7 +1,7 @@
 {
   "productName": "Termina SSH",
-  "version": "1.0.2",
-  "identifier": "com.terminassh.dev",
+  "version": "1.0.3",
+  "identifier": "io.github.kahikara.terminassh",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Termina SSH v1.0.2",
+        "title": "Termina SSH",
         "width": 1200,
         "height": 800,
         "resizable": true,
