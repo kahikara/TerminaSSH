@@ -124,6 +124,15 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
     })
   }
 
+  const normalizedForm = buildNormalizedForm()
+  const canSave =
+    Boolean(normalizedForm.name) &&
+    Boolean(normalizedForm.host) &&
+    Boolean(normalizedForm.username) &&
+    Number.isInteger(normalizedForm.port) &&
+    normalizedForm.port >= 1 &&
+    normalizedForm.port <= 65535
+
   const fieldClass =
     "w-full h-9 px-3 rounded-[10px] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border border-[var(--border-subtle)] outline-none focus:border-[var(--accent)] text-[13px] text-[var(--text-main)]"
 
@@ -159,6 +168,7 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
                   value={form.name}
                   onChange={e => setForm({ ...form, name: e.target.value })}
                   className={`${fieldClass} min-w-0`}
+                  required
                 />
               </label>
 
@@ -177,6 +187,7 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
                   value={form.host}
                   onChange={e => setForm({ ...form, host: e.target.value })}
                   className={fieldClass}
+                  required
                 />
               </label>
 
@@ -187,6 +198,9 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
                   value={form.port}
                   onChange={e => setForm({ ...form, port: parseInt(e.target.value || "22", 10) })}
                   className={fieldClass}
+                  min={1}
+                  max={65535}
+                  required
                 />
               </label>
 
@@ -196,6 +210,7 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
                   value={form.username}
                   onChange={e => setForm({ ...form, username: e.target.value })}
                   className={fieldClass}
+                  required
                 />
               </label>
 
@@ -293,7 +308,13 @@ export default function ConnectionModal({ isOpen, onClose, serverToEdit, onSucce
             <button onClick={onClose} className="ui-btn-ghost">
               {t("cancel", lang)}
             </button>
-            <button onClick={handleSave} className="ui-btn-primary">
+            <button
+              onClick={handleSave}
+              className="ui-btn-primary"
+              disabled={!canSave}
+              aria-disabled={!canSave}
+              style={!canSave ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+            >
               {t("save", lang)}
             </button>
           </div>
