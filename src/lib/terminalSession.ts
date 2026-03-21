@@ -44,8 +44,7 @@ export function isLocalServer(server: any) {
     server?.name === "Local Session" ||
     server?.host === "__local__" ||
     server?.host === "local" ||
-    server?.id === "local" ||
-    server?.id == null
+    server?.id === "local"
   )
 }
 

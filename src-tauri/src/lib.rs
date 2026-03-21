@@ -25,6 +25,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use chrono::Utc;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -540,19 +541,7 @@ fn try_auth_with_default_keys(sess: &Session, username: &str) -> bool {
 }
 
 fn current_export_timestamp() -> String {
-    if let Ok(output) = Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-    {
-        if output.status.success() {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !value.is_empty() {
-                return value;
-            }
-        }
-    }
-
-    "1970-01-01T00:00:00Z".to_string()
+    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 fn authenticate_session(
@@ -2047,22 +2036,49 @@ fn start_local_pty(
         })
         .map_err(|e| format!("PTY Error: {}", e))?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    #[cfg(target_os = "windows")]
+    let shell = std::env::var("TERMSSH_WINDOWS_SHELL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("COMSPEC")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "cmd.exe".to_string());
+
+    #[cfg(not(target_os = "windows"))]
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "/bin/bash".to_string());
+
     let shell_name = std::path::Path::new(&shell)
         .file_name()
         .and_then(|n| n.to_str())
-        .unwrap_or("bash")
-        .to_string();
+        .unwrap_or("shell")
+        .to_ascii_lowercase();
 
     let mut cmd = CommandBuilder::new(shell.clone());
-    cmd.arg("-i");
 
-    if shell_name.contains("bash") || shell_name.contains("zsh") || shell_name.contains("fish") {
-        cmd.arg("-l");
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmd.arg("-i");
+
+        if shell_name.contains("bash") || shell_name.contains("zsh") || shell_name.contains("fish") {
+            cmd.arg("-l");
+        }
+
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
     }
 
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
+    #[cfg(target_os = "windows")]
+    {
+        if shell_name == "powershell.exe" || shell_name == "pwsh.exe" || shell_name == "powershell" || shell_name == "pwsh" {
+            cmd.arg("-NoLogo");
+        }
+    }
 
     let mut child = pair
         .slave
