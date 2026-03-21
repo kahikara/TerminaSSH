@@ -14,7 +14,7 @@ export type StoreEntry = {
   started: boolean
   starting: boolean
   unlisten?: UnlistenFn
-  buffer?: string
+  exitUnlisten?: UnlistenFn
 }
 
 const pendingDestroyTimers: Record<string, number> = {}
@@ -45,16 +45,6 @@ export function isLocalServer(server: any) {
     server?.host === "__local__" ||
     server?.host === "local" ||
     server?.id === "local"
-  )
-}
-
-function shouldCloseFromBuffer(buf: string) {
-  return (
-    /(?:^|\r?\n)(logout|exit)(?:\r?\n|$)/i.test(buf) ||
-    /Connection to .* closed/i.test(buf) ||
-    /Connection closed/i.test(buf) ||
-    /\[Lokale Shell beendet\]/i.test(buf) ||
-    /\[Verbindung beendet\]/i.test(buf)
   )
 }
 
@@ -131,8 +121,7 @@ export function ensureTerminal(_server: any, sessionId: string, settings: any, o
       search,
       opened: false,
       started: false,
-      starting: false,
-      buffer: ""
+      starting: false
     }
 
     terminalStore[sessionId] = entry
@@ -153,17 +142,18 @@ export function ensureTerminal(_server: any, sessionId: string, settings: any, o
 
     listen(`term-output-${sessionId}`, (e: any) => {
       const text = String(e.payload ?? "")
-      entry!.buffer = ((entry!.buffer || "") + text).slice(-4000)
 
       term.write(text, () => {
         keepBottom(term)
       })
-
-      if (shouldCloseFromBuffer(entry!.buffer || "")) {
-        setTimeout(() => onClose?.(), 120)
-      }
     }).then((unlisten) => {
       entry!.unlisten = unlisten
+    }).catch(() => {})
+
+    listen(`term-exit-${sessionId}`, () => {
+      setTimeout(() => onClose?.(), 120)
+    }).then((unlisten) => {
+      entry!.exitUnlisten = unlisten
     }).catch(() => {})
   } else {
     try {
@@ -239,6 +229,7 @@ export function destroyTerminal(sessionId: string) {
   const entry: StoreEntry | undefined = terminalStore[sessionId]
   if (!entry) return
   try { entry.unlisten?.() } catch {}
+  try { entry.exitUnlisten?.() } catch {}
   try { invoke("close_session", { sessionId }).catch(() => {}) } catch {}
   try { (entry as any).__cleanup?.() } catch {}
   try { entry.term.dispose() } catch {}

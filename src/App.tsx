@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search } from 'lucide-react';
+import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Minus, Square } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { t } from './lib/i18n';
 import { useAppSettings } from './hooks/useAppSettings';
@@ -18,6 +18,15 @@ import InputContextMenu from './components/InputContextMenu';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 
 const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections";
+
+type LinuxWindowModeInfo = {
+  wayland_undecorated?: boolean
+}
+
+type AppMetaInfo = {
+  app_version?: string
+}
+
 
 export default function App() {
   const params = new URLSearchParams(window.location.search)
@@ -61,6 +70,9 @@ export default function App() {
   const [isConnModalOpen, setConnModalOpen] = useState(false);
   const [serverToEdit, setServerToEdit] = useState<any>(null);
   const [sidebarContextMenu, setSidebarContextMenu] = useState<{ x: number; y: number; server: any; isLocal: boolean } | null>(null);
+  const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
 
   const {
     dirtyEditors,
@@ -107,7 +119,51 @@ export default function App() {
     settingsRef.current = settings;
   }, [settings]);
 
-  const loadServers = useCallback(async () => {
+  useEffect(() => {
+    invoke('get_linux_window_mode')
+      .then((info) => {
+        const mode = (info || {}) as LinuxWindowModeInfo
+        setUseCustomLinuxTitlebar(Boolean(mode.wayland_undecorated))
+      })
+      .catch(() => {
+        setUseCustomLinuxTitlebar(false)
+      })
+
+    invoke('get_app_meta')
+      .then((info) => {
+        const meta = (info || {}) as AppMetaInfo
+        setAppVersion(String(meta.app_version || ""))
+      })
+      .catch(() => {
+        setAppVersion("")
+      })
+  }, [])
+
+  useEffect(() => {
+    if (!useCustomLinuxTitlebar) return
+
+    let mounted = true
+    let timer: number | undefined
+
+    const syncMaximized = async () => {
+      try {
+        const value = await invoke('window_is_maximized') as boolean
+        if (mounted) setIsWindowMaximized(Boolean(value))
+      } catch {}
+    }
+
+    void syncMaximized()
+    timer = window.setInterval(() => {
+      void syncMaximized()
+    }, 700)
+
+    return () => {
+      mounted = false
+      if (timer) window.clearInterval(timer)
+    }
+  }, [useCustomLinuxTitlebar])
+
+    const loadServers = useCallback(async () => {
     try {
       const items = await invoke('get_connections');
       setConnections(Array.isArray(items) ? items : []);
@@ -823,10 +879,89 @@ export default function App() {
     
 
   return (
-    <div className="flex h-screen w-full font-sans overflow-hidden relative">
+    <div
+      className="flex h-screen w-full font-sans overflow-hidden relative bg-[var(--bg-app)]"
+      style={{
+        border: useCustomLinuxTitlebar
+          ? '1px solid color-mix(in srgb, var(--border-subtle) 88%, rgba(255,255,255,0.08))'
+          : undefined,
+        boxShadow: useCustomLinuxTitlebar
+          ? '0 0 0 1px color-mix(in srgb, var(--bg-app) 72%, transparent) inset'
+          : undefined
+      }}
+    >
       <GlobalDialog dialog={dialog} onClose={() => setDialog({...dialog, isOpen: false})} />
 
-      <div style={{ width: isSidebarCollapsed ? 76 : sidebarWidth }} className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl">
+      {useCustomLinuxTitlebar && (
+        <>
+          <div
+            className="absolute top-0 left-0 right-0 z-[300] h-[30px] flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] px-2 select-none"
+            onMouseDown={(e) => {
+              const target = e.target as HTMLElement | null
+              if (target?.closest('[data-window-control="true"]')) return
+              void invoke('window_start_dragging').catch(() => {})
+            }}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <img
+                src="/app-icon.svg"
+                alt="logo"
+                className="w-4 h-4 object-contain shrink-0"
+                onError={(e) => e.currentTarget.style.display = 'none'}
+              />
+              <span className="text-[11px] font-semibold text-[var(--text-main)] truncate">
+                Termina SSH{appVersion ? ` v${appVersion}` : ""}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                data-window-control="true"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  void invoke('window_minimize').catch(() => {})
+                }}
+                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
+                title={settings.lang === 'de' ? 'Minimieren' : 'Minimize'}
+              >
+                <Minus size={12} />
+              </button>
+
+              <button
+                data-window-control="true"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  void invoke('window_toggle_maximize')
+                    .then((value) => setIsWindowMaximized(Boolean(value)))
+                    .catch(() => {})
+                }}
+                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
+                title={settings.lang === 'de' ? 'Maximieren' : 'Maximize'}
+              >
+                <Square size={10.5} className={isWindowMaximized ? 'scale-90' : ''} />
+              </button>
+
+              <button
+                data-window-control="true"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => window.close()}
+                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
+                title={settings.lang === 'de' ? 'Schließen' : 'Close'}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div
+        style={{
+          width: isSidebarCollapsed ? 76 : sidebarWidth,
+          paddingTop: useCustomLinuxTitlebar ? 30 : 0
+        }}
+        className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl"
+      >
         {isSidebarCollapsed ? (
           <div className="px-3 pt-3 pb-2 shrink-0">
             <div className="flex justify-center">
@@ -1141,7 +1276,10 @@ export default function App() {
         <div className="absolute top-0 right-0 w-[1px] h-full bg-[var(--border-subtle)] pointer-events-none" />
       </div>
 
-      <div className="flex-1 flex flex-col h-full relative z-10 min-w-0">
+      <div
+        style={{ paddingTop: useCustomLinuxTitlebar ? 30 : 0 }}
+        className="flex-1 flex flex-col h-full relative z-10 min-w-0"
+      >
         {activeTabId && (
           <div className="h-10 flex bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
             <div className="flex overflow-x-auto h-full scrollbar-hide w-full items-end pt-1 px-2 gap-1.5">

@@ -212,6 +212,16 @@ pub struct HostKeyCheckInfo {
     known_hosts_path: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct LinuxWindowModeInfo {
+    wayland_undecorated: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppMetaInfo {
+    app_version: String,
+}
+
 pub enum SshMessage {
     Input(String),
     Resize(u32, u32),
@@ -2709,6 +2719,76 @@ fn parse_meminfo_value_kib(source: &str, key: &str) -> Option<u64> {
 }
 
 #[tauri::command]
+fn get_linux_window_mode() -> Result<LinuxWindowModeInfo, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|value| value.eq_ignore_ascii_case("wayland"))
+                .unwrap_or(false);
+
+        return Ok(LinuxWindowModeInfo {
+            wayland_undecorated: is_wayland,
+        });
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(LinuxWindowModeInfo {
+            wayland_undecorated: false,
+        })
+    }
+}
+
+#[tauri::command]
+fn get_app_meta(app: AppHandle) -> Result<AppMetaInfo, String> {
+    Ok(AppMetaInfo {
+        app_version: app.package_info().version.to_string(),
+    })
+}
+
+#[tauri::command]
+fn window_minimize(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+
+    let is_maximized = window.is_maximized().map_err(|e| e.to_string())?;
+
+    if is_maximized {
+        window.unmaximize().map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn window_is_maximized(app: AppHandle) -> Result<bool, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+    window.is_maximized().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_start_dragging(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
     const STATUS_SPLIT_MARKER: &str = "--TERMSSH--";
 
@@ -2760,13 +2840,6 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(target_os = "linux")]
-    {
-        if std::env::var_os("GDK_BACKEND").is_none() {
-            std::env::set_var("GDK_BACKEND", "x11");
-        }
-    }
-
     init_db();
 
     tauri::Builder::default()
@@ -2801,6 +2874,12 @@ pub fn run() {
             sftp_download,
             close_session,
             ping_host,
+            get_linux_window_mode,
+            get_app_meta,
+            window_minimize,
+            window_toggle_maximize,
+            window_is_maximized,
+            window_start_dragging,
             get_status_bar_info,
             cancel_transfer,
             write_clipboard,
@@ -2832,7 +2911,21 @@ pub fn run() {
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_decorations(true);
+                #[cfg(target_os = "linux")]
+                {
+                    let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
+                        || std::env::var("XDG_SESSION_TYPE")
+                            .map(|value| value.eq_ignore_ascii_case("wayland"))
+                            .unwrap_or(false);
+
+                    let _ = window.set_decorations(!is_wayland);
+                }
+
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let _ = window.set_decorations(true);
+                }
+
                 let version = app.package_info().version.to_string();
                 let _ = window.set_title(&format!("Termina SSH v{}", version));
             }
