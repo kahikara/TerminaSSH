@@ -98,7 +98,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
             <form onSubmit={handleQuickConnect} className="p-4 grid grid-cols-1 md:grid-cols-[110px_1fr_88px_auto] gap-3 items-center">
               <input
                 type="text"
-                placeholder={t("username", lang)}
+                placeholder="username"
                 value={qc.user}
                 onChange={(e) => setQc({ ...qc, user: e.target.value })}
                 className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
@@ -106,7 +106,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
 
               <input
                 type="text"
-                placeholder="host / ip / domain"
+                placeholder="ip, domain or hostname"
                 value={qc.host}
                 onChange={(e) => setQc({ ...qc, host: e.target.value })}
                 className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
@@ -153,7 +153,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                       {t("activeSessions", lang)}
                     </div>
                   </div>
-                  <div className="text-xs text-[var(--text-muted)] whitespace-nowrap">
+                  <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
                     {lang === "de"
                       ? `${activeCount} ${activeCount === 1 ? "Sitzung" : "Sitzungen"}`
                       : `${activeCount} ${activeCount === 1 ? "session" : "sessions"}`}
@@ -214,7 +214,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                       {recentTitle}
                     </div>
                   </div>
-                  <div className="text-xs text-[var(--text-muted)] whitespace-nowrap">
+                  <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
                     {lang === "de"
                       ? `${recentCount} ${recentCount === 1 ? "Host" : "Hosts"}`
                       : `${recentCount} ${recentCount === 1 ? "host" : "hosts"}`}
