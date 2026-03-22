@@ -965,9 +965,19 @@ export default function App() {
         <>
           <div
             className="absolute top-0 left-0 right-0 z-[300] h-[30px] flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] px-2 select-none"
+            onDoubleClick={(e) => {
+              const target = e.target as HTMLElement | null
+              if (target?.closest('[data-window-control="true"]')) return
+              e.preventDefault()
+              e.stopPropagation()
+              void invoke('window_toggle_maximize')
+                .then((value) => setIsWindowMaximized(Boolean(value)))
+                .catch(() => {})
+            }}
             onMouseDown={(e) => {
               const target = e.target as HTMLElement | null
               if (target?.closest('[data-window-control="true"]')) return
+              if (e.detail > 1) return
               void invoke('window_start_dragging').catch(() => {})
             }}
           >

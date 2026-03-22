@@ -1045,9 +1045,25 @@ export default function SftpEditorWindow() {
     >
       <div
         data-tauri-drag-region
+        onDoubleClick={(e) => {
+          if (!useCustomWindowChrome) return
+          if ((e.target as HTMLElement).closest("button, input, textarea, select, a")) return
+          e.preventDefault()
+          e.stopPropagation()
+          void (async () => {
+            try {
+              const maximized = await invoke("current_window_toggle_maximize") as boolean
+              setIsWindowMaximized(Boolean(maximized))
+              persistEditorWindowState({ maximized: Boolean(maximized) })
+            } catch (err) {
+              console.error("editor titlebar double click maximize failed", err)
+            }
+          })()
+        }}
         onMouseDown={(e) => {
           if (!useCustomWindowChrome) return
           if ((e.target as HTMLElement).closest("button, input, textarea, select, a")) return
+          if (e.detail > 1) return
           startWindowDrag()
         }}
         style={{
