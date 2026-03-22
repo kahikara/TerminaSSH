@@ -11,7 +11,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
@@ -2556,14 +2556,21 @@ fn start_quick_ssh(
                 Err(_) => {}
             }
 
-            while let Ok(msg) = rx.try_recv() {
-                match msg {
-                    SshMessage::Input(input) => {
+            loop {
+                match rx.try_recv() {
+                    Ok(SshMessage::Input(input)) => {
                         let _ = channel.write_all(input.as_bytes());
                         let _ = channel.flush();
                     }
-                    SshMessage::Resize(c, r) => {
+                    Ok(SshMessage::Resize(c, r)) => {
                         let _ = channel.request_pty_size(c, r, None, None);
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        let _ = channel.close();
+                        let _ = app_handle.emit(&connect_event, false);
+                        emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                        return;
                     }
                 }
             }
@@ -2662,14 +2669,21 @@ fn start_ssh(
                 Ok(_) => {}
                 Err(_) => {}
             }
-            while let Ok(msg) = rx.try_recv() {
-                match msg {
-                    SshMessage::Input(input) => {
+            loop {
+                match rx.try_recv() {
+                    Ok(SshMessage::Input(input)) => {
                         let _ = channel.write_all(input.as_bytes());
                         let _ = channel.flush();
                     }
-                    SshMessage::Resize(c, r) => {
+                    Ok(SshMessage::Resize(c, r)) => {
                         let _ = channel.request_pty_size(c, r, None, None);
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        let _ = channel.close();
+                        let _ = app_handle.emit(&connect_event, false);
+                        emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                        return;
                     }
                 }
             }
