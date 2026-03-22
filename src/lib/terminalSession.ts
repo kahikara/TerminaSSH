@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager"
 import { listen, UnlistenFn } from "@tauri-apps/api/event"
 import { terminalStore } from "./terminalStore"
+import { t } from "./i18n"
 
 export type StoreEntry = {
   term: Terminal
@@ -247,12 +248,11 @@ export async function copyTerminalSelection(
   try {
     await writeText(text)
     try { (term as any).clearSelection?.() } catch {}
-    showToast?.(lang === "de" ? "Auswahl kopiert" : "Selection copied")
+    showToast?.(t("selectionCopied", lang))
   } catch (e: any) {
+    const errorText = String(e)
     showToast?.(
-      lang === "de"
-        ? `Kopieren fehlgeschlagen: ${String(e)}`
-        : `Copy failed: ${String(e)}`,
+      t("copyFailed", lang).replace("{error}", errorText),
       true
     )
   }
@@ -269,12 +269,11 @@ export async function pasteTerminalClipboard(
     if (!text) return
     await invoke("write_to_pty", { sessionId, input: text })
     try { term.focus() } catch {}
-    showToast?.(lang === "de" ? "Aus Zwischenablage eingefügt" : "Pasted from clipboard")
+    showToast?.(t("pastedFromClipboard", lang))
   } catch (e: any) {
+    const errorText = String(e)
     showToast?.(
-      lang === "de"
-        ? `Einfügen fehlgeschlagen: ${String(e)}`
-        : `Paste failed: ${String(e)}`,
+      t("pasteFailed", lang).replace("{error}", errorText),
       true
     )
   }

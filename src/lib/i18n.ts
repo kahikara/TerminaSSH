@@ -177,6 +177,10 @@ export const translations: Record<string, Record<string, string>> = {
     closePane: "Pane schließen",
     split: "Split",
     notes: "Notizen",
+    selectionCopied: "Auswahl kopiert",
+    copyFailed: "Kopieren fehlgeschlagen: {error}",
+    pastedFromClipboard: "Aus Zwischenablage eingefügt",
+    pasteFailed: "Einfügen fehlgeschlagen: {error}",
     sidebarHint: "Wähle eine Verbindung oder lege eine neue an."
   },
   en: {
@@ -357,6 +361,10 @@ export const translations: Record<string, Record<string, string>> = {
     closePane: "Close pane",
     split: "Split",
     notes: "Notes",
+    selectionCopied: "Selection copied",
+    copyFailed: "Copy failed: {error}",
+    pastedFromClipboard: "Pasted from clipboard",
+    pasteFailed: "Paste failed: {error}",
     sidebarHint: "Choose a connection or create a new one."
   }
 };
