@@ -144,12 +144,19 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
           <div className={bottomGridClass}>
             {showActiveSessionsCard && (
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] overflow-hidden">
-                <div className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border-subtle)]">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)]">
-                    <Terminal size={17} className="text-emerald-400" />
+                <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-[var(--border-subtle)]">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)]">
+                      <Terminal size={17} className="text-emerald-400" />
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-main)]">
+                      {t("activeSessions", lang)}
+                    </div>
                   </div>
-                  <div className="text-sm font-bold text-[var(--text-main)]">
-                    {t("activeSessions", lang)}
+                  <div className="text-xs text-[var(--text-muted)] whitespace-nowrap">
+                    {lang === "de"
+                      ? `${activeCount} ${activeCount === 1 ? "Sitzung" : "Sitzungen"}`
+                      : `${activeCount} ${activeCount === 1 ? "session" : "sessions"}`}
                   </div>
                 </div>
 
@@ -193,20 +200,24 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                   )}
                 </div>
 
-                <div className="px-4 pb-4 text-xs text-[var(--text-muted)]">
-                  {lang === "de" ? `${activeCount} offene Sessions` : `${activeCount} open sessions`}
-                </div>
               </div>
             )}
 
             {showRecentConnectionsCard && (
               <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] overflow-hidden">
-                <div className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border-subtle)]">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)]">
-                    <Clock size={17} className="text-[var(--accent)]" />
+                <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-[var(--border-subtle)]">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)]">
+                      <Clock size={17} className="text-[var(--accent)]" />
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-main)]">
+                      {recentTitle}
+                    </div>
                   </div>
-                  <div className="text-sm font-bold text-[var(--text-main)]">
-                    {recentTitle}
+                  <div className="text-xs text-[var(--text-muted)] whitespace-nowrap">
+                    {lang === "de"
+                      ? `${recentCount} ${recentCount === 1 ? "Host" : "Hosts"}`
+                      : `${recentCount} ${recentCount === 1 ? "host" : "hosts"}`}
                   </div>
                 </div>
 
@@ -252,9 +263,6 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                   )}
                 </div>
 
-                <div className="px-4 pb-4 text-xs text-[var(--text-muted)]">
-                  {lang === "de" ? `${recentCount} letzte Hosts` : `${recentCount} recent hosts`}
-                </div>
               </div>
             )}
           </div>
