@@ -3224,7 +3224,17 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
         .split_whitespace()
         .next()
         .filter(|value| *value != STATUS_SPLIT_MARKER)
-        .map(|s| s.to_string());
+        .and_then(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+
+            match trimmed.parse::<f64>() {
+                Ok(_) => Some(trimmed.to_string()),
+                Err(_) => None,
+            }
+        });
 
     let mem_total_kib = parse_meminfo_value_kib(mem_part, "MemTotal");
     let mem_available_kib = parse_meminfo_value_kib(mem_part, "MemAvailable");
