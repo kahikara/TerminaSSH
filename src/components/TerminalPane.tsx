@@ -284,9 +284,9 @@ const paneHeaderBtnStyle: CSSProperties = {
   transition: "background 140ms ease, color 140ms ease, border-color 140ms ease"
 }
 
-function getPaneLabel(server: TerminalServer | null | undefined) {
-  if (!server) return "Unknown"
-  if (isLocalServer(server)) return "Local Terminal"
+function getPaneLabel(server: TerminalServer | null | undefined, lang = "en") {
+  if (!server) return t("unknown", lang)
+  if (isLocalServer(server)) return t("localTerminal", lang)
   const user = server?.username || "user"
   const host = server?.host || server?.name || "host"
   return `${user}@${host}`
@@ -795,7 +795,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
               textOverflow: "ellipsis"
             }}
           >
-            {isLocalServer(activePaneServer) ? "Local Session" : `${activePaneServer?.username || ""}@${activePaneServer?.host || ""}`}
+            {isLocalServer(activePaneServer) ? t("localSession", settings?.lang || "en") : `${activePaneServer?.username || ""}@${activePaneServer?.host || ""}`}
           </div>
 
           {!isLocalServer(activePaneServer) && (
@@ -814,7 +814,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                 whiteSpace: "nowrap",
                 flexShrink: 0
               }}
-              title="Ping refreshes every 3 seconds"
+              title={t("pingRefreshHint", settings?.lang || "en")}
             >
               <span
                 style={{
@@ -832,7 +832,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                           : "var(--danger, #ef4444)"
                 }}
               />
-              <span>{pingMs === "timeout" ? "timeout" : `${pingMs} ms`}</span>
+              <span>{pingMs === "timeout" ? t("timeout", settings?.lang || "en") : `${pingMs} ms`}</span>
             </div>
           )}
         </div>
@@ -865,7 +865,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   return next
                 })
               }}
-              title="SFTP"
+              title={t("sftp", settings?.lang || "en")}
               style={{
                 ...toolBtnStyle,
                 background: showSftp ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -873,7 +873,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
               }}
             >
               <Folder size={13} />
-              <span>SFTP</span>
+              <span>{t("sftp", settings?.lang || "en")}</span>
             </button>
           )}
 
@@ -890,7 +890,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   return next
                 })
               }}
-              title="Snippets"
+              title={t("snippets", settings?.lang || "en")}
               style={{
                 ...toolBtnStyle,
                 background: showSnippets ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -898,7 +898,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
               }}
             >
               <ScrollText size={14} />
-              <span>Snippets</span>
+              <span>{t("snippets", settings?.lang || "en")}</span>
             </button>
           )}
 
@@ -915,7 +915,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   return next
                 })
               }}
-              title="Tunnels"
+              title={t("tunnels", settings?.lang || "en")}
               style={{
                 ...toolBtnStyle,
                 background: showTunnels ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -923,7 +923,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
               }}
             >
               <Cable size={13} />
-              <span>Tunnels</span>
+              <span>{t("tunnels", settings?.lang || "en")}</span>
             </button>
           )}
 
@@ -940,7 +940,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   return next
                 })
               }}
-              title="Notes"
+              title={t("notes", settings?.lang || "en")}
               style={{
                 ...toolBtnStyle,
                 background: showNotes ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -948,7 +948,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
               }}
             >
               <FileText size={13} />
-              <span>Notes</span>
+              <span>{t("notes", settings?.lang || "en")}</span>
             </button>
           )}
 
@@ -956,7 +956,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
             <>
               <button
                 onClick={() => setSplitDirection((v) => v === "vertical" ? "horizontal" : "vertical")}
-                title="Toggle split direction"
+                title={t("splitDirection", settings?.lang || "en")}
                 style={toolBtnStyle}
               >
                 {splitDirection === "vertical" ? <SplitSquareVertical size={13} /> : <SplitSquareHorizontal size={13} />}
@@ -964,7 +964,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
 
               <button
                 onClick={toggleSplit}
-                title="Split View"
+                title={t("splitView", settings?.lang || "en")}
                 style={{
                   ...toolBtnStyle,
                   background: isSplit ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
@@ -972,7 +972,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                 }}
               >
                 <Columns size={13} />
-                <span>Split</span>
+                <span>{t("split", settings?.lang || "en")}</span>
               </button>
             </>
           )}
@@ -1045,7 +1045,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                     textOverflow: "ellipsis"
                   }}
                 >
-                  {getPaneLabel(paneServers[0] || server)}
+                  {getPaneLabel(paneServers[0] || server, settings?.lang || "en")}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                   <div
@@ -1057,7 +1057,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                       color: focusedPaneId === paneIds[0] ? "var(--accent)" : "var(--text-muted)"
                     }}
                   >
-                    {focusedPaneId === paneIds[0] ? "Active" : "Passive"}
+                    {focusedPaneId === paneIds[0] ? t("active", settings?.lang || "en") : t("passive", settings?.lang || "en")}
                   </div>
 
                   <button
@@ -1065,7 +1065,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                       e.stopPropagation()
                       swapPanes()
                     }}
-                    title="Swap panes"
+                    title={t("swapPanes", settings?.lang || "en")}
                     style={paneHeaderBtnStyle}
                   >
                     <ArrowLeftRight size={12} />
@@ -1076,7 +1076,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                       e.stopPropagation()
                       closePane(paneIds[0])
                     }}
-                    title="Close pane"
+                    title={t("closePane", settings?.lang || "en")}
                     style={paneHeaderBtnStyle}
                   >
                     <X size={12} />
@@ -1156,7 +1156,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                         textOverflow: "ellipsis"
                       }}
                     >
-                      {getPaneLabel(paneServers[1] || paneServers[0] || server)}
+                      {getPaneLabel(paneServers[1] || paneServers[0] || server, settings?.lang || "en")}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                       <div
@@ -1168,7 +1168,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                           color: focusedPaneId === paneIds[1] ? "var(--accent)" : "var(--text-muted)"
                         }}
                       >
-                        {focusedPaneId === paneIds[1] ? "Active" : "Passive"}
+                        {focusedPaneId === paneIds[1] ? t("active", settings?.lang || "en") : t("passive", settings?.lang || "en")}
                       </div>
 
                       <button
@@ -1176,7 +1176,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                           e.stopPropagation()
                           swapPanes()
                         }}
-                        title="Swap panes"
+                        title={t("swapPanes", settings?.lang || "en")}
                         style={paneHeaderBtnStyle}
                       >
                         <ArrowLeftRight size={12} />
@@ -1187,7 +1187,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                           e.stopPropagation()
                           closePane(paneIds[1])
                         }}
-                        title="Close pane"
+                        title={t("closePane", settings?.lang || "en")}
                         style={paneHeaderBtnStyle}
                       >
                         <X size={12} />

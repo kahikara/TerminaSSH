@@ -1094,7 +1094,7 @@ export default function App() {
               <button
                 onClick={() => setActiveTabId(null)}
                 className="ui-icon-btn shrink-0"
-                title="Home"
+                title={t('home', settings.lang)}
               >
                 <Home size={18} />
               </button>
@@ -1113,7 +1113,7 @@ export default function App() {
                 Termina SSH
               </span>
             </div>
-            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0 justify-self-end" title="Home">
+            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0 justify-self-end" title={t('home', settings.lang)}>
               <Home size={18} />
             </button>
           </div>
@@ -1185,7 +1185,7 @@ export default function App() {
                       onContextMenu={(e) => openSidebarContextMenu(e, localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, localItem)}
                       onClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
                       onDoubleClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, { forceNewTab: true })}
-                      title={conn.name}
+                      title={localItem ? t('localTerminal', settings.lang) : conn.name}
                       className={`group/item flex items-center justify-center w-full h-9 rounded-xl border transition-all ${
                         active
                           ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
@@ -1236,7 +1236,7 @@ export default function App() {
                       >
                         <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
                       </div>
-                      <span className="truncate font-medium min-w-0">Local Terminal</span>
+                      <span className="truncate font-medium min-w-0">{t('localTerminal', settings.lang)}</span>
                     </button>
                   </div>
                 )}
@@ -1388,8 +1388,8 @@ export default function App() {
               onClick={toggleSidebarCollapse}
               className="ui-icon-btn shrink-0"
               title={isSidebarCollapsed
-                ? (settings.lang === 'de' ? 'Sidebar ausklappen' : 'Expand sidebar')
-                : (settings.lang === 'de' ? 'Sidebar einklappen' : 'Collapse sidebar')}
+                ? t('sidebarExpand', settings.lang)
+                : t('sidebarCollapse', settings.lang)}
             >
               {isSidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
             </button>
@@ -1505,7 +1505,7 @@ export default function App() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
             >
               {sidebarContextMenu.isLocal ? <TermIcon size={14} /> : <Server size={14} />}
-              <span>{settings.lang === 'de' ? 'Öffnen' : 'Open'}</span>
+              <span>{t('open', settings.lang)}</span>
             </button>
 
             <button
@@ -1516,7 +1516,7 @@ export default function App() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
             >
               <Plus size={14} />
-              <span>{settings.lang === 'de' ? 'In neuem Tab öffnen' : 'Open in new tab'}</span>
+              <span>{t('openInNewTab', settings.lang)}</span>
             </button>
 
             <button
@@ -1527,7 +1527,7 @@ export default function App() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
             >
               <Folder size={14} />
-              <span>{settings.lang === 'de' ? 'Im Split öffnen' : 'Open in split'}</span>
+              <span>{t('openInSplit', settings.lang)}</span>
             </button>
 
             {!sidebarContextMenu.isLocal && (
@@ -1539,7 +1539,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <SquarePen size={14} />
-                  <span>{settings.lang === 'de' ? 'Bearbeiten' : 'Edit'}</span>
+                  <span>{t('edit', settings.lang)}</span>
                 </button>
 
                 <button
@@ -1547,7 +1547,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <Plus size={14} />
-                  <span>{settings.lang === 'de' ? 'Duplizieren' : 'Duplicate'}</span>
+                  <span>{t('duplicate', settings.lang)}</span>
                 </button>
 
                 <button
@@ -1555,7 +1555,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
                 >
                   <X size={14} />
-                  <span>{settings.lang === 'de' ? 'Löschen' : 'Delete'}</span>
+                  <span>{t('delete', settings.lang)}</span>
                 </button>
               </>
             )}
