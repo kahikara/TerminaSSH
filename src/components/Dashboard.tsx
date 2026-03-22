@@ -91,7 +91,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                 <Zap className="text-[var(--accent)]" size={17} />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-[var(--text-main)]">{t("quickConnect", lang)}</h2>
+                <h2 className="text-[13px] font-semibold text-[var(--text-muted)]">{t("quickConnect", lang)}</h2>
               </div>
             </div>
 
@@ -101,7 +101,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                 placeholder={t("username", lang)}
                 value={qc.user}
                 onChange={(e) => setQc({ ...qc, user: e.target.value })}
-                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
+                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
               />
 
               <input
@@ -109,7 +109,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                 placeholder="host / ip / domain"
                 value={qc.host}
                 onChange={(e) => setQc({ ...qc, host: e.target.value })}
-                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
+                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
                 autoFocus
               />
 
@@ -126,7 +126,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                     port: Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 22
                   });
                 }}
-                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
+                className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
               />
 
               <button
