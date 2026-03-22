@@ -20,6 +20,7 @@ import {
   EyeOff
 } from "lucide-react"
 import { t } from "../lib/i18n"
+import { getPathBaseName } from "../lib/settingsHelpers"
 
 type FileItem = {
   name: string
@@ -622,7 +623,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     let rememberedRenameMode = false
 
     for (const local of pathsToUpload) {
-      const name = local.split("/").pop() || "upload.tmp"
+      const name = getPathBaseName(local) || "upload.tmp"
       const exists = files.some((f) => !f.is_dir && f.name === name)
 
       if (!exists) {
