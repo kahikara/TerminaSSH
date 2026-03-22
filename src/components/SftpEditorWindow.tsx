@@ -204,6 +204,8 @@ export default function SftpEditorWindow() {
   }, [])
 
   const lang = initialSettings?.lang || "de"
+  const themeName = String(initialSettings?.theme || "catppuccin")
+  const isLightTheme = themeName === "light"
 
   const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(false)
   const [isWindowMaximized, setIsWindowMaximized] = useState(false)
@@ -990,6 +992,38 @@ export default function SftpEditorWindow() {
           )
         : ""
 
+  const editorRootBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-app) 96%, white)"
+    : "color-mix(in srgb, var(--bg-app, #020617) 80%, #4a4d52)"
+
+  const editorChromeBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-sidebar) 86%, white)"
+    : "color-mix(in srgb, var(--bg-sidebar, #111827) 72%, #565a61)"
+
+  const editorHeaderBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-sidebar) 90%, white)"
+    : "color-mix(in srgb, var(--bg-sidebar, #111827) 76%, #4e535a)"
+
+  const editorSearchBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-app) 92%, var(--bg-sidebar))"
+    : "color-mix(in srgb, var(--bg-app, #020617) 78%, #4c5057)"
+
+  const editorGutterBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-sidebar) 82%, white)"
+    : "color-mix(in srgb, var(--bg-sidebar, #0f172a) 72%, #50545b)"
+
+  const editorTextareaBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-app) 98%, white)"
+    : "color-mix(in srgb, var(--bg-app, #020617) 74%, #3b3f45)"
+
+  const editorFooterBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-sidebar) 90%, white)"
+    : "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))"
+
+  const editorDialogBackground = isLightTheme
+    ? "color-mix(in srgb, var(--bg-app) 96%, white)"
+    : "color-mix(in srgb, var(--bg-app) 92%, black)"
+
   return (
     <div
       style={{
@@ -997,7 +1031,7 @@ export default function SftpEditorWindow() {
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "color-mix(in srgb, var(--bg-app, #020617) 80%, #4a4d52)",
+        background: editorRootBackground,
         color: "var(--text-main, #e5e7eb)",
         position: "relative",
         boxSizing: "border-box",
@@ -1025,7 +1059,7 @@ export default function SftpEditorWindow() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 10,
-          background: "color-mix(in srgb, var(--bg-sidebar, #111827) 72%, #565a61)",
+          background: editorChromeBackground,
           userSelect: "none",
           cursor: useCustomWindowChrome ? "grab" : "default"
         }}
@@ -1170,7 +1204,7 @@ export default function SftpEditorWindow() {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 10,
-          background: "color-mix(in srgb, var(--bg-sidebar, #111827) 76%, #4e535a)"
+          background: editorHeaderBackground
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -1274,7 +1308,7 @@ export default function SftpEditorWindow() {
           style={{
             padding: "10px 12px",
             borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-            background: "color-mix(in srgb, var(--bg-app, #020617) 78%, #4c5057)",
+            background: editorSearchBackground,
             display: "flex",
             flexDirection: "column",
             gap: 8
@@ -1352,7 +1386,7 @@ export default function SftpEditorWindow() {
                   width: gutterWidth,
                   overflow: "hidden",
                   borderRight: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-                  background: "color-mix(in srgb, var(--bg-sidebar, #0f172a) 72%, #50545b)",
+                  background: editorGutterBackground,
                   color: "var(--text-muted, #94a3b8)",
                   fontFamily: "JetBrains Mono, monospace",
                   fontSize: EDITOR_FONT_SIZE,
@@ -1400,7 +1434,7 @@ export default function SftpEditorWindow() {
                 boxSizing: "border-box",
                 border: "none",
                 outline: "none",
-                background: "color-mix(in srgb, var(--bg-app, #020617) 74%, #3b3f45)",
+                background: editorTextareaBackground,
                 color: "var(--text-main, #e5e7eb)",
                 padding: `${EDITOR_PADDING_Y}px ${EDITOR_PADDING_X}px`,
                 fontFamily: "JetBrains Mono, monospace",
@@ -1418,7 +1452,7 @@ export default function SftpEditorWindow() {
         style={{
           padding: "8px 12px",
           borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
+          background: editorFooterBackground,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -1462,7 +1496,7 @@ export default function SftpEditorWindow() {
               maxWidth: "100%",
               borderRadius: 16,
               border: "1px solid rgba(245,158,11,0.25)",
-              background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+              background: editorDialogBackground,
               color: "var(--text-main, #e5e7eb)",
               boxShadow: "0 18px 60px rgba(0,0,0,0.38)",
               padding: 16
@@ -1517,7 +1551,7 @@ export default function SftpEditorWindow() {
               maxWidth: "100%",
               borderRadius: 16,
               border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-              background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+              background: editorDialogBackground,
               color: "var(--text-main, #e5e7eb)",
               boxShadow: "0 18px 60px rgba(0,0,0,0.38)",
               padding: 16
