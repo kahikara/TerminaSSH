@@ -28,11 +28,14 @@ It aims to stay lightweight, functional, and native feeling across platforms whi
 * 💻 **Local and remote terminal workflow**  
   Use Termina SSH not only for remote servers, but also as a clean local terminal workspace.
 
+* ↔️ **Split terminal workflow**  
+  Work with multiple terminals side by side and switch between focused single pane and split based workflows.
+
 * 📂 **Integrated SFTP browser and remote editor**  
-  Browse remote files, upload content, and open files directly inside the app.
+  Browse remote files, upload content, edit remote files directly inside the app, and stay in one workflow.
 
 * 🧠 **Session focused workflow**  
-  Tabs, recent connections, quick access, and a layout built around actually getting work done.
+  Tabs, recent connections, quick access, split panes, and a layout built around actually getting work done.
 
 * 🔑 **SSH key and auth friendly**  
   Works with common SSH authentication flows and is designed to stay practical instead of getting in your way.
@@ -65,6 +68,8 @@ It aims to stay lightweight, functional, and native feeling across platforms whi
 * SSH connections with saved profiles
 * Local terminal
 * Tab based workflow
+* Split terminal workflow
+* Quick Connect
 * SFTP browser
 * Remote file editing
 * Snippets
@@ -76,6 +81,7 @@ It aims to stay lightweight, functional, and native feeling across platforms whi
 * Copy path and open folder actions in export dialogs
 * Theme support
 * System tray support
+* Cross platform release builds
 
 ## 🛠 Tech Stack
 
@@ -87,15 +93,15 @@ It aims to stay lightweight, functional, and native feeling across platforms whi
 
 ## 📦 Installation
 
-Prebuilt binaries may be available in **[Releases](../../releases)** depending on the release.
+Prebuilt binaries are available in **[Releases](../../releases)**.
 
-### Currently provided release assets can include
+### Current release assets
 
 * Linux: `.deb`, `.rpm`, `.AppImage`
 * Windows: `setup.exe`
 * macOS: `.dmg`
 
-Asset availability can vary per release while packaging and platform testing continue to improve.
+Release artifacts are built through GitHub Actions for more reproducible cross platform packaging.
 
 ## 💻 Development
 
@@ -129,8 +135,8 @@ Planned polish and future improvements include:
 
 * improved connection UX
 * richer theme customization
-* smarter SFTP editor behavior for binary files
-* more advanced split workspace workflow
+* smarter tunnel handling for heavier workloads
+* continued SFTP and editor polish
 * continued cross platform polish and packaging improvements
 
 ## ☕ Support the Project
