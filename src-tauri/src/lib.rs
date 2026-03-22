@@ -250,6 +250,55 @@ pub struct TunnelRuntimeEntry {
     _handle: JoinHandle<()>,
 }
 
+
+#[cfg(target_os = "linux")]
+fn maybe_relaunch_appimage_with_wayland_preload() {
+    use std::path::Path;
+    use std::process::Command;
+
+    let appimage = match std::env::var("APPIMAGE") {
+        Ok(value) if !value.trim().is_empty() => value,
+        _ => return,
+    };
+
+    if std::env::var_os("TERMSSH_APPIMAGE_RELAUNCHED").is_some() {
+        return;
+    }
+
+    if std::env::var_os("LD_PRELOAD").is_some() {
+        return;
+    }
+
+    let candidates = [
+        "/usr/lib/libwayland-client.so",
+        "/usr/lib64/libwayland-client.so",
+        "/lib/x86_64-linux-gnu/libwayland-client.so.0",
+        "/usr/lib/x86_64-linux-gnu/libwayland-client.so.0",
+        "/lib64/libwayland-client.so.0",
+    ];
+
+    let preload = candidates
+        .iter()
+        .find(|candidate| Path::new(candidate).exists())
+        .map(|candidate| (*candidate).to_string());
+
+    let Some(preload) = preload else {
+        return;
+    };
+
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    let spawn_result = Command::new(&appimage)
+        .args(args)
+        .env("LD_PRELOAD", &preload)
+        .env("TERMSSH_APPIMAGE_RELAUNCHED", "1")
+        .spawn();
+
+    if spawn_result.is_ok() {
+        std::process::exit(0);
+    }
+}
+
 fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBool>) {
     if !sent.swap(true, Ordering::Relaxed) {
         let _ = app.emit(&format!("term-exit-{}", session_id), true);
@@ -3267,6 +3316,9 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    maybe_relaunch_appimage_with_wayland_preload();
+
     if let Err(e) = init_db() {
         eprintln!("Database init failed: {}", e);
     }
