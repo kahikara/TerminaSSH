@@ -258,6 +258,7 @@ fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBo
 
 const APP_DIR_NAME: &str = "terminassh";
 const LEGACY_APP_DIR_NAME: &str = "ssh-mgr";
+const SSH_CONNECT_TIMEOUT_SECS: u64 = 5;
 
 fn home_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
@@ -507,8 +508,7 @@ fn probe_host_key(
     host: &str,
     port: u16,
 ) -> Result<(Session, Vec<u8>, HostKeyType, String), String> {
-    let tcp = TcpStream::connect(format!("{}:{}", host, port))
-        .map_err(|e| format!("TCP Error: {}", e))?;
+    let tcp = tcp_connect_with_timeout(host, port, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))?;
 
     let mut sess = Session::new().map_err(|e| e.to_string())?;
     sess.set_tcp_stream(tcp);
@@ -640,6 +640,34 @@ fn try_auth_with_default_keys(sess: &Session, username: &str) -> bool {
 
 fn current_export_timestamp() -> String {
     Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+fn tcp_connect_with_timeout(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
+    let addr_str = format!("{}:{}", host, port);
+    let addrs: Vec<_> = addr_str
+        .to_socket_addrs()
+        .map_err(|e| format!("TCP Error: {}", e))?
+        .collect();
+
+    if addrs.is_empty() {
+        return Err(format!("TCP Error: Could not resolve {}", addr_str));
+    }
+
+    let mut last_err: Option<std::io::Error> = None;
+
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => return Ok(stream),
+            Err(err) => last_err = Some(err),
+        }
+    }
+
+    Err(format!(
+        "TCP Error: {}",
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| format!("Could not connect to {}", addr_str))
+    ))
 }
 
 fn authenticate_session(
@@ -1989,8 +2017,7 @@ fn connect_quick_session(
     private_key: String,
     passphrase: String,
 ) -> Result<Session, String> {
-    let tcp = TcpStream::connect(format!("{}:{}", host, port))
-        .map_err(|e| format!("TCP Error: {}", e))?;
+    let tcp = tcp_connect_with_timeout(&host, port, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))?;
 
     let mut sess = Session::new().map_err(|e| e.to_string())?;
     sess.set_tcp_stream(tcp);
@@ -2037,8 +2064,7 @@ fn connect_ssh_session_with_password_override(
     };
     let passphrase = decrypt_pw(&enc_passphrase)?;
 
-    let tcp = TcpStream::connect(format!("{}:{}", host, port))
-        .map_err(|e| format!("TCP Error: {}", e))?;
+    let tcp = tcp_connect_with_timeout(&host, port, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))?;
     let mut sess = Session::new().map_err(|e| e.to_string())?;
     sess.set_tcp_stream(tcp);
     sess.handshake()
