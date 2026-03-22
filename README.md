@@ -87,21 +87,15 @@ It aims to stay lightweight, functional, and native feeling across platforms whi
 
 ## 📦 Installation
 
-Prebuilt binaries are available in **[Releases](../../releases)**.
+Prebuilt binaries may be available in **[Releases](../../releases)** depending on the release.
 
-### Linux
+### Currently provided release assets can include
 
-* `.deb`
-* `.rpm`
-* `.AppImage`
+* Linux: `.deb`, `.rpm`, `.AppImage`
+* Windows: `setup.exe`
+* macOS: `.dmg`
 
-### macOS
-
-* `.dmg`
-
-### Windows
-
-* `setup.exe`
+Asset availability can vary per release while packaging and platform testing continue to improve.
 
 ## 💻 Development
 
@@ -134,10 +128,10 @@ The generated release artifacts will be located in:
 Planned polish and future improvements include:
 
 * improved connection UX
-* better host fingerprint handling
-* richer theme support including light mode
+* richer theme customization
 * smarter SFTP editor behavior for binary files
 * more advanced split workspace workflow
+* continued cross platform polish and packaging improvements
 
 ## ☕ Support the Project
 
