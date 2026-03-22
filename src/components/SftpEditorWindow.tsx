@@ -1078,7 +1078,7 @@ export default function SftpEditorWindow() {
         </div>
 
         {useCustomWindowChrome && (
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
@@ -1090,9 +1090,9 @@ export default function SftpEditorWindow() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 24,
-                height: 24,
-                borderRadius: 6,
+                width: 22,
+                height: 22,
+                borderRadius: 4,
                 border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
                 background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
                 color: "var(--text-muted, #94a3b8)",
@@ -1101,7 +1101,7 @@ export default function SftpEditorWindow() {
               }}
               title={lang === "de" ? "Minimieren" : "Minimize"}
             >
-              <Minus size={12} />
+              <Minus size={11} />
             </button>
 
             <button
@@ -1121,9 +1121,9 @@ export default function SftpEditorWindow() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 24,
-                height: 24,
-                borderRadius: 6,
+                width: 22,
+                height: 22,
+                borderRadius: 4,
                 border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
                 background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
                 color: "var(--text-muted, #94a3b8)",
@@ -1134,7 +1134,7 @@ export default function SftpEditorWindow() {
                 ? (lang === "de" ? "Wiederherstellen" : "Restore")
                 : (lang === "de" ? "Maximieren" : "Maximize")}
             >
-              <Square size={10.5} />
+              <Square size={9.5} />
             </button>
 
             <button
@@ -1144,9 +1144,9 @@ export default function SftpEditorWindow() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 24,
-                height: 24,
-                borderRadius: 6,
+                width: 22,
+                height: 22,
+                borderRadius: 4,
                 border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
                 background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
                 color: "var(--text-muted, #94a3b8)",
@@ -1155,7 +1155,7 @@ export default function SftpEditorWindow() {
               }}
               title={lang === "de" ? "Schließen" : "Close"}
             >
-              <X size={12} />
+              <X size={11} />
             </button>
           </div>
         )}

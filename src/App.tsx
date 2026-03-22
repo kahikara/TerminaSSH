@@ -1038,17 +1038,17 @@ export default function App() {
               </span>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-[5px]">
               <button
                 data-window-control="true"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => {
                   void invoke('window_minimize').catch(() => {})
                 }}
-                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
+                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
                 title={settings.lang === 'de' ? 'Minimieren' : 'Minimize'}
               >
-                <Minus size={12} />
+                <Minus size={11} />
               </button>
 
               <button
@@ -1059,10 +1059,10 @@ export default function App() {
                     .then((value) => setIsWindowMaximized(Boolean(value)))
                     .catch(() => {})
                 }}
-                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
+                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
                 title={settings.lang === 'de' ? 'Maximieren' : 'Maximize'}
               >
-                <Square size={10.5} className={isWindowMaximized ? 'scale-90' : ''} />
+                <Square size={9.5} className={isWindowMaximized ? 'scale-90' : ''} />
               </button>
 
               <button
@@ -1071,10 +1071,10 @@ export default function App() {
                 onClick={() => {
                   void invoke('window_close_main').catch(() => {})
                 }}
-                className="flex items-center justify-center w-6 h-6 rounded-md border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
+                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
                 title={settings.lang === 'de' ? 'Schließen' : 'Close'}
               >
-                <X size={12} />
+                <X size={11} />
               </button>
             </div>
           </div>
