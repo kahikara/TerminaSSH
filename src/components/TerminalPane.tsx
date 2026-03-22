@@ -336,12 +336,13 @@ export default function TerminalPane(props: TerminalPaneProps) {
     paneServers[focusedPaneIndex] ||
     paneServers[0] ||
     server
+  const activePaneIsLocal = isLocalServer(activePaneServer)
   const isActive = Boolean(props.isActive)
   const showSplit = settings.showSplit !== false && !isMultiServerSplit
-  const showSftpBtn = settings.showSftp !== false && !isLocalServer(server)
-  const showTunnelsBtn = settings.showTunnels !== false && !isLocalServer(server)
-  const showSnippetsBtn = settings.showSnippets !== false && !isLocalServer(server)
-  const showNotesBtn = settings.showNotes !== false && !isLocalServer(server)
+  const showSftpBtn = settings.showSftp !== false && !activePaneIsLocal
+  const showTunnelsBtn = settings.showTunnels !== false && !activePaneIsLocal
+  const showSnippetsBtn = settings.showSnippets !== false && !activePaneIsLocal
+  const showNotesBtn = settings.showNotes !== false && !activePaneIsLocal
   const showSearchBtn = settings.showSearch !== false
   const showStatusBar = settings.showStatusBar !== false
   const showStatusBarSession = settings.showStatusBarSession !== false
