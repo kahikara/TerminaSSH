@@ -10,7 +10,8 @@ import {
   Cable,
   ChevronRight,
   Play,
-  Square
+  Square,
+  AlertTriangle
 } from "lucide-react"
 
 type TunnelItem = {
@@ -405,6 +406,37 @@ export default function TunnelPanel({
         <div className="ui-subtitle" style={{ lineHeight: 1.45 }}>
           Local tunnels for this server. Left side is your PC. Right side is the target reachable from the server.
         </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid rgba(245, 158, 11, 0.28)",
+            background: "rgba(245, 158, 11, 0.08)",
+            color: "var(--text-main)"
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8
+            }}
+          >
+            <AlertTriangle size={15} style={{ marginTop: 1, flexShrink: 0, color: "rgb(245, 158, 11)" }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35 }}>
+                {server?.lang === "de" ? "Hinweis zur Nutzung" : "Usage note"}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, color: "var(--text-muted)" }}>
+                {server?.lang === "de"
+                  ? "Diese Tunnel sind am besten für Datenbank Clients, SSH Tools und eher einzelne Verbindungen geeignet. Browser und Web UIs können viele parallele Verbindungen öffnen und sind mit dieser einfachen Tunnel Art nicht ideal."
+                  : "These tunnels are best for database clients, SSH tools, and mostly single connection apps. Browsers and web UIs can open many parallel connections and are not ideal for this simple tunnel mode."}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
@@ -537,6 +569,11 @@ export default function TunnelPanel({
                 <div className="ui-title">{editingItem ? (server?.lang === "de" ? "Tunnel bearbeiten" : "Edit tunnel") : (server?.lang === "de" ? "Neuer Tunnel" : "New tunnel")}</div>
                 <div className="ui-subtitle" style={{ marginTop: 2 }}>
                   {server?.lang === "de" ? "Wiederverwendbares lokales Port Forwarding für diesen Server" : "Reusable local port forwarding for this server"}
+                </div>
+                <div className="ui-subtitle" style={{ marginTop: 8, lineHeight: 1.45 }}>
+                  {server?.lang === "de"
+                    ? "Empfohlen für Datenbank Clients und andere eher einzelne Verbindungen. Für Browser und Web UIs besser mit Vorsicht verwenden."
+                    : "Recommended for database clients and other mostly single connection tools. Use with extra care for browsers and web UIs."}
                 </div>
               </div>
 
