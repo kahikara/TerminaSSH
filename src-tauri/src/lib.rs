@@ -851,7 +851,7 @@ fn add_snippet(name: String, command: String, app: AppHandle) -> Result<String, 
     )
     .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
-    Ok("Snippet gespeichert!".to_string())
+    Ok("Snippet saved".to_string())
 }
 #[tauri::command]
 fn update_snippet(
@@ -867,7 +867,7 @@ fn update_snippet(
     )
     .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
-    Ok("Snippet aktualisiert!".to_string())
+    Ok("Snippet updated".to_string())
 }
 #[tauri::command]
 fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
@@ -875,7 +875,7 @@ fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
     conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
-    Ok("Snippet gelöscht!".to_string())
+    Ok("Snippet deleted".to_string())
 }
 
 #[tauri::command]
@@ -957,7 +957,7 @@ fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<Stri
     .map_err(|e| e.to_string())?;
     let _ = app.emit("connection-saved", ());
     Ok(format!(
-        "Verbindung '{}' sicher gespeichert!",
+        "Connection '{}' saved",
         connection.name
     ))
 }
@@ -1012,7 +1012,7 @@ fn update_connection(
     .map_err(|e| e.to_string())?;
     let _ = old_name;
     let _ = app.emit("connection-saved", ());
-    Ok(format!("Verbindung '{}' aktualisiert!", connection.name))
+    Ok(format!("Connection '{}' updated", connection.name))
 }
 
 #[tauri::command]
@@ -1034,7 +1034,7 @@ fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, St
     conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     let _ = app.emit("connection-saved", ());
-    Ok(format!("Verbindung '{}' gelöscht!", name))
+    Ok(format!("Connection '{}' deleted", name))
 }
 
 fn read_public_key_for_path(private_key_path: &str) -> String {
@@ -2039,7 +2039,7 @@ fn connect_quick_session(
         .map_err(|e| format!("Handshake Error: {}", e))?;
 
     if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
-        return Err("Authentifizierung fehlgeschlagen!".to_string());
+        return Err("Authentication failed".to_string());
     }
 
     Ok(sess)
@@ -2066,7 +2066,7 @@ fn connect_ssh_session_with_password_override(
             },
         )
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => "Verbindung nicht gefunden".to_string(),
+            rusqlite::Error::QueryReturnedNoRows => "Connection not found".to_string(),
             _ => e.to_string(),
         })?;
 
@@ -2085,7 +2085,7 @@ fn connect_ssh_session_with_password_override(
         .map_err(|e| format!("Handshake Error: {}", e))?;
 
     if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
-        return Err("Authentifizierung fehlgeschlagen!".to_string());
+        return Err("Authentication failed".to_string());
     }
     Ok(sess)
 }
@@ -2732,7 +2732,7 @@ fn sftp_mkdir(id: i32, path: String) -> Result<String, String> {
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     sftp.mkdir(Path::new(&path), 0o755)
         .map_err(|e| e.to_string())?;
-    Ok("Ordner erstellt".to_string())
+    Ok("Folder created".to_string())
 }
 
 #[tauri::command]
@@ -2741,7 +2741,7 @@ fn sftp_rename(id: i32, old_path: String, new_path: String) -> Result<String, St
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     sftp.rename(Path::new(&old_path), Path::new(&new_path), None)
         .map_err(|e| e.to_string())?;
-    Ok("Umbenannt".to_string())
+    Ok("Renamed".to_string())
 }
 
 #[tauri::command]
@@ -2754,7 +2754,7 @@ fn sftp_delete(id: i32, path: String) -> Result<String, String> {
     } else {
         sftp.unlink(Path::new(&path)).map_err(|e| e.to_string())?;
     }
-    Ok("Gelöscht".to_string())
+    Ok("Deleted".to_string())
 }
 
 #[tauri::command]
@@ -2778,7 +2778,7 @@ fn sftp_write_file(id: i32, path: String, content_base64: String) -> Result<Stri
         .map_err(|e| format!("Invalid base64 content: {}", e))?;
     let mut file = sftp.create(Path::new(&path)).map_err(|e| e.to_string())?;
     file.write_all(&bytes).map_err(|e| e.to_string())?;
-    Ok("Gespeichert".to_string())
+    Ok("Saved".to_string())
 }
 
 #[tauri::command]
@@ -2894,7 +2894,7 @@ async fn sftp_upload(
             std::time::Instant::now(),
             &mut transferred,
         )?;
-        Ok("Upload abgeschlossen!".to_string())
+        Ok("Upload completed".to_string())
     })
     .await
     .map_err(|_| "Thread Error".to_string())?;
@@ -3017,7 +3017,7 @@ async fn sftp_download(
             std::time::Instant::now(),
             &mut transferred,
         )?;
-        Ok("Download abgeschlossen!".to_string())
+        Ok("Download completed".to_string())
     })
     .await
     .map_err(|_| "Thread Error".to_string())?;
