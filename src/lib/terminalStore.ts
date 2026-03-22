@@ -1,1 +1,3 @@
-export const terminalStore: Record<string, any> = {}
+import type { TerminalStoreEntry } from "./terminalTypes"
+
+export const terminalStore: Record<string, TerminalStoreEntry> = {}
