@@ -387,7 +387,10 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const resizeDragRef = useRef(false)
-  const transferSessionId = "sftp"
+  const transferSessionId = useMemo(
+    () => `sftp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    []
+  )
 
   const visibleFiles = useMemo(() => {
     const filtered = showHidden ? files : files.filter((f) => !f.name.startsWith("."))
@@ -457,7 +460,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     return () => {
       if (cleanup) cleanup()
     }
-  }, [])
+  }, [transferSessionId])
 
   function clearProgressSoon() {
     window.setTimeout(() => {
