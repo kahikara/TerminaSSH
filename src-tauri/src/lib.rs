@@ -259,6 +259,7 @@ fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBo
 const APP_DIR_NAME: &str = "terminassh";
 const LEGACY_APP_DIR_NAME: &str = "ssh-mgr";
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 5;
+const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 
 fn home_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
@@ -372,6 +373,20 @@ fn get_app_dir() -> String {
 fn get_db_path() -> String {
     format!("{}/connections.db", get_app_dir())
 }
+
+fn open_db() -> Result<Connection, String> {
+    let conn = open_db()?;
+    conn.busy_timeout(Duration::from_secs(DB_BUSY_TIMEOUT_SECS))
+        .map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA foreign_keys = ON;"
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(conn)
+}
+
 fn get_key_path() -> String {
     format!("{}/master.key", get_app_dir())
 }
@@ -735,8 +750,7 @@ fn decrypt_pw(encoded: &str) -> Result<String, String> {
 }
 
 fn init_db() -> Result<(), String> {
-    let db_path = get_db_path();
-    let conn = Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS connections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL, username TEXT NOT NULL)",
@@ -809,7 +823,7 @@ fn read_clipboard(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn get_snippets() -> Result<Vec<SnippetItem>, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let mut stmt = conn
         .prepare("SELECT id, name, command FROM snippets ORDER BY name ASC")
         .map_err(|e| e.to_string())?;
@@ -830,7 +844,7 @@ fn get_snippets() -> Result<Vec<SnippetItem>, String> {
 }
 #[tauri::command]
 fn add_snippet(name: String, command: String, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "INSERT INTO snippets (name, command) VALUES (?1, ?2)",
         (&name, &command),
@@ -846,7 +860,7 @@ fn update_snippet(
     command: String,
     app: AppHandle,
 ) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
         (&name, &command, &id),
@@ -857,7 +871,7 @@ fn update_snippet(
 }
 #[tauri::command]
 fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     let _ = app.emit("snippets-updated", ());
@@ -866,7 +880,7 @@ fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn get_connections() -> Result<Vec<ConnectionItem>, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let mut stmt = conn
         .prepare("SELECT id, name, host, port, username, private_key, group_name, password FROM connections ORDER BY CASE WHEN TRIM(group_name) = '' THEN 0 ELSE 1 END, group_name COLLATE NOCASE ASC, name COLLATE NOCASE ASC, host COLLATE NOCASE ASC")
         .map_err(|e| e.to_string())?;
@@ -926,7 +940,7 @@ fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<Stri
 
     let enc_pw = encrypt_pw(&connection.password);
     let enc_passphrase = encrypt_pw(&connection.passphrase);
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         (
@@ -960,7 +974,7 @@ fn update_connection(
     normalize_connection_fields(&mut connection);
     validate_connection(&connection)?;
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let pw_to_save = if clear_password {
         String::new()
     } else if connection.password.is_empty() {
@@ -1004,7 +1018,7 @@ fn update_connection(
 #[tauri::command]
 fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<(), String> {
     let enc_pw = encrypt_pw(&password);
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "UPDATE connections SET password = ?1 WHERE id = ?2",
         (&enc_pw, &id),
@@ -1016,7 +1030,7 @@ fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<
 
 #[tauri::command]
 fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     let _ = app.emit("connection-saved", ());
@@ -1067,7 +1081,7 @@ fn export_backup_bundle(settings_json: String, notes_json: String) -> Result<Str
             .map_err(|e| format!("Invalid notes JSON: {}", e))?
     };
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
 
     let mut connections = Vec::new();
     {
@@ -1307,7 +1321,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
     }
     let mut key_path_map: HashMap<String, String> = HashMap::new();
 
-    let mut conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let mut conn = open_db()?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     let mut ssh_keys_imported = 0usize;
@@ -1726,7 +1740,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 
 #[tauri::command]
 fn get_ssh_keys() -> Result<Vec<SshKeyItem>, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let mut stmt = conn.prepare(
         "SELECT id, name, public_key, private_key_path, key_type, fingerprint FROM ssh_keys ORDER BY name ASC"
     ).map_err(|e| e.to_string())?;
@@ -1775,7 +1789,7 @@ fn save_ssh_key(
 
     let fingerprint = fingerprint_for_pubkey_path(&format!("{}.pub", path));
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
         (&name, &public, &path, &key_type, &fingerprint)
@@ -1837,7 +1851,7 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
         .to_string();
     let fingerprint = fingerprint_for_pubkey_path(&pub_path);
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
         (&clean_name, &public_key, &private_path, &key_type_final, &fingerprint)
@@ -1848,7 +1862,7 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
 
 #[tauri::command]
 fn delete_ssh_key(id: i32) -> Result<(), String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
 
     let mut stmt = conn
         .prepare("SELECT private_key_path, key_type FROM ssh_keys WHERE id = ?1")
@@ -1872,7 +1886,7 @@ fn delete_ssh_key(id: i32) -> Result<(), String> {
 
 #[tauri::command]
 fn get_tunnels(server_id: i32) -> Result<Vec<TunnelItem>, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let mut stmt = conn.prepare(
         "SELECT id, name, server_id, local_port, remote_host, remote_port, bind_host, auto_start
          FROM ssh_tunnels
@@ -1921,7 +1935,7 @@ fn save_tunnel(tunnel: SshTunnel) -> Result<String, String> {
         tunnel.bind_host.trim().to_string()
     };
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "INSERT INTO ssh_tunnels (server_id, name, local_port, remote_host, remote_port, bind_host, auto_start)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -1957,7 +1971,7 @@ fn update_tunnel(id: i32, tunnel: SshTunnel) -> Result<String, String> {
         tunnel.bind_host.trim().to_string()
     };
 
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute(
         "UPDATE ssh_tunnels
          SET server_id = ?1, name = ?2, local_port = ?3, remote_host = ?4, remote_port = ?5, bind_host = ?6, auto_start = ?7
@@ -1979,14 +1993,14 @@ fn update_tunnel(id: i32, tunnel: SshTunnel) -> Result<String, String> {
 
 #[tauri::command]
 fn delete_tunnel(id: i32) -> Result<String, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     conn.execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     Ok("Tunnel deleted".to_string())
 }
 
 fn get_tunnel_by_id(id: i32) -> Result<TunnelItem, String> {
-    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn = open_db()?;
     let mut stmt = conn.prepare(
         "SELECT id, name, server_id, local_port, remote_host, remote_port, bind_host, auto_start
          FROM ssh_tunnels
@@ -2035,7 +2049,7 @@ fn connect_ssh_session_with_password_override(
     id: i32,
     password_override: Option<String>,
 ) -> Result<Session, String> {
-    let conn_db = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
+    let conn_db = open_db()?;
     let row_data: (String, u16, String, String, String, String) = conn_db
         .query_row(
             "SELECT host, port, username, password, private_key, passphrase FROM connections WHERE id = ?1",
