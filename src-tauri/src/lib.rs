@@ -375,7 +375,7 @@ fn get_db_path() -> String {
 }
 
 fn open_db() -> Result<Connection, String> {
-    let conn = open_db()?;
+    let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;
     conn.busy_timeout(Duration::from_secs(DB_BUSY_TIMEOUT_SECS))
         .map_err(|e| e.to_string())?;
     conn.execute_batch(
