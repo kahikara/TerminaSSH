@@ -181,7 +181,14 @@ export const translations: Record<string, Record<string, string>> = {
     copyFailed: "Kopieren fehlgeschlagen: {error}",
     pastedFromClipboard: "Aus Zwischenablage eingefügt",
     pasteFailed: "Einfügen fehlgeschlagen: {error}",
-    sidebarHint: "Wähle eine Verbindung oder lege eine neue an."
+    sidebarHint: "Wähle eine Verbindung oder lege eine neue an.",
+    dashboardIntro: "Öffne ein lokales Terminal, verbinde dich schnell mit Hosts oder mach dort weiter, wo du aufgehört hast.",
+    quickConnectUserPlaceholder: "username",
+    quickConnectHostPlaceholder: "ip, domain oder hostname",
+    sessionSingular: "Sitzung",
+    sessionPlural: "Sitzungen",
+    hostSingular: "Host",
+    hostPlural: "Hosts"
   },
   en: {
     connections: "Connections",
@@ -365,7 +372,14 @@ export const translations: Record<string, Record<string, string>> = {
     copyFailed: "Copy failed: {error}",
     pastedFromClipboard: "Pasted from clipboard",
     pasteFailed: "Paste failed: {error}",
-    sidebarHint: "Choose a connection or create a new one."
+    sidebarHint: "Choose a connection or create a new one.",
+    dashboardIntro: "Open a local shell, connect fast, or continue where you left off.",
+    quickConnectUserPlaceholder: "username",
+    quickConnectHostPlaceholder: "ip, domain or hostname",
+    sessionSingular: "session",
+    sessionPlural: "sessions",
+    hostSingular: "host",
+    hostPlural: "hosts"
   }
 };
 

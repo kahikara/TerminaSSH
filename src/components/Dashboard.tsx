@@ -51,9 +51,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
       <div className="w-full max-w-5xl mx-auto px-6 py-6 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <p className="text-sm text-[var(--text-muted)] max-w-2xl leading-relaxed">
-            {lang === "de"
-              ? "Öffne ein lokales Terminal, verbinde dich schnell mit Hosts oder mach dort weiter, wo du aufgehört hast."
-              : "Open a local shell, connect fast, or continue where you left off."}
+            {t("dashboardIntro", lang)}
           </p>
         </div>
 
@@ -75,7 +73,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
             </div>
             <div className="min-w-0">
               <div className="text-[13px] font-bold text-[var(--text-main)]">
-                Local Terminal
+                {t("localTerminal", lang)}
               </div>
               <div className="text-xs text-[var(--text-muted)]">
                 localhost
@@ -98,7 +96,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
             <form onSubmit={handleQuickConnect} className="p-4 grid grid-cols-1 md:grid-cols-[110px_1fr_88px_auto] gap-3 items-center">
               <input
                 type="text"
-                placeholder="username"
+                placeholder={t("quickConnectUserPlaceholder", lang)}
                 value={qc.user}
                 onChange={(e) => setQc({ ...qc, user: e.target.value })}
                 className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
@@ -106,7 +104,7 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
 
               <input
                 type="text"
-                placeholder="ip, domain or hostname"
+                placeholder={t("quickConnectHostPlaceholder", lang)}
                 value={qc.host}
                 onChange={(e) => setQc({ ...qc, host: e.target.value })}
                 className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
@@ -155,8 +153,8 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                   </div>
                   <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
                     {lang === "de"
-                      ? `${activeCount} ${activeCount === 1 ? "Sitzung" : "Sitzungen"}`
-                      : `${activeCount} ${activeCount === 1 ? "session" : "sessions"}`}
+                      ? `${activeCount} ${activeCount === 1 ? t("sessionSingular", lang) : t("sessionPlural", lang)}`
+                      : `${activeCount} ${activeCount === 1 ? t("sessionSingular", lang) : t("sessionPlural", lang)}`}
                   </div>
                 </div>
 
@@ -216,8 +214,8 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
                   </div>
                   <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
                     {lang === "de"
-                      ? `${recentCount} ${recentCount === 1 ? "Host" : "Hosts"}`
-                      : `${recentCount} ${recentCount === 1 ? "host" : "hosts"}`}
+                      ? `${recentCount} ${recentCount === 1 ? t("hostSingular", lang) : t("hostPlural", lang)}`
+                      : `${recentCount} ${recentCount === 1 ? t("hostSingular", lang) : t("hostPlural", lang)}`}
                   </div>
                 </div>
 
