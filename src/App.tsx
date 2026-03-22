@@ -620,34 +620,20 @@ export default function App() {
           }
 
           const tabId = Math.random().toString(36).substring(7);
-          const newTab = {
-            ...server,
-            sessionPassword: pwd,
-            tabId,
-            sessionId: tabId
-          };
-          setOpenTabs(prev => [...prev, newTab]);
-          setActiveTabId(tabId);
-        }
-      });
-      return;
-    }
-
-    if (server?.isQuickConnect && server?.quickConnectNeedsPassword) {
-      showDialog({
-        type: "prompt",
-        title: settings.lang === "de" ? "Passwort für Quick Connect" : "Password for Quick Connect",
-        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
-        isPassword: true,
-        onConfirm: (pwd: string) => {
-          const tabId = Math.random().toString(36).substring(7);
-          const newTab = {
-            ...server,
-            password: pwd || "",
-            quickConnectNeedsPassword: false,
-            tabId,
-            sessionId: tabId
-          };
+          const newTab = server?.isQuickConnect
+            ? {
+                ...server,
+                password: pwd,
+                quickConnectNeedsPassword: false,
+                tabId,
+                sessionId: tabId
+              }
+            : {
+                ...server,
+                sessionPassword: pwd,
+                tabId,
+                sessionId: tabId
+              };
           setOpenTabs(prev => [...prev, newTab]);
           setActiveTabId(tabId);
         }
@@ -737,40 +723,16 @@ export default function App() {
             }
           }
 
-          const rightServer = {
-            ...server,
-            sessionPassword: pwd
-          };
-
-          setOpenTabs(prev => {
-            const next = [...prev];
-            const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
-            if (idx === -1) return prev;
-
-            const baseTab = next[idx];
-            const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
-            next[idx] = buildSplitTabFromServers(leftServer, rightServer, activeTabId);
-            return next;
-          });
-
-          setActiveTabId(activeTabId);
-        }
-      });
-      return;
-    }
-
-    if (server?.isQuickConnect && server?.quickConnectNeedsPassword) {
-      showDialog({
-        type: "prompt",
-        title: settings.lang === "de" ? "Passwort für Quick Connect" : "Password for Quick Connect",
-        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
-        isPassword: true,
-        onConfirm: (pwd: string) => {
-          const rightServer = {
-            ...server,
-            password: pwd || "",
-            quickConnectNeedsPassword: false
-          };
+          const rightServer = server?.isQuickConnect
+            ? {
+                ...server,
+                password: pwd,
+                quickConnectNeedsPassword: false
+              }
+            : {
+                ...server,
+                sessionPassword: pwd
+              };
 
           setOpenTabs(prev => {
             const next = [...prev];
