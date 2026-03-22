@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core"
 import { RotateCcw, Save, X, Search, Replace, List, Minus, Square } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { t } from "../lib/i18n"
+import InputContextMenu from "./InputContextMenu"
+import { useInputContextMenu } from "../hooks/useInputContextMenu"
 
 function qp(name: string) {
   return new URLSearchParams(window.location.search).get(name) || ""
@@ -204,6 +206,7 @@ export default function SftpEditorWindow() {
   }, [])
 
   const lang = initialSettings?.lang || "de"
+  const { inputMenu, runInputMenuAction } = useInputContextMenu({ lang })
   const themeName = String(initialSettings?.theme || "catppuccin")
   const isLightTheme = themeName === "light"
 
@@ -1592,6 +1595,12 @@ export default function SftpEditorWindow() {
           </div>
         </div>
       )}
+
+      <InputContextMenu
+        inputMenu={inputMenu}
+        lang={lang}
+        onAction={runInputMenuAction}
+      />
     </div>
   )
 }
