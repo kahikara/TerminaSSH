@@ -3,20 +3,13 @@ import { FitAddon } from "xterm-addon-fit"
 import { SearchAddon } from "xterm-addon-search"
 import { invoke } from "@tauri-apps/api/core"
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager"
-import { listen, UnlistenFn } from "@tauri-apps/api/event"
+import { listen } from "@tauri-apps/api/event"
 import { terminalStore } from "./terminalStore"
 import { t } from "./i18n"
+import type { AppSettings } from "./types"
+import type { TerminalServer, TerminalStoreEntry } from "./terminalTypes"
 
-export type StoreEntry = {
-  term: Terminal
-  fit: FitAddon
-  search: SearchAddon
-  opened: boolean
-  started: boolean
-  starting: boolean
-  unlisten?: UnlistenFn
-  exitUnlisten?: UnlistenFn
-}
+export type StoreEntry = TerminalStoreEntry
 
 const pendingDestroyTimers: Record<string, number> = {}
 
@@ -36,7 +29,7 @@ export function cancelDestroySession(sessionId: string) {
   }
 }
 
-export function isLocalServer(server: any) {
+export function isLocalServer(server: TerminalServer | null | undefined) {
   return (
     !!server?.isLocal ||
     server?.type === "local" ||
@@ -66,7 +59,7 @@ export function formatSessionDuration(totalSeconds: number) {
     .join(":")
 }
 
-function createTerminalOptions(settings: any) {
+function createTerminalOptions(settings: AppSettings | null | undefined) {
   const isLight = settings?.theme === "light"
 
   return {
@@ -105,7 +98,7 @@ function createTerminalOptions(settings: any) {
   } as const
 }
 
-export function ensureTerminal(_server: any, sessionId: string, settings: any, onClose?: () => void): StoreEntry {
+export function ensureTerminal(_server: TerminalServer | null | undefined, sessionId: string, settings: AppSettings, onClose?: () => void): StoreEntry {
   let entry: StoreEntry = terminalStore[sessionId]
 
   if (!entry) {
@@ -168,7 +161,7 @@ export function ensureTerminal(_server: any, sessionId: string, settings: any, o
   return entry
 }
 
-export async function startIfNeeded(server: any, sessionId: string, entry: StoreEntry) {
+export async function startIfNeeded(server: TerminalServer, sessionId: string, entry: StoreEntry) {
   if (entry.started || entry.starting) return
 
   entry.starting = true
