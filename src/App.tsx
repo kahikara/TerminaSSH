@@ -373,13 +373,7 @@ export default function App() {
   }, [isSidebarCollapsed]);
 
   const ensureHostKeyTrusted = async (server: any) => {
-    const wantsLocal =
-      !!server?.isLocal ||
-      server?.id === 'local' ||
-      server?.name === 'Local Terminal' ||
-      server?.host === 'localhost';
-
-    if (wantsLocal) return true;
+    if (isLocalConnection(server)) return true;
 
     const host = String(server?.host || '').trim();
     const port = Number(server?.port) || 22;
@@ -534,13 +528,7 @@ export default function App() {
   };
 
   const needsSessionPasswordPrompt = (server: any) => {
-    const wantsLocal =
-      !!server?.isLocal ||
-      server?.id === 'local' ||
-      server?.name === 'Local Terminal' ||
-      server?.host === 'localhost';
-
-    if (wantsLocal) return false;
+    if (isLocalConnection(server)) return false;
     if (server?.isQuickConnect) return !!server?.quickConnectNeedsPassword;
 
     return server?.has_password === false && !server?.private_key;
@@ -561,6 +549,15 @@ export default function App() {
     };
   };
 
+  const isLocalConnection = (server: any) => {
+    return (
+      !!server?.isLocal ||
+      server?.id === 'local' ||
+      server?.name === 'Local Terminal' ||
+      server?.host === 'localhost'
+    );
+  };
+
   const openTerminal = async (
     server: any,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
@@ -569,13 +566,7 @@ export default function App() {
       if (options.forceNewTab) return null;
       if (server?.isQuickConnect) return null;
 
-      const wantsLocal =
-        !!server?.isLocal ||
-        server?.id === 'local' ||
-        server?.name === 'Local Terminal' ||
-        server?.host === 'localhost';
-
-      if (wantsLocal) {
+      if (isLocalConnection(server)) {
         const existingLocal = openTabs.find((tab: any) => tab?.isLocal);
         return existingLocal?.tabId || null;
       }
@@ -687,13 +678,7 @@ export default function App() {
       return;
     }
 
-    const wantsLocal =
-      !!server?.isLocal ||
-      server?.id === 'local' ||
-      server?.name === 'Local Terminal' ||
-      server?.host === 'localhost';
-
-    if (!wantsLocal) {
+    if (!isLocalConnection(server)) {
       if (!(await ensureHostKeyTrusted(server))) {
         return;
       }
