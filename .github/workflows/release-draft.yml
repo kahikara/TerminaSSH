@@ -1,4 +1,4 @@
-name: release-draft
+name: release-draft-1-0-3
 
 on:
   workflow_dispatch:
@@ -19,31 +19,36 @@ jobs:
             os: ubuntu-22.04
             args: --bundles deb,rpm,appimage
             rust_targets: ""
+            no_strip: "true"
+
           - name: windows
             os: windows-latest
             args: --bundles nsis
             rust_targets: ""
-          - name: macos-aarch64
+            no_strip: ""
+
+          - name: macos
             os: macos-latest
-            args: --target aarch64-apple-darwin --bundles dmg
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --bundles dmg
+            rust_targets: ""
+            no_strip: ""
 
     steps:
-      - name: checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: setup node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
           cache: npm
 
-      - name: install rust stable
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_targets }}
 
-      - name: install linux deps
+      - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -53,19 +58,20 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: install frontend deps
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: typecheck
+      - name: Typecheck
         run: npm run check
 
-      - name: build and upload draft release
+      - name: Build and upload draft release
         uses: tauri-apps/tauri-action@action-v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NO_STRIP: ${{ matrix.no_strip }}
         with:
-          tagName: v__VERSION__
-          releaseName: Termina SSH v__VERSION__
+          tagName: v1.0.3
+          releaseName: Termina SSH v1.0.3
           releaseBody: |
             Draft release for testing.
 
@@ -74,7 +80,7 @@ jobs:
             .rpm
             .AppImage
             .dmg
-            setup.exe
+            .exe
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
