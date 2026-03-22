@@ -2317,7 +2317,7 @@ fn start_local_pty(
     let shell = std::env::var("SHELL")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "/bin/bash".to_string());
+        .unwrap_or_else(|| "/bin/sh".to_string());
 
     let shell_name = std::path::Path::new(&shell)
         .file_name()
