@@ -50,9 +50,6 @@ export default function Dashboard({ lang, settings, openTerminal, activeTabs, re
     <div className="flex-1 overflow-y-auto bg-[var(--bg-app)] text-[var(--text-main)] min-h-0">
       <div className="w-full max-w-5xl mx-auto px-6 py-6 flex flex-col gap-5">
         <div className="flex flex-col gap-2">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--text-main)]">
-            Termina SSH
-          </h1>
           <p className="text-sm text-[var(--text-muted)] max-w-2xl leading-relaxed">
             {lang === "de"
               ? "Öffne ein lokales Terminal, verbinde dich schnell mit Hosts oder mach dort weiter, wo du aufgehört hast."
