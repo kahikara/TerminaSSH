@@ -351,6 +351,23 @@ const menuButtonStyle: React.CSSProperties = {
   transition: "background 140ms ease"
 }
 
+function sftpEntryStyle(hovered: boolean): React.CSSProperties {
+  return {
+    ...row,
+    position: "relative",
+    borderRadius: 12,
+    border: hovered
+      ? "1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle))"
+      : "1px solid transparent",
+    background: hovered
+      ? "color-mix(in srgb, var(--bg-hover) 72%, transparent)"
+      : "transparent",
+    borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 68%, transparent)",
+    margin: 0,
+    transition: "background 140ms ease, border-color 140ms ease"
+  }
+}
+
 export default function SftpPanel({ server, visible, onClose, lang = "de" }: any) {
   const [path, setPath] = useState("/")
   const [files, setFiles] = useState<FileItem[]>([])
@@ -383,6 +400,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
 
   const [menuItem, setMenuItem] = useState<string | null>(null)
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null)
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -1034,7 +1052,9 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       >
         {path !== "/" && (
           <div
-            style={row}
+            style={sftpEntryStyle(hoveredItem === "__parent__")}
+            onMouseEnter={() => setHoveredItem("__parent__")}
+            onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
             onClick={() => {
               const parent = path.split("/").slice(0, -2).join("/") || "/"
               load(parent)
@@ -1077,7 +1097,9 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
         {visibleFiles.map((f) => (
           <div
             key={f.name}
-            style={{ ...row, position: "relative" }}
+            style={sftpEntryStyle(hoveredItem === f.name)}
+            onMouseEnter={() => setHoveredItem(f.name)}
+            onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
             onDoubleClick={() => {
               if (f.is_dir) {
                 const next = path + (path.endsWith("/") ? "" : "/") + f.name
