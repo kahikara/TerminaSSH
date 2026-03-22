@@ -546,6 +546,21 @@ export default function App() {
     return server?.has_password === false && !server?.private_key;
   };
 
+  const applyPromptPasswordToServer = (server: any, pwd: string) => {
+    if (server?.isQuickConnect) {
+      return {
+        ...server,
+        password: pwd,
+        quickConnectNeedsPassword: false
+      };
+    }
+
+    return {
+      ...server,
+      sessionPassword: pwd
+    };
+  };
+
   const openTerminal = async (
     server: any,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
@@ -620,20 +635,12 @@ export default function App() {
           }
 
           const tabId = Math.random().toString(36).substring(7);
-          const newTab = server?.isQuickConnect
-            ? {
-                ...server,
-                password: pwd,
-                quickConnectNeedsPassword: false,
-                tabId,
-                sessionId: tabId
-              }
-            : {
-                ...server,
-                sessionPassword: pwd,
-                tabId,
-                sessionId: tabId
-              };
+          const resolvedServer = applyPromptPasswordToServer(server, pwd);
+          const newTab = {
+            ...resolvedServer,
+            tabId,
+            sessionId: tabId
+          };
           setOpenTabs(prev => [...prev, newTab]);
           setActiveTabId(tabId);
         }
@@ -723,16 +730,7 @@ export default function App() {
             }
           }
 
-          const rightServer = server?.isQuickConnect
-            ? {
-                ...server,
-                password: pwd,
-                quickConnectNeedsPassword: false
-              }
-            : {
-                ...server,
-                sessionPassword: pwd
-              };
+          const rightServer = applyPromptPasswordToServer(server, pwd);
 
           setOpenTabs(prev => {
             const next = [...prev];
