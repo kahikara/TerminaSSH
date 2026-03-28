@@ -128,6 +128,17 @@ function createTerminalOptions(settings: AppSettings | null | undefined) {
   } as const
 }
 
+function applyTerminalOptions(entry: StoreEntry, settings: AppSettings | null | undefined) {
+  const nextOptions = createTerminalOptions(settings)
+  entry.term.options.fontSize = nextOptions.fontSize
+  entry.term.options.scrollback = nextOptions.scrollback
+  entry.term.options.cursorBlink = nextOptions.cursorBlink
+  entry.term.options.cursorStyle = nextOptions.cursorStyle
+  entry.term.options.theme = nextOptions.theme
+  try { entry.fit.fit() } catch {}
+  keepBottom(entry.term)
+}
+
 export function ensureTerminal(_server: TerminalServer | null | undefined, sessionId: string, settings: AppSettings, onClose?: () => void): StoreEntry {
   let entry: StoreEntry = terminalStore[sessionId]
 
@@ -181,12 +192,15 @@ export function ensureTerminal(_server: TerminalServer | null | undefined, sessi
     }).catch(() => {})
   } else {
     try {
-      const nextOptions = createTerminalOptions(settings)
-      entry.term.options.fontSize = nextOptions.fontSize
-      entry.term.options.scrollback = nextOptions.scrollback
-      entry.term.options.cursorBlink = nextOptions.cursorBlink
-      entry.term.options.cursorStyle = nextOptions.cursorStyle
-      entry.term.options.theme = nextOptions.theme
+      applyTerminalOptions(entry, settings)
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try {
+            applyTerminalOptions(entry, settings)
+          } catch {}
+        })
+      })
     } catch {}
   }
 
