@@ -102,8 +102,57 @@ export default function App() {
     });
   }, [settings.closeToTray, settings.lang, showToast]);
 
-  const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', title: '', placeholder: '', defaultValue: '', isPassword: false, onConfirm: (_v:any)=>{}, onCancel: ()=>{} });
-  const showDialog = (config: any) => setDialog(prev => ({ ...prev, isOpen: true, ...config }));
+  const [dialog, setDialog] = useState({
+    isOpen: false,
+    type: 'alert',
+    tone: undefined,
+    title: '',
+    description: '',
+    placeholder: '',
+    defaultValue: '',
+    defaultConfirmValue: '',
+    confirmPlaceholder: '',
+    isPassword: false,
+    requireConfirm: false,
+    allowEmpty: false,
+    checkboxLabel: '',
+    checkboxDefaultChecked: false,
+    confirmLabel: '',
+    cancelLabel: '',
+    secondaryLabel: '',
+    tertiaryLabel: '',
+    onConfirm: (_v:any)=>{},
+    onCancel: ()=>{},
+    onSecondary: undefined,
+    onTertiary: undefined,
+    validate: undefined
+  });
+  const showDialog = (config: any) => setDialog({
+    isOpen: true,
+    type: 'alert',
+    tone: undefined,
+    title: '',
+    description: '',
+    placeholder: '',
+    defaultValue: '',
+    defaultConfirmValue: '',
+    confirmPlaceholder: '',
+    isPassword: false,
+    requireConfirm: false,
+    allowEmpty: false,
+    checkboxLabel: '',
+    checkboxDefaultChecked: false,
+    confirmLabel: '',
+    cancelLabel: '',
+    secondaryLabel: '',
+    tertiaryLabel: '',
+    onConfirm: (_v:any)=>{},
+    onCancel: ()=>{},
+    onSecondary: undefined,
+    onTertiary: undefined,
+    validate: undefined,
+    ...config
+  });
 
   const isDragging = useRef(false);
   const expandedSidebarWidthRef = useRef(260);
