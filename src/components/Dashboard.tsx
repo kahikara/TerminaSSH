@@ -43,7 +43,7 @@ export default function Dashboard({
   recentConns,
   activateTab
 }: DashboardProps) {
-  const [qc, setQc] = useState<{ user: string; host: string; port: number }>({ user: "", host: "", port: 22 });
+  const [qc, setQc] = useState<{ user: string; host: string; port: string }>({ user: "", host: "", port: "22" });
 
   const activeCount = activeTabs?.length || 0;
   const recentItems = useMemo(() => (recentConns || []).slice(0, 6), [recentConns]);
@@ -63,7 +63,8 @@ export default function Dashboard({
 
     const host = qc.host.trim();
     const username = qc.user.trim();
-    const port = Number.isFinite(qc.port) && qc.port > 0 && qc.port <= 65535 ? qc.port : 22;
+    const parsedPort = parseInt(qc.port.trim() || "22", 10);
+    const port = Number.isFinite(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 22;
 
     if (!host) return;
 
@@ -150,10 +151,19 @@ export default function Dashboard({
                 max="65535"
                 value={qc.port}
                 onChange={(e) => {
-                  const parsed = parseInt(e.target.value || "22", 10);
+                  const next = e.target.value;
+                  if (next === "" || /^\d+$/.test(next)) {
+                    setQc({
+                      ...qc,
+                      port: next
+                    });
+                  }
+                }}
+                onBlur={() => {
+                  const parsed = parseInt(qc.port.trim() || "22", 10);
                   setQc({
                     ...qc,
-                    port: Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 22
+                    port: String(Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 22)
                   });
                 }}
                 className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
