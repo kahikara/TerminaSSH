@@ -305,6 +305,46 @@ fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBo
     }
 }
 
+fn sanitize_local_shell_env(cmd: &mut CommandBuilder) {
+    for key in [
+        "APPIMAGE",
+        "APPDIR",
+        "OWD",
+        "ARGV0",
+        "TERMSSH_APPIMAGE_RELAUNCHED",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    for key in [
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "LD_DEBUG",
+        "LD_ASSUME_KERNEL",
+        "LD_BIND_NOW",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    #[cfg(target_os = "macos")]
+    for key in [
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+        "DYLD_INSERT_LIBRARIES",
+    ] {
+        cmd.env_remove(key);
+    }
+}
+
 const APP_DIR_NAME: &str = "terminassh";
 const LEGACY_APP_DIR_NAME: &str = "ssh-mgr";
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 5;
@@ -2415,6 +2455,7 @@ fn start_local_pty(
         .to_ascii_lowercase();
 
     let mut cmd = CommandBuilder::new(shell.clone());
+    sanitize_local_shell_env(&mut cmd);
 
     #[cfg(not(target_os = "windows"))]
     {
