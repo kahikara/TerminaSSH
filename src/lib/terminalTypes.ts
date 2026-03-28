@@ -1,6 +1,6 @@
-import type { Terminal } from "xterm"
-import type { FitAddon } from "xterm-addon-fit"
-import type { SearchAddon } from "xterm-addon-search"
+import type { Terminal } from "@xterm/xterm"
+import type { FitAddon } from "@xterm/addon-fit"
+import type { SearchAddon } from "@xterm/addon-search"
 
 export type TerminalServer = {
   id?: string | number | null
