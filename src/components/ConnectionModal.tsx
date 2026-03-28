@@ -37,6 +37,7 @@ type ConnectionModalProps = {
   onSuccess: () => void | Promise<void>
   showToast: ToastFn
   showDialog: DialogFn
+  globalDialogOpen?: boolean
   lang: string
 }
 
@@ -58,6 +59,7 @@ export default function ConnectionModal({
   onSuccess,
   showToast,
   showDialog,
+  globalDialogOpen = false,
   lang
 }: ConnectionModalProps) {
   const [form, setForm] = useState<ConnectionForm>({
@@ -299,8 +301,18 @@ export default function ConnectionModal({
     "rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_84%,var(--bg-app))] p-3"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl flex flex-col">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${globalDialogOpen ? "bg-transparent backdrop-blur-0" : "bg-black/60 backdrop-blur-sm"}`}
+      style={{ pointerEvents: globalDialogOpen ? "none" : "auto" }}
+    >
+      <div
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl flex flex-col"
+        style={{
+          opacity: globalDialogOpen ? 0.72 : 1,
+          transform: globalDialogOpen ? "scale(0.985)" : "scale(1)",
+          transition: "opacity 140ms ease, transform 140ms ease"
+        }}
+      >
         <div className="min-h-[52px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
           <div>
             <div className="text-[14px] leading-[1.2] font-bold text-[var(--text-main)]">

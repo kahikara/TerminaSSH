@@ -1579,9 +1579,18 @@ export default function App() {
         onSuccess={loadServers}
         showToast={showToast}
         showDialog={showDialog}
+        globalDialogOpen={dialog.isOpen}
         lang={settings.lang}
       />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} setSettings={setSettings} showToast={showToast} showDialog={showDialog} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        setSettings={setSettings}
+        showToast={showToast}
+        showDialog={showDialog}
+        globalDialogOpen={dialog.isOpen}
+      />
 
       <SessionCloseDialog
         isOpen={sessionCloseDialogOpen}

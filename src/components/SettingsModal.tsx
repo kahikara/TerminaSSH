@@ -24,6 +24,7 @@ type SettingsModalProps = {
   setSettings: (next: AppSettings) => void
   showToast: any
   showDialog: any
+  globalDialogOpen?: boolean
 }
 
 export default function SettingsModal({
@@ -32,7 +33,8 @@ export default function SettingsModal({
   settings,
   setSettings,
   showToast,
-  showDialog
+  showDialog,
+  globalDialogOpen = false
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsSectionId>("general")
   const [keys, setKeys] = useState<StoredSshKey[]>([])
@@ -57,12 +59,20 @@ export default function SettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200 ${globalDialogOpen ? "bg-transparent backdrop-blur-0" : "bg-black/60 backdrop-blur-sm"}`}
+      style={{ pointerEvents: globalDialogOpen ? "none" : "auto" }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div style={modalShell}>
+      <div
+        style={{
+          ...modalShell,
+          opacity: globalDialogOpen ? 0.72 : 1,
+          transform: globalDialogOpen ? "scale(0.985)" : "scale(1)",
+          transition: "opacity 140ms ease, transform 140ms ease"
+        }}
+      >
         <SettingsModalHeader
           title={ui.settingsTitle}
           subtitle={ui.subtitle}
