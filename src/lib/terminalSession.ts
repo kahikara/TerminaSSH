@@ -87,27 +87,27 @@ function createTerminalOptions(settings: AppSettings | null | undefined) {
         brightWhite: "#0f172a"
       }
     : {
-        background: "rgba(9, 12, 18, 0)",
-        foreground: "#e5e7eb",
-        cursor: "#22d3ee",
+        background: "rgba(11, 18, 32, 0.96)",
+        foreground: "#f3f4f6",
+        cursor: "#38bdf8",
         cursorAccent: "#0b1220",
-        selectionBackground: "rgba(148, 163, 184, 0.22)",
+        selectionBackground: "rgba(125, 211, 252, 0.22)",
         black: "#111827",
-        red: "#f87171",
-        green: "#4ade80",
-        yellow: "#fbbf24",
+        red: "#ff6b6b",
+        green: "#22c55e",
+        yellow: "#f59e0b",
         blue: "#60a5fa",
         magenta: "#c084fc",
         cyan: "#22d3ee",
         white: "#e5e7eb",
-        brightBlack: "#6b7280",
-        brightRed: "#fca5a5",
-        brightGreen: "#86efac",
-        brightYellow: "#fcd34d",
+        brightBlack: "#94a3b8",
+        brightRed: "#ff8a8a",
+        brightGreen: "#4ade80",
+        brightYellow: "#fbbf24",
         brightBlue: "#93c5fd",
         brightMagenta: "#d8b4fe",
         brightCyan: "#67e8f9",
-        brightWhite: "#f9fafb"
+        brightWhite: "#ffffff"
       }
 
   return {
