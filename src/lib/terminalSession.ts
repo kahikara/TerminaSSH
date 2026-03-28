@@ -61,13 +61,19 @@ export function formatSessionDuration(totalSeconds: number) {
 
 function createTerminalOptions(settings: AppSettings | null | undefined) {
   const isLight = settings?.theme === "light"
+  const rootStyle = typeof window !== "undefined"
+    ? window.getComputedStyle(document.documentElement)
+    : null
+
+  const bgApp = rootStyle?.getPropertyValue("--bg-app").trim() || (isLight ? "#f8fafc" : "#0b1220")
+  const textMain = rootStyle?.getPropertyValue("--text-main").trim() || (isLight ? "#0f172a" : "#f3f4f6")
 
   const theme = isLight
     ? {
-        background: "rgba(248, 250, 252, 0)",
-        foreground: "#0f172a",
+        background: bgApp,
+        foreground: textMain,
         cursor: "#0f766e",
-        cursorAccent: "#f8fafc",
+        cursorAccent: bgApp,
         selectionBackground: "rgba(148, 163, 184, 0.32)",
         black: "#1e293b",
         red: "#dc2626",
@@ -87,10 +93,10 @@ function createTerminalOptions(settings: AppSettings | null | undefined) {
         brightWhite: "#0f172a"
       }
     : {
-        background: "rgba(11, 18, 32, 0.96)",
-        foreground: "#f3f4f6",
+        background: bgApp,
+        foreground: textMain,
         cursor: "#38bdf8",
-        cursorAccent: "#0b1220",
+        cursorAccent: bgApp,
         selectionBackground: "rgba(125, 211, 252, 0.22)",
         black: "#111827",
         red: "#ff6b6b",
