@@ -25,7 +25,7 @@ import {
 } from "../lib/terminalSession"
 import { t } from "../lib/i18n"
 import type { AppSettings } from "../lib/types"
-import "xterm/css/xterm.css"
+import "@xterm/xterm/css/xterm.css"
 
 type ToastFn = (msg: string, isErr?: boolean) => void
 
