@@ -99,12 +99,14 @@ export async function copySshPublicKey({
 
 export function confirmDeleteSshKey({
   id,
+  name,
   lang,
   showDialog,
   showToast,
   loadKeys
 }: {
   id: number
+  name: string
   lang: string
   showDialog: (config: any) => void
   showToast: (msg: string, isErr?: boolean) => void
@@ -112,7 +114,14 @@ export function confirmDeleteSshKey({
 }) {
   showDialog({
     type: "confirm",
-    title: lang === "de" ? "Löschen bestätigen" : "Confirm delete",
+    tone: "danger",
+    title: lang === "de" ? "SSH Schlüssel löschen" : "Delete SSH key",
+    description:
+      lang === "de"
+        ? `Der gespeicherte SSH Schlüssel "${name}" wird entfernt.`
+        : `This removes the stored SSH key "${name}".`,
+    confirmLabel: lang === "de" ? "Löschen" : "Delete",
+    cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",
     onConfirm: async () => {
       try {
         await invoke("delete_ssh_key", { id })

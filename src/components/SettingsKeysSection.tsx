@@ -71,7 +71,13 @@ export default function SettingsKeysSection({
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 10
+          }}
+        >
           {keys.map((k) => (
             <div
               key={k.id}
@@ -83,12 +89,35 @@ export default function SettingsKeysSection({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: 14
+                gap: 14,
+                minWidth: 0
               }}
             >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-main)" }}>{k.name}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontFamily: "JetBrains Mono, monospace" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "var(--text-main)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}
+                >
+                  {k.name}
+                </div>
+                <div
+                  title={`${k.key_type} • ${k.fingerprint}`}
+                  style={{
+                    fontSize: 11,
+                    color: "var(--text-muted)",
+                    marginTop: 4,
+                    fontFamily: "JetBrains Mono, monospace",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}
+                >
                   {k.key_type} • {k.fingerprint}
                 </div>
               </div>
@@ -103,7 +132,7 @@ export default function SettingsKeysSection({
                 </button>
 
                 <button
-                  onClick={() => confirmDeleteSshKey({ id: k.id, lang, showDialog, showToast, loadKeys })}
+                  onClick={() => confirmDeleteSshKey({ id: k.id, name: k.name, lang, showDialog, showToast, loadKeys })}
                   style={actionBtnStyle}
                   title={t("delete", lang)}
                 >
