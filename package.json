@@ -1,6 +1,6 @@
 {
   "name": "termina-ssh",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A modern SSH workspace built with Tauri, Rust, and React",
   "type": "module",
   "scripts": {

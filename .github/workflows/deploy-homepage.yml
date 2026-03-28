@@ -6,6 +6,11 @@ on:
     paths:
       - "homepage/**"
       - ".github/workflows/deploy-homepage.yml"
+      - "LICENSE"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/Cargo.toml"
+      - "package-lock.json"
+      - "package.json"
   workflow_dispatch:
 
 permissions:

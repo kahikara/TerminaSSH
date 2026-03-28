@@ -1,6 +1,6 @@
 {
   "productName": "Termina SSH",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "io.github.kahikara.terminassh",
   "build": {
     "beforeDevCommand": "npm run dev",
