@@ -62,6 +62,54 @@ export function formatSessionDuration(totalSeconds: number) {
 function createTerminalOptions(settings: AppSettings | null | undefined) {
   const isLight = settings?.theme === "light"
 
+  const theme = isLight
+    ? {
+        background: "rgba(248, 250, 252, 0)",
+        foreground: "#0f172a",
+        cursor: "#0f766e",
+        cursorAccent: "#f8fafc",
+        selectionBackground: "rgba(148, 163, 184, 0.32)",
+        black: "#1e293b",
+        red: "#dc2626",
+        green: "#15803d",
+        yellow: "#a16207",
+        blue: "#0369a1",
+        magenta: "#7c3aed",
+        cyan: "#0f766e",
+        white: "#e2e8f0",
+        brightBlack: "#475569",
+        brightRed: "#ef4444",
+        brightGreen: "#16a34a",
+        brightYellow: "#ca8a04",
+        brightBlue: "#0284c7",
+        brightMagenta: "#8b5cf6",
+        brightCyan: "#0d9488",
+        brightWhite: "#0f172a"
+      }
+    : {
+        background: "rgba(9, 12, 18, 0)",
+        foreground: "#e5e7eb",
+        cursor: "#22d3ee",
+        cursorAccent: "#0b1220",
+        selectionBackground: "rgba(148, 163, 184, 0.22)",
+        black: "#111827",
+        red: "#f87171",
+        green: "#4ade80",
+        yellow: "#fbbf24",
+        blue: "#60a5fa",
+        magenta: "#c084fc",
+        cyan: "#22d3ee",
+        white: "#e5e7eb",
+        brightBlack: "#6b7280",
+        brightRed: "#fca5a5",
+        brightGreen: "#86efac",
+        brightYellow: "#fcd34d",
+        brightBlue: "#93c5fd",
+        brightMagenta: "#d8b4fe",
+        brightCyan: "#67e8f9",
+        brightWhite: "#f9fafb"
+      }
+
   return {
     fontFamily: "JetBrains Mono, monospace",
     fontSize: Number(settings?.fontSize) || 13,
@@ -70,31 +118,7 @@ function createTerminalOptions(settings: AppSettings | null | undefined) {
     cursorStyle: settings?.cursorStyle || "bar",
     allowTransparency: true,
     convertEol: false,
-    theme: isLight
-      ? {
-          background: "#f8fafc",
-          foreground: "#0f172a",
-          cursor: "#0f766e",
-          cursorAccent: "#f8fafc",
-          selectionBackground: "#cbd5e1",
-          black: "#1e293b",
-          red: "#dc2626",
-          green: "#15803d",
-          yellow: "#a16207",
-          blue: "#0369a1",
-          magenta: "#7c3aed",
-          cyan: "#0f766e",
-          white: "#e2e8f0",
-          brightBlack: "#475569",
-          brightRed: "#ef4444",
-          brightGreen: "#16a34a",
-          brightYellow: "#ca8a04",
-          brightBlue: "#0284c7",
-          brightMagenta: "#8b5cf6",
-          brightCyan: "#0d9488",
-          brightWhite: "#0f172a"
-        }
-      : undefined
+    theme
   } as const
 }
 
@@ -151,10 +175,12 @@ export function ensureTerminal(_server: TerminalServer | null | undefined, sessi
     }).catch(() => {})
   } else {
     try {
-      entry.term.options.fontSize = Number(settings?.fontSize) || 13
-      entry.term.options.scrollback = Number(settings?.scrollback) || 10000
-      entry.term.options.cursorBlink = settings?.cursorBlink !== false
-      entry.term.options.cursorStyle = settings?.cursorStyle || "bar"
+      const nextOptions = createTerminalOptions(settings)
+      entry.term.options.fontSize = nextOptions.fontSize
+      entry.term.options.scrollback = nextOptions.scrollback
+      entry.term.options.cursorBlink = nextOptions.cursorBlink
+      entry.term.options.cursorStyle = nextOptions.cursorStyle
+      entry.term.options.theme = nextOptions.theme
     } catch {}
   }
 

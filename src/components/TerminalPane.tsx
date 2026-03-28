@@ -181,7 +181,7 @@ function TerminalInstance({
       if (fitTimer !== null) clearTimeout(fitTimer)
       try { (entry as any).__cleanup?.() } catch {}
     }
-  }, [server, sessionId, settings?.fontSize, settings?.scrollback, settings?.cursorBlink, settings?.cursorStyle])
+  }, [server, sessionId, settings?.fontSize, settings?.scrollback, settings?.cursorBlink, settings?.cursorStyle, settings?.theme])
 
   return (
     <div
