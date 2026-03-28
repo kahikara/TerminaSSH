@@ -73,8 +73,8 @@ export default function SettingsKeysSection({
       ) : (
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            display: "flex",
+            flexDirection: "column",
             gap: 10
           }}
         >
