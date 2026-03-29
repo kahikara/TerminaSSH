@@ -257,6 +257,7 @@ export default function SftpEditorWindow() {
   const originalRef = useRef("")
   const channelRef = useRef<BroadcastChannel | null>(null)
   const uiTimerRef = useRef<number | null>(null)
+  const loadSeqRef = useRef(0)
 
   async function applyTheme() {
     try {
@@ -438,6 +439,9 @@ export default function SftpEditorWindow() {
   }
 
   async function loadFile(force = false) {
+    const seq = loadSeqRef.current + 1
+    loadSeqRef.current = seq
+
     try {
       if (!force && dirtyRef.current) {
         openConfirm("reload", t("unsavedChangesLostReload", lang))
@@ -474,6 +478,8 @@ export default function SftpEditorWindow() {
 
       const binaryCheck = detectBinaryContent(text)
 
+      if (loadSeqRef.current !== seq) return
+
       if (!utf8Valid) {
         openBinaryPrompt(text, "invalid-utf8")
         setStatus("idle")
@@ -499,8 +505,10 @@ export default function SftpEditorWindow() {
       setCursorInfo(getCursorInfo(text, 0))
       evaluateLargeFileNotice(text)
     } catch (e) {
+      if (loadSeqRef.current !== seq) return
       showError(t("failedToLoadFile", lang), e)
     } finally {
+      if (loadSeqRef.current !== seq) return
       setLoading(false)
       setTimeout(() => {
         updateCursor()
