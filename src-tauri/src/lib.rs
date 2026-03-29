@@ -3325,7 +3325,7 @@ fn close_session(session_id: String, state: State<'_, SshState>) {
     }
 }
 #[tauri::command]
-fn ping_host(host: String, port: u16) -> Result<u128, String> {
+fn measure_tcp_latency(host: String, port: u16) -> Result<u128, String> {
     let start = std::time::Instant::now();
     let addr_str = format!("{}:{}", host, port);
     if let Ok(mut addrs) = addr_str.to_socket_addrs() {
@@ -3565,7 +3565,7 @@ pub fn run() {
             sftp_upload,
             sftp_download,
             close_session,
-            ping_host,
+            measure_tcp_latency,
             get_linux_window_mode,
             get_app_meta,
             window_minimize,

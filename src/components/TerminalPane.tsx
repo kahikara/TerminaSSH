@@ -416,7 +416,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
 
     const updatePing = async () => {
       try {
-        const ms = await invoke("ping_host", {
+        const ms = await invoke("measure_tcp_latency", {
           host: activePaneServer.host,
           port: activePaneServer.port || 22
         })
