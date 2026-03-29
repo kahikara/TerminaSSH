@@ -247,7 +247,7 @@ pub struct SshState {
 
 pub struct TunnelRuntimeEntry {
     stop_flag: Arc<AtomicBool>,
-    _handle: JoinHandle<()>,
+    handle: JoinHandle<()>,
 }
 
 
@@ -2559,7 +2559,7 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
         id,
         TunnelRuntimeEntry {
             stop_flag,
-            _handle: handle,
+            handle,
         },
     );
 
@@ -2568,14 +2568,20 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
 
 #[tauri::command]
 fn stop_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
-    let mut map = state
-        .tunnel_runtime
-        .lock()
-        .map_err(|_| "Tunnel state lock failed".to_string())?;
-    if let Some(entry) = map.remove(&id) {
+    let entry = {
+        let mut map = state
+            .tunnel_runtime
+            .lock()
+            .map_err(|_| "Tunnel state lock failed".to_string())?;
+        map.remove(&id)
+    };
+
+    if let Some(entry) = entry {
         entry.stop_flag.store(true, Ordering::Relaxed);
+        let _ = entry.handle.join();
         return Ok("Tunnel stopped".to_string());
     }
+
     Ok("Tunnel was not running".to_string())
 }
 
