@@ -26,14 +26,14 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
     if (!dialog.isOpen) return
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
+      if (e.key !== "Escape" || busy) return
       e.preventDefault()
       void cancel()
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [dialog.isOpen, dialog.type, dialog.onCancel])
+  }, [dialog.isOpen, dialog.type, dialog.onCancel, busy])
 
   if (!dialog.isOpen) return null
 

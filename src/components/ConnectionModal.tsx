@@ -311,6 +311,8 @@ export default function ConnectionModal({
     normalizedForm.port >= 1 &&
     normalizedForm.port <= 65535
 
+  const isBusy = saveBusy || testBusy
+
   const fieldClass =
     "w-full h-9 px-3 rounded-[10px] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border border-[var(--border-subtle)] outline-none focus:border-[var(--accent)] text-[13px] text-[var(--text-main)]"
 
@@ -340,7 +342,7 @@ export default function ConnectionModal({
             </div>
           </div>
 
-          <button onClick={onClose} className="ui-icon-btn" title={t("close", lang)}>
+          <button onClick={() => { if (!isBusy) onClose() }} className="ui-icon-btn" title={t("close", lang)} disabled={isBusy}>
             <X size={15} />
           </button>
         </div>
@@ -505,24 +507,24 @@ export default function ConnectionModal({
           )}
 
           <div className="flex gap-2 flex-wrap justify-end">
-            <button onClick={onClose} className="ui-btn-ghost" disabled={saveBusy}>
+            <button onClick={() => { if (!isBusy) onClose() }} className="ui-btn-ghost" disabled={isBusy}>
               {t("cancel", lang)}
             </button>
             <button
               onClick={() => void handleTestConnection()}
               className="ui-btn-ghost"
-              disabled={!canSave || testBusy || saveBusy}
-              aria-disabled={!canSave || testBusy || saveBusy}
-              style={!canSave || testBusy || saveBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+              disabled={!canSave || isBusy}
+              aria-disabled={!canSave || isBusy}
+              style={!canSave || isBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
               {testBusy ? (lang === "de" ? "Teste..." : "Testing...") : (lang === "de" ? "Testen" : "Test")}
             </button>
             <button
               onClick={() => void handleSave()}
               className="ui-btn-primary"
-              disabled={!canSave || testBusy || saveBusy}
-              aria-disabled={!canSave || testBusy || saveBusy}
-              style={!canSave || testBusy || saveBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+              disabled={!canSave || isBusy}
+              aria-disabled={!canSave || isBusy}
+              style={!canSave || isBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
               {saveBusy ? (lang === "de" ? "Speichere..." : "Saving...") : t("save", lang)}
             </button>
