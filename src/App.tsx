@@ -630,9 +630,12 @@ export default function App() {
   const isLocalConnection = (server: any) => {
     return (
       !!server?.isLocal ||
+      server?.type === 'local' ||
+      server?.kind === 'local' ||
       server?.id === 'local' ||
       server?.name === 'Local Terminal' ||
-      server?.host === 'localhost'
+      server?.host === '__local__' ||
+      server?.host === 'local'
     );
   };
 
