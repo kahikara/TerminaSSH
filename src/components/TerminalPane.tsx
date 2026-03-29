@@ -846,13 +846,9 @@ export default function TerminalPane(props: TerminalPaneProps) {
         width: "100%",
         height: "100%",
         display: "flex",
-        flex: "1 1 auto",
-        alignSelf: "stretch",
         flexDirection: "column",
         minHeight: 0,
         minWidth: 0,
-        maxWidth: "100%",
-        overflow: "hidden",
         background: "var(--bg-app, #000)",
         position: "relative"
       }}
@@ -1109,12 +1105,9 @@ export default function TerminalPane(props: TerminalPaneProps) {
         id={`split-root-${sessionId}`}
         style={{
           flex: 1,
-          width: "100%",
-          maxWidth: "100%",
           minHeight: 0,
           minWidth: 0,
           display: "flex",
-          overflow: "hidden",
           flexDirection: splitDirection === "vertical" ? "row" : "column",
           background: "var(--bg-app, #000)"
         }}
