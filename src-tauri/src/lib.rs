@@ -250,6 +250,28 @@ pub struct TunnelRuntimeEntry {
     handle: JoinHandle<()>,
 }
 
+fn take_finished_tunnel_entries(
+    state: &State<'_, SshState>,
+) -> Result<Vec<TunnelRuntimeEntry>, String> {
+    let mut map = state
+        .tunnel_runtime
+        .lock()
+        .map_err(|_| "Tunnel state lock failed".to_string())?;
+
+    let finished_ids: Vec<i32> = map
+        .iter()
+        .filter_map(|(id, entry)| entry.handle.is_finished().then_some(*id))
+        .collect();
+
+    let mut entries = Vec::new();
+    for id in finished_ids {
+        if let Some(entry) = map.remove(&id) {
+            entries.push(entry);
+        }
+    }
+
+    Ok(entries)
+}
 
 #[cfg(target_os = "linux")]
 fn maybe_relaunch_appimage_with_wayland_preload() {
@@ -2532,6 +2554,11 @@ fn trust_host_key(host: String, port: u16) -> Result<(), String> {
 
 #[tauri::command]
 fn get_active_tunnels(state: State<'_, SshState>) -> Result<Vec<ActiveTunnelItem>, String> {
+    let finished_entries = take_finished_tunnel_entries(&state)?;
+    for entry in finished_entries {
+        let _ = entry.handle.join();
+    }
+
     let map = state
         .tunnel_runtime
         .lock()
@@ -2542,6 +2569,11 @@ fn get_active_tunnels(state: State<'_, SshState>) -> Result<Vec<ActiveTunnelItem
 
 #[tauri::command]
 fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
+    let finished_entries = take_finished_tunnel_entries(&state)?;
+    for entry in finished_entries {
+        let _ = entry.handle.join();
+    }
+
     {
         let map = state
             .tunnel_runtime
