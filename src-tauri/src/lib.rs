@@ -916,6 +916,70 @@ fn ignore_duplicate_column_error(result: Result<usize, rusqlite::Error>) -> Resu
     }
 }
 
+fn ensure_ssh_tunnels_foreign_key(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare("PRAGMA foreign_key_list(ssh_tunnels)")
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        let (table_name, from_col, to_col, on_delete) = row.map_err(|e| e.to_string())?;
+        if table_name == "connections"
+            && from_col == "server_id"
+            && to_col == "id"
+            && on_delete.eq_ignore_ascii_case("CASCADE")
+ {
+            return Ok(())
+        }
+    }
+
+    conn.execute_batch(
+        r#"
+        PRAGMA foreign_keys = OFF;
+        BEGIN IMMEDIATE;
+
+        CREATE TABLE ssh_tunnels_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            local_port INTEGER NOT NULL,
+            remote_host TEXT NOT NULL,
+            remote_port INTEGER NOT NULL,
+            bind_host TEXT NOT NULL DEFAULT '127.0.0.1',
+            auto_start INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (server_id) REFERENCES connections(id) ON DELETE CASCADE
+        );
+
+        INSERT INTO ssh_tunnels_new (
+            id, server_id, name, local_port, remote_host, remote_port, bind_host, auto_start
+        )
+        SELECT
+            t.id, t.server_id, t.name, t.local_port, t.remote_host, t.remote_port, t.bind_host, t.auto_start
+        FROM ssh_tunnels t
+        INNER JOIN connections c ON c.id = t.server_id;
+
+        DROP TABLE ssh_tunnels;
+        ALTER TABLE ssh_tunnels_new RENAME TO ssh_tunnels;
+
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+        "#,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn init_db() -> Result<(), String> {
     let conn = open_db()?;
 
@@ -975,6 +1039,8 @@ fn init_db() -> Result<(), String> {
         [],
     )
     .map_err(|e| e.to_string())?;
+
+    ensure_ssh_tunnels_foreign_key(&conn)?;
 
     Ok(())
 }
