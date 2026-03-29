@@ -1374,6 +1374,55 @@ fn validate_snippet(name: &str, command: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn normalize_ssh_key_name(name: &str) -> String {
+    name.trim().to_string()
+}
+
+fn normalize_ssh_key_type(key_type: &str) -> String {
+    let normalized = key_type.trim().to_lowercase();
+    if normalized.is_empty() {
+        "imported".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn ensure_ssh_key_unique(
+    conn: &Connection,
+    public_key: &str,
+    private_key_path: &str,
+) -> Result<(), String> {
+    let existing_by_path: Option<String> = conn
+        .query_row(
+            "SELECT name FROM ssh_keys WHERE private_key_path = ?1 LIMIT 1",
+            [&private_key_path],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(name) = existing_by_path {
+        return Err(format!("SSH key already exists for this path: {}", name));
+    }
+
+    if !public_key.trim().is_empty() {
+        let existing_by_public_key: Option<String> = conn
+            .query_row(
+                "SELECT name FROM ssh_keys WHERE public_key = ?1 LIMIT 1",
+                [&public_key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if let Some(name) = existing_by_public_key {
+            return Err(format!("SSH key already exists: {}", name));
+        }
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<String, String> {
     normalize_connection_fields(&mut connection);
@@ -2291,7 +2340,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 fn get_ssh_keys() -> Result<Vec<SshKeyItem>, String> {
     let conn = open_db()?;
     let mut stmt = conn.prepare(
-        "SELECT id, name, public_key, private_key_path, key_type, fingerprint FROM ssh_keys ORDER BY name ASC"
+        "SELECT id, name, public_key, private_key_path, key_type, fingerprint FROM ssh_keys ORDER BY name COLLATE NOCASE ASC"
     ).map_err(|e| e.to_string())?;
 
     let iter = stmt
@@ -2321,6 +2370,11 @@ fn save_ssh_key(
     private_key_path: String,
     key_type: String,
 ) -> Result<(), String> {
+    let name = normalize_ssh_key_name(&name);
+    if name.is_empty() {
+        return Err("Key name is empty".to_string());
+    }
+
     if private_key_path.trim().is_empty() {
         return Err("Private key path is empty".to_string());
     }
@@ -2330,6 +2384,7 @@ fn save_ssh_key(
         return Err(format!("Key file not found: {}", path));
     }
 
+    let normalized_key_type = normalize_ssh_key_type(&key_type);
     let public = if public_key.trim().is_empty() {
         read_public_key_for_path(&path)
     } else {
@@ -2339,9 +2394,10 @@ fn save_ssh_key(
     let fingerprint = fingerprint_for_pubkey_path(&format!("{}.pub", path));
 
     let conn = open_db()?;
+    ensure_ssh_key_unique(&conn, &public, &path)?;
     conn.execute(
         "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
-        (&name, &public, &path, &key_type, &fingerprint)
+        (&name, &public, &path, &normalized_key_type, &fingerprint)
     ).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -2349,12 +2405,12 @@ fn save_ssh_key(
 
 #[tauri::command]
 fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
-    let clean_name = name.trim();
-    if clean_name.is_empty() {
+    let normalized_name = normalize_ssh_key_name(&name);
+    if normalized_name.is_empty() {
         return Err("Key name is empty".to_string());
     }
 
-    let safe_name: String = clean_name
+    let safe_name: String = normalized_name
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -2365,11 +2421,13 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
         })
         .collect();
 
-    let key_type_final = if key_type.trim().is_empty() {
-        "ed25519"
+    let normalized_key_type = normalize_ssh_key_type(&key_type);
+    let key_type_final = if normalized_key_type == "imported" {
+        "ed25519".to_string()
     } else {
-        key_type.trim()
+        normalized_key_type
     };
+
     let key_dir = get_keys_dir();
     let private_path = format!("{}/{}", key_dir, safe_name);
     let pub_path = format!("{}.pub", private_path);
@@ -2380,13 +2438,13 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
 
     let output = run_ssh_keygen(&[
         "-t",
-        key_type_final,
+        &key_type_final,
         "-f",
         &private_path,
         "-N",
         "",
         "-C",
-        clean_name,
+        &normalized_name,
     ])?;
 
     if !output.status.success() {
@@ -2401,9 +2459,10 @@ fn generate_ssh_key(name: String, key_type: String) -> Result<(), String> {
     let fingerprint = fingerprint_for_pubkey_path(&pub_path);
 
     let conn = open_db()?;
+    ensure_ssh_key_unique(&conn, &public_key, &private_path)?;
     conn.execute(
         "INSERT INTO ssh_keys (name, public_key, private_key_path, key_type, fingerprint) VALUES (?1, ?2, ?3, ?4, ?5)",
-        (&clean_name, &public_key, &private_path, &key_type_final, &fingerprint)
+        (&normalized_name, &public_key, &private_path, &key_type_final, &fingerprint)
     ).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -2419,10 +2478,17 @@ fn delete_ssh_key(id: i32) -> Result<(), String> {
 
     let (private_key_path, key_type): (String, String) = stmt
         .query_row([&id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "SSH key not found".to_string(),
+            _ => e.to_string(),
+        })?;
+
+    let deleted = conn.execute("DELETE FROM ssh_keys WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
-    conn.execute("DELETE FROM ssh_keys WHERE id = ?1", [&id])
-        .map_err(|e| e.to_string())?;
+    if deleted == 0 {
+        return Err("SSH key not found".to_string());
+    }
 
     let managed_dir = get_keys_dir();
     if key_type != "imported" && private_key_path.starts_with(&managed_dir) {
