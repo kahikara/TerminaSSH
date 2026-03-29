@@ -194,12 +194,20 @@ export function ensureTerminal(_server: TerminalServer | null | undefined, sessi
         keepBottom(term)
       })
     }).then((unlisten) => {
+      if (terminalStore[sessionId] !== entry) {
+        try { unlisten() } catch {}
+        return
+      }
       entry!.unlisten = unlisten
     }).catch(() => {})
 
     listen(`term-exit-${sessionId}`, () => {
       setTimeout(() => onClose?.(), 120)
     }).then((unlisten) => {
+      if (terminalStore[sessionId] !== entry) {
+        try { unlisten() } catch {}
+        return
+      }
       entry!.exitUnlisten = unlisten
     }).catch(() => {})
   } else {
