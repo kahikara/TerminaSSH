@@ -74,6 +74,7 @@ export default function App() {
   const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [appVersion, setAppVersion] = useState("");
+  const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState === 'visible');
 
   const {
     dirtyEditors,
@@ -171,6 +172,21 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
+    const syncVisibility = () => {
+      setDocumentVisible(document.visibilityState === 'visible');
+    };
+
+    syncVisibility();
+    document.addEventListener('visibilitychange', syncVisibility);
+    window.addEventListener('focus', syncVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', syncVisibility);
+      window.removeEventListener('focus', syncVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (sidebarSearchFocusTimerRef.current !== null) {
         clearTimeout(sidebarSearchFocusTimerRef.current);
@@ -211,16 +227,27 @@ export default function App() {
       } catch {}
     }
 
-    void syncMaximized()
-    timer = window.setInterval(() => {
+    const handleWindowStateHint = () => {
       void syncMaximized()
-    }, 700)
+    }
+
+    void syncMaximized()
+    window.addEventListener('resize', handleWindowStateHint)
+    window.addEventListener('focus', handleWindowStateHint)
+
+    if (documentVisible) {
+      timer = window.setInterval(() => {
+        void syncMaximized()
+      }, 2000)
+    }
 
     return () => {
       mounted = false
-      if (timer) window.clearInterval(timer)
+      window.removeEventListener('resize', handleWindowStateHint)
+      window.removeEventListener('focus', handleWindowStateHint)
+      if (timer !== undefined) window.clearInterval(timer)
     }
-  }, [useCustomLinuxTitlebar])
+  }, [useCustomLinuxTitlebar, documentVisible])
 
     const loadServers = useCallback(async () => {
     try {

@@ -327,6 +327,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
   const [paneServers, setPaneServers] = useState<TerminalServer[]>(initialPaneServers)
   const [splitCounter, setSplitCounter] = useState(0)
   const [focusedPaneId, setFocusedPaneId] = useState(initialPaneSessionIds[0] || sessionId)
+  const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState === "visible")
 
   const dragRef = useRef(false)
   const paneIdsRef = useRef<string[]>(initialPaneSessionIds)
@@ -393,6 +394,21 @@ export default function TerminalPane(props: TerminalPaneProps) {
   }, [paneIds, focusedPaneId, sessionId])
 
   useEffect(() => {
+    const syncVisibility = () => {
+      setDocumentVisible(document.visibilityState === "visible")
+    }
+
+    syncVisibility()
+    document.addEventListener("visibilitychange", syncVisibility)
+    window.addEventListener("focus", syncVisibility)
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncVisibility)
+      window.removeEventListener("focus", syncVisibility)
+    }
+  }, [])
+
+  useEffect(() => {
     if (paneServers.length > paneIds.length) {
       setPaneServers((prev) => prev.slice(0, paneIds.length))
       return
@@ -410,7 +426,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
   }, [paneIds, paneServers.length, server])
 
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive || !documentVisible) return
 
     if (isLocalServer(activePaneServer)) {
       setPingMs("local")
@@ -438,20 +454,30 @@ export default function TerminalPane(props: TerminalPaneProps) {
       alive = false
       clearInterval(id)
     }
-  }, [isActive, activePaneServer])
+  }, [isActive, documentVisible, activePaneServer])
 
   useEffect(() => {
-    setSessionSeconds(0)
+    const startedAt = Date.now()
 
-    const id = window.setInterval(() => {
-      setSessionSeconds((prev) => prev + 1)
-    }, 1000)
+    const updateSessionSeconds = () => {
+      setSessionSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+    }
 
-    return () => clearInterval(id)
+    updateSessionSeconds()
+    const id = window.setInterval(updateSessionSeconds, 1000)
+
+    document.addEventListener("visibilitychange", updateSessionSeconds)
+    window.addEventListener("focus", updateSessionSeconds)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", updateSessionSeconds)
+      window.removeEventListener("focus", updateSessionSeconds)
+    }
   }, [sessionId])
 
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive || !documentVisible) return
 
     if (isLocalServer(activePaneServer) || (!showStatusBarLoad && !showStatusBarRam) || !activePaneServer?.id) {
       setStatusMetrics({})
@@ -482,10 +508,10 @@ export default function TerminalPane(props: TerminalPaneProps) {
       alive = false
       clearInterval(id)
     }
-  }, [isActive, activePaneServer?.id, showStatusBarLoad, showStatusBarRam])
+  }, [isActive, documentVisible, activePaneServer?.id, showStatusBarLoad, showStatusBarRam])
 
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive || !documentVisible) return
 
     if (isLocalServer(activePaneServer) || !showStatusBarTunnel || !activePaneServer?.id) {
       setActiveTunnelLabel("")
@@ -530,7 +556,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
       alive = false
       clearInterval(id)
     }
-  }, [isActive, activePaneServer?.id, showStatusBarTunnel, statusLang])
+  }, [isActive, documentVisible, activePaneServer?.id, showStatusBarTunnel, statusLang])
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
