@@ -2243,7 +2243,20 @@ fn update_tunnel(id: i32, tunnel: SshTunnel) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn delete_tunnel(id: i32) -> Result<String, String> {
+fn delete_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
+    let entry = {
+        let mut map = state
+            .tunnel_runtime
+            .lock()
+            .map_err(|_| "Tunnel state lock failed".to_string())?;
+        map.remove(&id)
+    };
+
+    if let Some(entry) = entry {
+        entry.stop_flag.store(true, Ordering::Relaxed);
+        let _ = entry.handle.join();
+    }
+
     let conn = open_db()?;
     conn.execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
