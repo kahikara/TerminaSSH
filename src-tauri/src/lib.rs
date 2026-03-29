@@ -895,6 +895,20 @@ fn decrypt_pw(encoded: &str) -> Result<String, String> {
     String::from_utf8(plaintext).map_err(|_| "UTF8 Fehler".to_string())
 }
 
+fn ignore_duplicate_column_error(result: Result<usize, rusqlite::Error>) -> Result<(), String> {
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.to_ascii_lowercase().contains("duplicate column name") {
+                Ok(())
+            } else {
+                Err(msg)
+            }
+        }
+    }
+}
+
 fn init_db() -> Result<(), String> {
     let conn = open_db()?;
 
@@ -904,22 +918,22 @@ fn init_db() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let _ = conn.execute(
+    ignore_duplicate_column_error(conn.execute(
         "ALTER TABLE connections ADD COLUMN password TEXT NOT NULL DEFAULT ''",
         [],
-    );
-    let _ = conn.execute(
+    ))?;
+    ignore_duplicate_column_error(conn.execute(
         "ALTER TABLE connections ADD COLUMN private_key TEXT NOT NULL DEFAULT ''",
         [],
-    );
-    let _ = conn.execute(
+    ))?;
+    ignore_duplicate_column_error(conn.execute(
         "ALTER TABLE connections ADD COLUMN passphrase TEXT NOT NULL DEFAULT ''",
         [],
-    );
-    let _ = conn.execute(
+    ))?;
+    ignore_duplicate_column_error(conn.execute(
         "ALTER TABLE connections ADD COLUMN group_name TEXT NOT NULL DEFAULT ''",
         [],
-    );
+    ))?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS snippets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, command TEXT NOT NULL)",
