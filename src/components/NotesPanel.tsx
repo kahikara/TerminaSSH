@@ -1,13 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { FileText, Trash2, X } from "lucide-react"
 
-function notesKey(server: any) {
-  if (server?.isLocal || server?.id === "local" || server?.host === "localhost") {
+type NotesServer = {
+  id?: string | number
+  isLocal?: boolean
+  host?: string
+  port?: number
+  username?: string
+}
+
+type NotesPanelProps = {
+  server?: NotesServer | null
+  lang?: string
+  visible: boolean
+  onClose?: () => void
+  showDialog?: (config: Record<string, unknown>) => void
+}
+
+function notesKey(server: NotesServer | null | undefined) {
+  if (server?.isLocal || server?.id === "local" || server?.host === "__local__") {
     return "termina_notes:local"
   }
 
-  const user = String(server?.username || "")
-  const host = String(server?.host || "")
+  const user = String(server?.username || "").trim()
+  const host = String(server?.host || "").trim()
   const port = String(server?.port || 22)
 
   return `termina_notes:${user}@${host}:${port}`
@@ -35,7 +51,7 @@ export default function NotesPanel({
   visible,
   onClose,
   showDialog
-}: any) {
+}: NotesPanelProps) {
   const storageKey = useMemo(() => notesKey(server), [server])
   const [text, setText] = useState("")
   const [status, setStatus] = useState<"idle" | "saved">("idle")

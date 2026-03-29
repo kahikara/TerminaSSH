@@ -1838,7 +1838,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         .cloned()
         .unwrap_or_default();
 
-    let mut imported_notes: Vec<BackupNote> = Vec::new();
+    let mut imported_notes_map: HashMap<String, String> = HashMap::new();
     for item in notes_value {
         let storage_key = item
             .get("storage_key")
@@ -1858,11 +1858,14 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         }
 
-        imported_notes.push(BackupNote {
-            storage_key,
-            content,
-        });
+        imported_notes_map.insert(storage_key, content);
     }
+
+    let mut imported_notes: Vec<BackupNote> = imported_notes_map
+        .into_iter()
+        .map(|(storage_key, content)| BackupNote { storage_key, content })
+        .collect();
+    imported_notes.sort_by(|a, b| a.storage_key.cmp(&b.storage_key));
 
     let notes_imported = imported_notes.len();
 
