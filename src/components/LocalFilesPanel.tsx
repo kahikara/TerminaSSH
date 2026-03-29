@@ -554,13 +554,23 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           }}
         >
           <button
-            onClick={() => load(homePath || "/")}
+            onClick={() => {
+              invoke("get_local_home_dir")
+                .then((home) => {
+                  const resolvedHome = String(home || "/")
+                  setHomePath(resolvedHome)
+                  void load(resolvedHome)
+                })
+                .catch(() => {
+                  setHomePath("/")
+                  void load("/")
+                })
+            }}
             style={{ ...iconBtn, flexShrink: 0 }}
             title={lang === "de" ? "Home Verzeichnis" : "Home directory"}
           >
             <Home size={14} />
           </button>
-
           <button
             onClick={() => setShowHidden((prev) => !prev)}
             style={{ ...iconBtn, flexShrink: 0 }}
@@ -699,7 +709,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   textOverflow: "ellipsis"
                 }}
               >
-                {i === 0 ? <span>/</span> : null}
                 <span>{i === 0 ? "/" : part.label}</span>
               </button>
               {i < arr.length - 1 && <ChevronRight size={12} />}

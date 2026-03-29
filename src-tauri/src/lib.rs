@@ -2832,24 +2832,22 @@ fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
             continue;
         }
 
-        let (is_dir, size) = match fs::metadata(&entry_path) {
-            Ok(entry_metadata) => (
-                entry_metadata.is_dir(),
-                if entry_metadata.is_dir() { 0 } else { entry_metadata.len() },
-            ),
-            Err(_) => {
-                let file_type = match entry.file_type() {
-                    Ok(file_type) => file_type,
-                    Err(_) => continue,
-                };
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
 
-                (file_type.is_dir(), 0)
-            }
+        let size = if file_type.is_dir() {
+            0
+        } else {
+            fs::symlink_metadata(&entry_path)
+                .map(|metadata| metadata.len())
+                .unwrap_or(0)
         };
 
         items.push(FileItem {
             name,
-            is_dir,
+            is_dir: file_type.is_dir(),
             size,
         });
     }
@@ -2922,12 +2920,12 @@ fn local_write_file(path: String, content_base64: String) -> Result<String, Stri
 
 #[tauri::command]
 fn get_local_home_dir() -> Result<String, String> {
-    Ok(
-        home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .to_string_lossy()
-            .to_string(),
-    )
+    let home = home_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    match fs::canonicalize(&home) {
+        Ok(resolved) => Ok(resolved.to_string_lossy().to_string()),
+        Err(_) => Ok(home.to_string_lossy().to_string()),
+    }
 }
 
 #[tauri::command]
