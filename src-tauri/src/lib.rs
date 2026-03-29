@@ -1291,14 +1291,67 @@ fn ensure_tunnel_bind_target_is_unique(
     }
 }
 
+fn ensure_connection_identity_unique(
+    conn: &Connection,
+    connection: &SshConnection,
+    exclude_id: Option<i32>,
+) -> Result<(), String> {
+    let existing: Option<String> = if let Some(exclude_id) = exclude_id {
+        conn.query_row(
+            "SELECT name FROM connections WHERE host = ?1 AND port = ?2 AND username = ?3 AND group_name = ?4 AND id != ?5 LIMIT 1",
+            (
+                &connection.host,
+                &connection.port,
+                &connection.username,
+                &connection.group_name,
+                &exclude_id,
+            ),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(
+            "SELECT name FROM connections WHERE host = ?1 AND port = ?2 AND username = ?3 AND group_name = ?4 LIMIT 1",
+            (
+                &connection.host,
+                &connection.port,
+                &connection.username,
+                &connection.group_name,
+            ),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    };
+
+    if let Some(name) = existing {
+        Err(format!(
+            "A connection for {}@{}:{} already exists{}",
+            connection.username,
+            connection.host,
+            connection.port,
+            if name == connection.name {
+                String::new()
+            } else {
+                format!(": {}", name)
+            }
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<String, String> {
     normalize_connection_fields(&mut connection);
     validate_connection(&connection)?;
 
+    let conn = open_db()?;
+    ensure_connection_identity_unique(&conn, &connection, None)?;
+
     let enc_pw = encrypt_pw(&connection.password)?;
     let enc_passphrase = encrypt_pw(&connection.passphrase)?;
-    let conn = open_db()?;
     conn.execute(
         "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         (
@@ -1333,27 +1386,37 @@ fn update_connection(
     validate_connection(&connection)?;
 
     let conn = open_db()?;
+    ensure_connection_exists(&conn, id)?;
+    ensure_connection_identity_unique(&conn, &connection, Some(id))?;
+
+    let existing_secrets: (String, String) = conn
+        .query_row(
+            "SELECT password, passphrase FROM connections WHERE id = ?1",
+            [&id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "Connection not found".to_string(),
+            _ => e.to_string(),
+        })?;
+
     let pw_to_save = if clear_password {
         String::new()
     } else if connection.password.is_empty() {
-        let mut stmt = conn
-            .prepare("SELECT password FROM connections WHERE id = ?1")
-            .map_err(|e| e.to_string())?;
-        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
+        existing_secrets.0
     } else {
         encrypt_pw(&connection.password)?
     };
+
     let passphrase_to_save = if clear_passphrase {
         String::new()
     } else if connection.passphrase.is_empty() {
-        let mut stmt = conn
-            .prepare("SELECT passphrase FROM connections WHERE id = ?1")
-            .map_err(|e| e.to_string())?;
-        stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
+        existing_secrets.1
     } else {
         encrypt_pw(&connection.passphrase)?
     };
-    conn.execute(
+
+    let updated = conn.execute(
         "UPDATE connections SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8 WHERE id = ?9",
         (
             &connection.name,
@@ -1368,6 +1431,11 @@ fn update_connection(
         ),
     )
     .map_err(|e| e.to_string())?;
+
+    if updated == 0 {
+        return Err("Connection not found".to_string());
+    }
+
     let _ = old_name;
     let _ = app.emit("connection-saved", ());
     Ok(format!("Connection '{}' updated", connection.name))
@@ -1377,11 +1445,16 @@ fn update_connection(
 fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<(), String> {
     let enc_pw = encrypt_pw(&password)?;
     let conn = open_db()?;
-    conn.execute(
+    let updated = conn.execute(
         "UPDATE connections SET password = ?1 WHERE id = ?2",
         (&enc_pw, &id),
     )
     .map_err(|e| e.to_string())?;
+
+    if updated == 0 {
+        return Err("Connection not found".to_string());
+    }
+
     let _ = app.emit("connection-saved", ());
     Ok(())
 }
@@ -1394,6 +1467,7 @@ fn delete_connection(
     state: State<'_, SshState>,
 ) -> Result<String, String> {
     let conn = open_db()?;
+    ensure_connection_exists(&conn, id)?;
 
     let mut stmt = conn
         .prepare("SELECT id FROM ssh_tunnels WHERE server_id = ?1")
@@ -1427,8 +1501,12 @@ fn delete_connection(
     conn.execute("DELETE FROM ssh_tunnels WHERE server_id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
-    conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
+    let deleted = conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
+
+    if deleted == 0 {
+        return Err("Connection not found".to_string());
+    }
 
     let _ = app.emit("connection-saved", ());
     Ok(format!("Connection '{}' deleted", name))
