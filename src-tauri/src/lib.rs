@@ -2947,6 +2947,28 @@ fn get_local_home_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn get_local_roots() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut roots = Vec::new();
+
+        for letter in b'A'..=b'Z' {
+            let root = format!("{}:\\", letter as char);
+            if Path::new(&root).exists() {
+                roots.push(root);
+            }
+        }
+
+        return Ok(roots);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
 fn test_connection(
     mut connection: SshConnection,
     check_sftp: Option<bool>,
@@ -4252,6 +4274,7 @@ pub fn run() {
             local_read_file,
             local_write_file,
             get_local_home_dir,
+            get_local_roots,
             close_session,
             measure_tcp_latency,
             get_linux_window_mode,

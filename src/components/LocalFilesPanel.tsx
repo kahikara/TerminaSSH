@@ -4,6 +4,7 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import {
   Folder,
   File,
+  HardDrive,
   ArrowLeft,
   X,
   RefreshCw,
@@ -444,6 +445,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [showHidden, setShowHidden] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [sortMenuStyle, setSortMenuStyle] = useState<React.CSSProperties | null>(null)
+  const [rootsMenuOpen, setRootsMenuOpen] = useState(false)
+  const [rootsMenuStyle, setRootsMenuStyle] = useState<React.CSSProperties | null>(null)
   const [browserMenuOpen, setBrowserMenuOpen] = useState(false)
   const [browserMenuStyle, setBrowserMenuStyle] = useState<React.CSSProperties | null>(null)
   const [panelWidth, setPanelWidth] = useState(readStoredPanelWidth())
@@ -463,6 +466,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [isLoading, setIsLoading] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
+  const [localRoots, setLocalRoots] = useState<string[]>([])
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -495,6 +499,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     setContextMenuStyle(null)
     setSortMenuOpen(false)
     setSortMenuStyle(null)
+    setRootsMenuOpen(false)
+    setRootsMenuStyle(null)
     setBrowserMenuOpen(false)
     setBrowserMenuStyle(null)
   }
@@ -573,6 +579,22 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       })
       .catch(() => {
         return load("/")
+      })
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
+
+    invoke("get_local_roots")
+      .then((roots) => {
+        setLocalRoots(
+          Array.isArray(roots)
+            ? roots.map((root) => String(root || "").trim()).filter(Boolean)
+            : []
+        )
+      })
+      .catch(() => {
+        setLocalRoots([])
       })
   }, [visible])
 
@@ -736,7 +758,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         e.preventDefault()
         e.stopPropagation()
 
-        if (menuItem || sortMenuOpen) {
+        if (menuItem || sortMenuOpen || rootsMenuOpen) {
           clearTransientChrome()
           return
         }
@@ -819,6 +841,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     newFolderValid,
     menuItem,
     sortMenuOpen,
+    rootsMenuOpen,
     errorText,
     successText,
     navigableEntries,
@@ -1032,6 +1055,94 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           >
             <Home size={14} />
           </button>
+
+          {localRoots.length > 0 && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+
+                  if (rootsMenuOpen) {
+                    setRootsMenuOpen(false)
+                    setRootsMenuStyle(null)
+                    return
+                  }
+
+                  const panelEl = panelRef.current
+                  const buttonEl = e.currentTarget as HTMLButtonElement
+
+                  if (panelEl && buttonEl) {
+                    const panelRect = panelEl.getBoundingClientRect()
+                    const buttonRect = buttonEl.getBoundingClientRect()
+                    setRootsMenuStyle(getSmallMenuPosition(buttonRect, panelRect))
+                  } else {
+                    setRootsMenuStyle(null)
+                  }
+
+                  setMenuItem(null)
+                  setMenuStyle(null)
+                  setContextMenuItem(null)
+                  setContextMenuStyle(null)
+                  setSortMenuOpen(false)
+                  setSortMenuStyle(null)
+                  setBrowserMenuOpen(false)
+                  setBrowserMenuStyle(null)
+                  setRootsMenuOpen(true)
+                }}
+                style={{ ...iconBtn, flexShrink: 0 }}
+                title={lang === "de" ? "Laufwerke" : "Drives"}
+              >
+                <HardDrive size={14} />
+              </button>
+
+              {rootsMenuOpen && (
+                <div
+                  style={{
+                    ...(rootsMenuStyle || {
+                      position: "absolute",
+                      top: 40,
+                      right: 0,
+                      width: 156,
+                      minWidth: 156,
+                      borderRadius: 10,
+                      border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+                      background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+                      boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                      overflow: "hidden",
+                      zIndex: 35
+                    }),
+                    maxHeight: 220,
+                    overflowY: "auto"
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {localRoots.map((root) => {
+                    const activeRoot = path.toLowerCase().startsWith(root.toLowerCase())
+
+                    return (
+                      <button
+                        key={root}
+                        style={{
+                          ...menuButtonStyle,
+                          color: activeRoot ? "var(--text-main)" : undefined,
+                          background: activeRoot ? "var(--bg-hover, rgba(255,255,255,0.08))" : undefined,
+                          fontWeight: activeRoot ? 700 : 500
+                        }}
+                        onClick={() => {
+                          setRootsMenuOpen(false)
+                          setRootsMenuStyle(null)
+                          void load(root)
+                        }}
+                      >
+                        {root}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={() => setShowHidden((prev) => !prev)}
             style={{ ...iconBtn, flexShrink: 0 }}
