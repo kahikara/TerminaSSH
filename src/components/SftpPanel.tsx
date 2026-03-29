@@ -642,13 +642,15 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     let applyAll = false
     let rememberedAction: ConflictAction | null = null
     let rememberedRenameMode = false
+    let knownFiles = [...files]
 
     for (const local of pathsToUpload) {
       const name = getPathBaseName(local) || "upload.tmp"
-      const exists = files.some((f) => !f.is_dir && f.name === name)
+      const exists = knownFiles.some((f) => !f.is_dir && f.name === name)
 
       if (!exists) {
         await uploadSingle(local, name)
+        knownFiles.push({ name, is_dir: false, size: 0 })
         continue
       }
 
@@ -658,10 +660,10 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       if (applyAll && rememberedAction) {
         action = rememberedAction
         if (rememberedRenameMode) {
-          renameVal = uniqueRenamedName(name, files)
+          renameVal = uniqueRenamedName(name, knownFiles)
         }
       } else {
-        const answer = await askConflict(name, uniqueRenamedName(name, files))
+        const answer = await askConflict(name, uniqueRenamedName(name, knownFiles))
         action = answer.action
         renameVal = answer.renameValue || name
 
@@ -685,6 +687,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       }
       if (action === "rename") {
         await uploadSingle(local, renameVal)
+        knownFiles.push({ name: renameVal, is_dir: false, size: 0 })
       }
     }
 
