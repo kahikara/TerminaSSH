@@ -414,7 +414,7 @@ export default function App() {
     return haystack.includes(normalizedSidebarSearch);
   };
 
-  const filteredRootServers = useMemo(() => {
+  const filteredRootServers = useMemo<ConnectionItem[]>(() => {
     if (!isSidebarSearching) return rootServers;
     return rootServers.filter((conn) => matchesSidebarSearch(conn));
   }, [rootServers, isSidebarSearching, normalizedSidebarSearch]);
@@ -439,7 +439,7 @@ export default function App() {
     return false;
   };
 
-  const activeTab = useMemo(
+  const activeTab = useMemo<AppTab | null>(
     () => openTabs.find((tab) => tab.tabId === activeTabId) || null,
     [openTabs, activeTabId]
   );
@@ -485,7 +485,7 @@ export default function App() {
   const sidebarActiveConnectionId = activeConnectionId ?? lastActiveConnectionId;
   const isLocalActive = sidebarActiveConnectionId === "__local__";
   const isServerActive = (conn: ConnectionItem) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
-  const draggedTabGhost = useMemo(
+  const draggedTabGhost = useMemo<AppTab | null>(
     () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
   );
@@ -767,7 +767,7 @@ export default function App() {
     server: ConnectionItem,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
   ) => {
-    const findExistingTabId = () => {
+    const findExistingTabId = (): string | null => {
       if (options.forceNewTab) return null;
       if (server?.isQuickConnect) return null;
 
@@ -1081,7 +1081,7 @@ export default function App() {
     document.body.style.cursor = '';
   }, []);
 
-  const handleTabPointerStart = useCallback((e: any, tabId: string) => {
+  const handleTabPointerStart = useCallback((e: React.MouseEvent<HTMLDivElement>, tabId: string) => {
     if (e.button !== 0) return;
 
     const target = e.target as HTMLElement | null;
@@ -1465,7 +1465,7 @@ export default function App() {
                         </div>
                         {!isSidebarSearching && groups[group].length === 0 && (
                            <span
-                             onClick={(e) => { e.stopPropagation(); setSettings({...settings, customFolders: settings.customFolders.filter((f:string)=>f!==group)}); }}
+                             onClick={(e) => { e.stopPropagation(); setSettings({...settings, customFolders: settings.customFolders.filter((f) => f !== group)}); }}
                              className="opacity-0 group-hover/folder:opacity-100 text-[var(--danger)] transition-all focus-visible:opacity-100 flex items-center justify-center shrink-0"
                              style={{ width: 18, height: 18, borderRadius: 6 }}
                            >
