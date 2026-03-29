@@ -765,6 +765,13 @@ fn default_ssh_private_key_paths() -> Vec<PathBuf> {
         .collect()
 }
 
+fn cleanup_imported_key_files(paths: &[String]) {
+    for private_path in paths {
+        let _ = fs::remove_file(private_path);
+        let _ = fs::remove_file(format!("{}.pub", private_path));
+    }
+}
+
 fn try_auth_with_private_key(
     sess: &Session,
     username: &str,
@@ -1477,6 +1484,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
 
     let keys_dir = get_keys_dir();
     let mut warnings: Vec<String> = Vec::new();
+    let mut created_imported_key_paths: Vec<String> = Vec::new();
 
     if version < 3 {
         warnings.push(
@@ -1554,7 +1562,11 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             let stem = sanitize_key_file_stem(&name);
             let private_path = ensure_unique_key_path(&keys_dir, &stem);
 
-            fs::write(&private_path, bytes).map_err(|e| e.to_string())?;
+            fs::write(&private_path, bytes).map_err(|e| {
+                cleanup_imported_key_files(&created_imported_key_paths);
+                e.to_string()
+            })?;
+            created_imported_key_paths.push(private_path.clone());
 
             #[cfg(unix)]
             {
@@ -1889,7 +1901,10 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         tunnels_imported += 1;
     }
 
-    tx.commit().map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| {
+        cleanup_imported_key_files(&created_imported_key_paths);
+        e.to_string()
+    })?;
 
     Ok(ImportBackupResult {
         settings,
