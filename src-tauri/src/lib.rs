@@ -2764,6 +2764,26 @@ fn connect_ssh_session(id: i32) -> Result<Session, String> {
     connect_ssh_session_with_password_override(id, None)
 }
 
+fn normalize_remote_path(path: &str) -> Result<String, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Path is empty".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+fn map_sftp_path_error(err: ssh2::Error, action: &str, path: &str) -> String {
+    let message = err.message().to_ascii_lowercase();
+    if message.contains("no such file")
+        || message.contains("not found")
+        || message.contains("does not exist")
+    {
+        format!("{} not found: {}", action, path)
+    } else {
+        format!("{} failed for {}: {}", action, path, err)
+    }
+}
+
 #[tauri::command]
 fn test_connection(
     mut connection: SshConnection,
@@ -3458,42 +3478,54 @@ fn sftp_list_dir(id: i32, path: String) -> Result<Vec<FileItem>, String> {
 
 #[tauri::command]
 fn sftp_mkdir(id: i32, path: String) -> Result<String, String> {
+    let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     sftp.mkdir(Path::new(&path), 0o755)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| map_sftp_path_error(e, "Create folder", &path))?;
     Ok("Folder created".to_string())
 }
 
 #[tauri::command]
 fn sftp_rename(id: i32, old_path: String, new_path: String) -> Result<String, String> {
+    let old_path = normalize_remote_path(&old_path)?;
+    let new_path = normalize_remote_path(&new_path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     sftp.rename(Path::new(&old_path), Path::new(&new_path), None)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| map_sftp_path_error(e, "Rename", &old_path))?;
     Ok("Renamed".to_string())
 }
 
 #[tauri::command]
 fn sftp_delete(id: i32, path: String) -> Result<String, String> {
+    let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
-    let stat = sftp.stat(Path::new(&path)).map_err(|e| e.to_string())?;
+    let stat = sftp
+        .stat(Path::new(&path))
+        .map_err(|e| map_sftp_path_error(e, "Delete target", &path))?;
     if stat.is_dir() {
-        sftp.rmdir(Path::new(&path)).map_err(|e| e.to_string())?;
+        sftp.rmdir(Path::new(&path))
+            .map_err(|e| map_sftp_path_error(e, "Delete folder", &path))?;
     } else {
-        sftp.unlink(Path::new(&path)).map_err(|e| e.to_string())?;
+        sftp.unlink(Path::new(&path))
+            .map_err(|e| map_sftp_path_error(e, "Delete file", &path))?;
     }
     Ok("Deleted".to_string())
 }
 
 #[tauri::command]
 fn sftp_read_file(id: i32, path: String) -> Result<SftpReadFilePayload, String> {
+    let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
-    let mut file = sftp.open(Path::new(&path)).map_err(|e| e.to_string())?;
+    let mut file = sftp
+        .open(Path::new(&path))
+        .map_err(|e| map_sftp_path_error(e, "Read file", &path))?;
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    file.read_to_end(&mut buf)
+        .map_err(|e| format!("Read failed for {}: {}", path, e))?;
     Ok(SftpReadFilePayload {
         content_base64: STANDARD.encode(&buf),
     })
@@ -3501,13 +3533,17 @@ fn sftp_read_file(id: i32, path: String) -> Result<SftpReadFilePayload, String> 
 
 #[tauri::command]
 fn sftp_write_file(id: i32, path: String, content_base64: String) -> Result<String, String> {
+    let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     let bytes = STANDARD
         .decode(content_base64.as_bytes())
         .map_err(|e| format!("Invalid base64 content: {}", e))?;
-    let mut file = sftp.create(Path::new(&path)).map_err(|e| e.to_string())?;
-    file.write_all(&bytes).map_err(|e| e.to_string())?;
+    let mut file = sftp
+        .create(Path::new(&path))
+        .map_err(|e| map_sftp_path_error(e, "Write file", &path))?;
+    file.write_all(&bytes)
+        .map_err(|e| format!("Write failed for {}: {}", path, e))?;
     Ok("Saved".to_string())
 }
 
