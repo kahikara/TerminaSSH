@@ -450,6 +450,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [sortMode, setSortMode] = useState<LocalSortMode>("folders")
   const [menuItem, setMenuItem] = useState<string | null>(null)
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null)
+  const [contextMenuItem, setContextMenuItem] = useState<string | null>(null)
+  const [contextMenuStyle, setContextMenuStyle] = useState<React.CSSProperties | null>(null)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [renameItem, setRenameItem] = useState<FileItem | null>(null)
   const [renameValue, setRenameValue] = useState("")
@@ -489,6 +491,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   function clearTransientChrome() {
     setMenuItem(null)
     setMenuStyle(null)
+    setContextMenuItem(null)
+    setContextMenuStyle(null)
     setSortMenuOpen(false)
     setSortMenuStyle(null)
     setBrowserMenuOpen(false)
@@ -508,8 +512,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (!panelRect) return
 
     setSelectedItem(entry.name)
-    setMenuItem(entry.name)
-    setMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 156, entry.is_dir ? 118 : 154))
+    setContextMenuItem(entry.name)
+    setContextMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 156, entry.is_dir ? 118 : 154))
   }
 
   function activateEntry(entryName: string) {
@@ -1441,6 +1445,64 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           </div>
         ))}
       </div>
+
+      {contextMenuItem && (() => {
+        const entry = visibleFiles.find((f) => f.name === contextMenuItem)
+        if (!entry) return null
+
+        return (
+          <div
+            data-local-context-menu="true"
+            style={contextMenuStyle || {
+              position: "absolute",
+              left: 8,
+              top: 8,
+              width: 156,
+              minWidth: 156,
+              borderRadius: 10,
+              border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+              background: "var(--bg-app, #020617)",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+              overflow: "hidden",
+              zIndex: 80
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              style={menuButtonStyle}
+              onClick={() => {
+                clearTransientChrome()
+                if (entry.is_dir) {
+                  void load(buildLocalPath(path, entry.name))
+                } else {
+                  void openEditor(entry)
+                }
+              }}
+            >
+              {entry.is_dir ? (lang === "de" ? "Öffnen" : "Open") : t("edit", lang)}
+            </button>
+            <button
+              style={menuButtonStyle}
+              onClick={() => {
+                clearTransientChrome()
+                setRenameItem(entry)
+                setRenameValue(entry.name)
+              }}
+            >
+              {t("rename", lang)}
+            </button>
+            <button
+              style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
+              onClick={() => {
+                clearTransientChrome()
+                setDeleteItem(entry)
+              }}
+            >
+              {t("delete", lang)}
+            </button>
+          </div>
+        )
+      })()}
 
       {browserMenuOpen && (
         <div
