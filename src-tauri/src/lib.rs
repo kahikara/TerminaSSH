@@ -608,6 +608,36 @@ fn check_known_host_status_for_session(
     Ok(status.to_string())
 }
 
+fn ensure_known_host_match_for_session(
+    sess: &Session,
+    host: &str,
+    port: u16,
+) -> Result<(), String> {
+    let (key, _) = sess
+        .host_key()
+        .ok_or("Could not read remote host key".to_string())?;
+
+    let status = check_known_host_status_for_session(sess, host, port, key)?;
+    let display_host = format_known_host_name(host, port);
+
+    match status.as_str() {
+        "match" => Ok(()),
+        "not_found" => Err(format!(
+            "Host key for {} is not trusted yet. Trust the host before connecting.",
+            display_host
+        )),
+        "mismatch" => Err(format!(
+            "Stored host key for {} does not match the current server. Review and replace it before connecting.",
+            display_host
+        )),
+        _ => Err(format!(
+            "Host key verification failed for {}.",
+            display_host
+        )),
+    }
+}
+
+
 fn probe_host_key(
     host: &str,
     port: u16,
@@ -2127,6 +2157,8 @@ fn connect_quick_session(
     sess.handshake()
         .map_err(|e| format!("Handshake Error: {}", e))?;
 
+    ensure_known_host_match_for_session(&sess, &host, port)?;
+
     if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
         return Err("Authentication failed".to_string());
     }
@@ -2172,6 +2204,8 @@ fn connect_ssh_session_with_password_override(
     sess.set_tcp_stream(tcp);
     sess.handshake()
         .map_err(|e| format!("Handshake Error: {}", e))?;
+
+    ensure_known_host_match_for_session(&sess, &host, port)?;
 
     if !authenticate_session(&sess, &username, &password, &private_key, &passphrase) {
         return Err("Authentication failed".to_string());
