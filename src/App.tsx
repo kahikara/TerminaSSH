@@ -116,6 +116,8 @@ type HostKeyCheckInfo = {
   known_hosts_path: string
 }
 
+type ConnectionGroups = Record<string, ConnectionItem[]>
+
 const createClosedDialogState = (): GlobalDialogState => ({
   isOpen: false,
   type: 'alert',
@@ -370,8 +372,8 @@ export default function App() {
   }, [connections]);
 
   const { groups, rootServers } = useMemo(() => {
-    const grps: Record<string, any[]> = {};
-    const root: any[] = [];
+    const grps: ConnectionGroups = {};
+    const root: ConnectionItem[] = [];
     (settings.customFolders || []).forEach((f: string) => grps[f] = []);
 
     connections.forEach((curr) => {
@@ -386,14 +388,14 @@ export default function App() {
     return { groups: grps, rootServers: root };
   }, [connections, settings.customFolders]);
 
-  const collapsedConnections = useMemo(() => {
+  const collapsedConnections = useMemo<ConnectionItem[]>(() => {
     const items: ConnectionItem[] = [
       { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }
     ];
 
-    rootServers.forEach((conn: any) => items.push(conn));
+    rootServers.forEach((conn) => items.push(conn));
     Object.keys(groups).sort().forEach((group) => {
-      groups[group].forEach((conn: any) => items.push(conn));
+      groups[group].forEach((conn) => items.push(conn));
     });
 
     return items;
@@ -402,7 +404,7 @@ export default function App() {
   const normalizedSidebarSearch = sidebarSearchQuery.trim().toLowerCase();
   const isSidebarSearching = showSidebarSearch && normalizedSidebarSearch.length > 0;
 
-  const matchesSidebarSearch = (conn: any) => {
+  const matchesSidebarSearch = (conn: ConnectionItem) => {
     if (!normalizedSidebarSearch) return true;
     const haystack = [
       conn?.name || "",
@@ -414,15 +416,15 @@ export default function App() {
 
   const filteredRootServers = useMemo(() => {
     if (!isSidebarSearching) return rootServers;
-    return rootServers.filter((conn: any) => matchesSidebarSearch(conn));
+    return rootServers.filter((conn) => matchesSidebarSearch(conn));
   }, [rootServers, isSidebarSearching, normalizedSidebarSearch]);
 
-  const filteredGroups = useMemo(() => {
+  const filteredGroups = useMemo<ConnectionGroups>(() => {
     if (!isSidebarSearching) return groups;
 
-    const next: Record<string, any[]> = {};
+    const next: ConnectionGroups = {};
     Object.keys(groups).forEach((group) => {
-      const matches = groups[group].filter((conn: any) => matchesSidebarSearch(conn));
+      const matches = groups[group].filter((conn) => matchesSidebarSearch(conn));
       if (matches.length > 0) next[group] = matches;
     });
     return next;
@@ -482,7 +484,7 @@ export default function App() {
   const activeConnectionId = activeTab?.isLocal ? "__local__" : activeTab?.id != null ? String(activeTab.id) : null;
   const sidebarActiveConnectionId = activeConnectionId ?? lastActiveConnectionId;
   const isLocalActive = sidebarActiveConnectionId === "__local__";
-  const isServerActive = (conn: any) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
+  const isServerActive = (conn: ConnectionItem) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
   const draggedTabGhost = useMemo(
     () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
@@ -830,7 +832,7 @@ export default function App() {
 
           const tabId = Math.random().toString(36).substring(7);
           const resolvedServer = applyPromptPasswordToServer(server, pwd);
-          const newTab = {
+          const newTab: AppTab = {
             ...resolvedServer,
             tabId,
             sessionId: tabId
@@ -843,7 +845,7 @@ export default function App() {
     }
 
     const tabId = Math.random().toString(36).substring(7);
-    const newTab = { ...server, tabId, sessionId: tabId };
+    const newTab: AppTab = { ...server, tabId, sessionId: tabId };
     setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(tabId);
   };
@@ -1329,7 +1331,7 @@ export default function App() {
 
             {isSidebarCollapsed ? (
               <div className="flex flex-col items-center gap-1.5 rounded-xl">
-                {collapsedConnections.map((conn: any, idx: number) => {
+                {collapsedConnections.map((conn, idx: number) => {
                   const localItem = !!conn?.isLocal || conn?.id === 'local'
                   const active = localItem ? isLocalActive : isServerActive(conn)
 
@@ -1406,7 +1408,7 @@ export default function App() {
                   </div>
                 )}
 
-                {sidebarVisibleRootServers.map((conn: any) => {
+                {sidebarVisibleRootServers.map((conn) => {
                   const active = isServerActive(conn);
 
                   return (
@@ -1473,7 +1475,7 @@ export default function App() {
                       </button>
                       {!isCollapsed && (
                         <div className="flex flex-col gap-0 ml-3 border-l border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] pl-2 mt-0.5">
-                          {sidebarVisibleGroups[group].map((conn: any) => {
+                          {sidebarVisibleGroups[group].map((conn) => {
                             const active = isServerActive(conn);
 
                             return (
