@@ -870,19 +870,24 @@ fn authenticate_session(
     false
 }
 
-fn encrypt_pw(pw: &str) -> String {
+fn encrypt_pw(pw: &str) -> Result<String, String> {
     if pw.is_empty() {
-        return String::new();
+        return Ok(String::new());
     }
+
     let key = get_or_create_key();
     let cipher = Aes256Gcm::new(&key.into());
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher.encrypt(nonce, pw.as_bytes()).unwrap();
+
+    let ciphertext = cipher
+        .encrypt(nonce, pw.as_bytes())
+        .map_err(|e| e.to_string())?;
+
     let mut combined = nonce_bytes.to_vec();
     combined.extend_from_slice(&ciphertext);
-    STANDARD.encode(combined)
+    Ok(STANDARD.encode(combined))
 }
 
 fn decrypt_pw(encoded: &str) -> Result<String, String> {
@@ -1171,8 +1176,8 @@ fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<Stri
     normalize_connection_fields(&mut connection);
     validate_connection(&connection)?;
 
-    let enc_pw = encrypt_pw(&connection.password);
-    let enc_passphrase = encrypt_pw(&connection.passphrase);
+    let enc_pw = encrypt_pw(&connection.password)?;
+    let enc_passphrase = encrypt_pw(&connection.passphrase)?;
     let conn = open_db()?;
     conn.execute(
         "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -1216,7 +1221,7 @@ fn update_connection(
             .map_err(|e| e.to_string())?;
         stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
     } else {
-        encrypt_pw(&connection.password)
+        encrypt_pw(&connection.password)?
     };
     let passphrase_to_save = if clear_passphrase {
         String::new()
@@ -1226,7 +1231,7 @@ fn update_connection(
             .map_err(|e| e.to_string())?;
         stmt.query_row([&id], |row| row.get(0)).unwrap_or_default()
     } else {
-        encrypt_pw(&connection.passphrase)
+        encrypt_pw(&connection.passphrase)?
     };
     conn.execute(
         "UPDATE connections SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8 WHERE id = ?9",
@@ -1250,7 +1255,7 @@ fn update_connection(
 
 #[tauri::command]
 fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<(), String> {
-    let enc_pw = encrypt_pw(&password);
+    let enc_pw = encrypt_pw(&password)?;
     let conn = open_db()?;
     conn.execute(
         "UPDATE connections SET password = ?1 WHERE id = ?2",
@@ -1797,8 +1802,8 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         }
 
-        let enc_pw = encrypt_pw(&password);
-        let enc_passphrase = encrypt_pw(&passphrase);
+        let enc_pw = encrypt_pw(&password)?;
+        let enc_passphrase = encrypt_pw(&passphrase)?;
 
         tx.execute(
             "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
