@@ -75,23 +75,25 @@ export default function SnippetsPanel({
 
     if (!name || !command) return
 
-    if (editingId !== null) {
-      await invoke("update_snippet", {
-        id: editingId,
-        name,
-        command
-      })
-    } else {
-      await invoke("add_snippet", {
-        name,
-        command
-      })
-    }
+    try {
+      if (editingId !== null) {
+        await invoke("update_snippet", {
+          id: editingId,
+          name,
+          command
+        })
+      } else {
+        await invoke("add_snippet", {
+          name,
+          command
+        })
+      }
 
-    setForm({ name: "", command: "" })
-    setEditingId(null)
-    setIsEditorOpen(false)
-    loadSnippets()
+      setForm({ name: "", command: "" })
+      setEditingId(null)
+      setIsEditorOpen(false)
+      await loadSnippets()
+    } catch {}
   }
 
   function resetEditor() {
