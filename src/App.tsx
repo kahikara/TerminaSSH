@@ -27,6 +27,95 @@ type AppMetaInfo = {
   app_version?: string
 }
 
+type ConnectionItem = {
+  id?: number | string
+  name?: string
+  host?: string
+  port?: number
+  username?: string
+  password?: string
+  private_key?: string
+  passphrase?: string
+  group_name?: string
+  has_password?: boolean
+  sessionPassword?: string | null
+  isLocal?: boolean
+  isQuickConnect?: boolean
+  quickConnectNeedsPassword?: boolean
+  splitMode?: boolean
+  paneServers?: ConnectionItem[]
+  paneSessionIds?: string[]
+  focusedPaneIndex?: number
+  type?: string
+  kind?: string
+  [key: string]: unknown
+}
+
+type AppTab = ConnectionItem & {
+  tabId: string
+  sessionId: string
+}
+
+type ConnectionDraft = {
+  name?: string
+  host?: string
+  port?: number | string
+  username?: string
+  password?: string
+  private_key?: string
+  passphrase?: string
+  group_name?: string
+}
+
+type SidebarContextMenuState = {
+  x: number
+  y: number
+  server: ConnectionItem
+  isLocal: boolean
+}
+
+type DashboardConnection = {
+  id?: string | number
+  name: string
+  host?: string
+  port?: number
+  username?: string
+  isLocal?: boolean
+  isQuickConnect?: boolean
+  quickConnectNeedsPassword?: boolean
+}
+
+type DashboardTab = DashboardConnection & {
+  tabId: string
+}
+
+type EditableConnection = {
+  id: number | string
+  name: string
+  host?: string
+  port?: number
+  username?: string
+  private_key?: string
+  group_name?: string
+}
+
+
+const isDashboardConnection = (
+  value: ConnectionItem | null | undefined
+): value is DashboardConnection => {
+  return typeof value?.name === 'string' && value.name.trim().length > 0
+}
+
+const isDashboardTab = (value: AppTab): value is AppTab & DashboardTab => {
+  return typeof value?.tabId === 'string' && typeof value?.name === 'string' && value.name.trim().length > 0
+}
+
+const isEditableConnection = (
+  value: ConnectionItem | null | undefined
+): value is EditableConnection => {
+  return value?.id !== undefined && value?.id !== null && typeof value?.name === 'string' && value.name.trim().length > 0
+}
+
 
 export default function App() {
   const params = new URLSearchParams(window.location.search)
@@ -44,14 +133,14 @@ export default function App() {
     }
   }, [sidebarWidth, isSidebarCollapsed]);
 
-  const [openTabs, setOpenTabs] = useState<any[]>([]);
+  const [openTabs, setOpenTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [lastActiveConnectionId, setLastActiveConnectionId] = useState<string | null>(null);
   const [tabDragId, setTabDragId] = useState<string | null>(null);
   const [tabDropId, setTabDropId] = useState<string | null>(null);
   const [tabPointerDragging, setTabPointerDragging] = useState(false);
   const [tabGhostPos, setTabGhostPos] = useState<{ x: number; y: number } | null>(null);
-  const [connections, setConnections] = useState<any[]>([]);
+  const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [recentConnectionIds, setRecentConnectionIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem(RECENT_CONNECTIONS_STORAGE_KEY);
@@ -68,9 +157,9 @@ export default function App() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
-  const [serverToEdit, setServerToEdit] = useState<any>(null);
-  const [connectionDraft, setConnectionDraft] = useState<any>(null);
-  const [sidebarContextMenu, setSidebarContextMenu] = useState<{ x: number; y: number; server: any; isLocal: boolean } | null>(null);
+  const [serverToEdit, setServerToEdit] = useState<ConnectionItem | null>(null);
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const [sidebarContextMenu, setSidebarContextMenu] = useState<SidebarContextMenuState | null>(null);
   const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [appVersion, setAppVersion] = useState("");
@@ -252,7 +341,7 @@ export default function App() {
     const loadServers = useCallback(async () => {
     try {
       const items = await invoke('get_connections');
-      setConnections(Array.isArray(items) ? items : []);
+      setConnections(Array.isArray(items) ? (items as ConnectionItem[]) : []);
     } catch (e) {
       setConnections([]);
       showToast(
@@ -275,7 +364,7 @@ export default function App() {
   }, [recentConnectionIds]);
 
   useEffect(() => {
-    const validIds = new Set(connections.map((conn: any) => String(conn.id)));
+    const validIds = new Set(connections.map((conn) => String(conn.id)));
 
     setRecentConnectionIds((prev) => {
       const next = prev.filter((id) => validIds.has(String(id)));
@@ -288,7 +377,7 @@ export default function App() {
     const root: any[] = [];
     (settings.customFolders || []).forEach((f: string) => grps[f] = []);
 
-    connections.forEach((curr: any) => {
+    connections.forEach((curr) => {
       const g = curr.group_name;
       if (!g || g.trim() === '') {
         root.push(curr);
@@ -301,7 +390,7 @@ export default function App() {
   }, [connections, settings.customFolders]);
 
   const collapsedConnections = useMemo(() => {
-    const items: any[] = [
+    const items: ConnectionItem[] = [
       { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }
     ];
 
@@ -352,7 +441,7 @@ export default function App() {
   };
 
   const activeTab = useMemo(
-    () => openTabs.find((tab: any) => tab.tabId === activeTabId) || null,
+    () => openTabs.find((tab) => tab.tabId === activeTabId) || null,
     [openTabs, activeTabId]
   );
 
@@ -381,7 +470,7 @@ export default function App() {
   useEffect(() => {
     if (lastActiveConnectionId == null) return;
 
-    const stillOpen = openTabs.some((tab: any) => {
+    const stillOpen = openTabs.some((tab) => {
       if (lastActiveConnectionId === "__local__") {
         return !!tab?.isLocal;
       }
@@ -398,18 +487,27 @@ export default function App() {
   const isLocalActive = sidebarActiveConnectionId === "__local__";
   const isServerActive = (conn: any) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
   const draggedTabGhost = useMemo(
-    () => openTabs.find((tab: any) => tab.tabId === tabDragId) || null,
+    () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
   );
 
-  const recentConnectionsForDashboard = useMemo(() => {
-    if (!recentConnectionIds.length) return connections.slice(0, 6);
+  const recentConnectionsForDashboard = useMemo<DashboardConnection[]>(() => {
+    const baseConnections = !recentConnectionIds.length
+      ? connections.slice(0, 6)
+      : connections
+          .filter((conn) => recentConnectionIds.includes(String(conn.id)))
+          .sort(
+            (a, b) =>
+              recentConnectionIds.indexOf(String(a.id)) - recentConnectionIds.indexOf(String(b.id))
+          )
 
-    const order = new Map(recentConnectionIds.map((id, index) => [String(id), index]));
-    return connections
-      .filter((conn: any) => order.has(String(conn.id)))
-      .sort((a: any, b: any) => (order.get(String(a.id)) ?? 9999) - (order.get(String(b.id)) ?? 9999));
+    return baseConnections.filter(isDashboardConnection)
   }, [connections, recentConnectionIds]);
+
+  const dashboardActiveTabs = useMemo<DashboardTab[]>(
+    () => openTabs.filter(isDashboardTab),
+    [openTabs]
+  );
 
   const handleMouseMove = (e: MouseEvent) => { if (isDragging.current) setSidebarWidth(Math.min(Math.max(e.clientX, 200), 600)); };
   const handleMouseUp = () => { isDragging.current = false; document.body.style.cursor = 'default'; };
@@ -477,7 +575,7 @@ export default function App() {
     setSidebarSearchQuery("");
   }, [isSidebarCollapsed]);
 
-  const ensureHostKeyTrusted = async (server: any) => {
+  const ensureHostKeyTrusted = async (server: ConnectionItem) => {
     if (isLocalConnection(server)) return true;
 
     const host = String(server?.host || '').trim();
@@ -632,14 +730,14 @@ export default function App() {
     }
   };
 
-  const needsSessionPasswordPrompt = (server: any) => {
+  const needsSessionPasswordPrompt = (server: ConnectionItem) => {
     if (isLocalConnection(server)) return false;
     if (server?.isQuickConnect) return !!server?.quickConnectNeedsPassword;
 
     return server?.has_password === false && !server?.private_key;
   };
 
-  const applyPromptPasswordToServer = (server: any, pwd: string) => {
+  const applyPromptPasswordToServer = (server: ConnectionItem, pwd: string): ConnectionItem => {
     if (server?.isQuickConnect) {
       return {
         ...server,
@@ -654,7 +752,7 @@ export default function App() {
     };
   };
 
-  const isLocalConnection = (server: any) => {
+  const isLocalConnection = (server: ConnectionItem | null | undefined) => {
     return (
       !!server?.isLocal ||
       server?.type === 'local' ||
@@ -667,7 +765,7 @@ export default function App() {
   };
 
   const openTerminal = async (
-    server: any,
+    server: ConnectionItem,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
   ) => {
     const findExistingTabId = () => {
@@ -780,7 +878,7 @@ export default function App() {
       return;
     }
 
-    const currentTab = openTabs.find((tab: any) => tab.tabId === activeTabId);
+    const currentTab = openTabs.find((tab) => tab.tabId === activeTabId);
     if (!currentTab) {
       await openTerminal(server);
       return;
@@ -827,7 +925,7 @@ export default function App() {
 
           setOpenTabs(prev => {
             const next = [...prev];
-            const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
+            const idx = next.findIndex((tab) => tab.tabId === activeTabId);
             if (idx === -1) return prev;
 
             const baseTab = next[idx];
@@ -844,7 +942,7 @@ export default function App() {
 
     setOpenTabs(prev => {
       const next = [...prev];
-      const idx = next.findIndex((tab: any) => tab.tabId === activeTabId);
+      const idx = next.findIndex((tab) => tab.tabId === activeTabId);
       if (idx === -1) return prev;
 
       const baseTab = next[idx];
@@ -856,7 +954,7 @@ export default function App() {
     setActiveTabId(activeTabId);
   };
 
-  const openSidebarContextMenu = useCallback((e: React.MouseEvent, server: any, isLocal = false) => {
+  const openSidebarContextMenu = useCallback((e: React.MouseEvent, server: ConnectionItem, isLocal = false) => {
     e.preventDefault();
     e.stopPropagation();
     setSidebarContextMenu({
@@ -867,14 +965,14 @@ export default function App() {
     });
   }, []);
 
-  const editSidebarServer = useCallback((server: any) => {
+  const editSidebarServer = useCallback((server: ConnectionItem) => {
     closeSidebarContextMenu();
     setConnectionDraft(null);
     setServerToEdit(server);
     setConnModalOpen(true);
   }, [closeSidebarContextMenu]);
 
-  const duplicateSidebarServer = useCallback((server: any) => {
+  const duplicateSidebarServer = useCallback((server: ConnectionItem) => {
     closeSidebarContextMenu();
 
     const sourceName = String(server?.name || "").trim();
@@ -894,7 +992,7 @@ export default function App() {
     setConnModalOpen(true);
   }, [closeSidebarContextMenu, settings.lang]);
 
-  const deleteSidebarServer = useCallback((server: any) => {
+  const deleteSidebarServer = useCallback((server: ConnectionItem) => {
     closeSidebarContextMenu();
     showDialog({
       type: 'confirm',
@@ -940,7 +1038,7 @@ export default function App() {
     }
   ) => {
     setOpenTabs((prev) =>
-      prev.map((tab: any) => {
+      prev.map((tab) => {
         if (tab.tabId !== tabId) return tab;
 
         const paneServers = Array.isArray(payload.paneServers) ? payload.paneServers.filter(Boolean) : [];
@@ -1028,8 +1126,8 @@ export default function App() {
 
       if (tabPointerDragging && tabDropId && tabDropId !== tabDragId) {
         setOpenTabs(prev => {
-          const fromIndex = prev.findIndex((tab: any) => tab.tabId === tabDragId);
-          const toIndex = prev.findIndex((tab: any) => tab.tabId === tabDropId);
+          const fromIndex = prev.findIndex((tab) => tab.tabId === tabDragId);
+          const toIndex = prev.findIndex((tab) => tab.tabId === tabDropId);
 
           if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return prev;
 
@@ -1527,7 +1625,7 @@ export default function App() {
                 lang={settings.lang}
                 settings={settings}
                 openTerminal={openTerminal}
-                activeTabs={openTabs}
+                activeTabs={dashboardActiveTabs}
                 recentConns={recentConnectionsForDashboard}
                 activateTab={(tabId: string) => setActiveTabId(tabId)}
               />
@@ -1633,7 +1731,7 @@ export default function App() {
           setServerToEdit(null);
           setConnectionDraft(null);
         }}
-        serverToEdit={serverToEdit}
+        serverToEdit={isEditableConnection(serverToEdit) ? serverToEdit : null}
         initialConnection={connectionDraft}
         onSuccess={loadServers}
         showToast={showToast}
