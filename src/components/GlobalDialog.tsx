@@ -12,7 +12,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
       setConfirmVal(dialog.defaultConfirmValue || "")
       setCheckVal(Boolean(dialog.checkboxDefaultChecked))
     }
-  }, [dialog.isOpen, dialog.defaultValue, dialog.defaultConfirmValue])
+  }, [dialog.isOpen, dialog.defaultValue, dialog.defaultConfirmValue, dialog.checkboxDefaultChecked])
 
   if (!dialog.isOpen) return null
 
