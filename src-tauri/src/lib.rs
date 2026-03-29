@@ -2837,17 +2837,32 @@ fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
             Err(_) => continue,
         };
 
-        let size = if file_type.is_dir() {
+        let link_metadata = fs::symlink_metadata(&entry_path).ok();
+        let resolved_metadata = if file_type.is_symlink() {
+            fs::metadata(&entry_path).ok()
+        } else {
+            None
+        };
+
+        let is_dir = file_type.is_dir()
+            || resolved_metadata
+                .as_ref()
+                .map(|metadata| metadata.is_dir())
+                .unwrap_or(false);
+
+        let size = if is_dir {
             0
         } else {
-            fs::symlink_metadata(&entry_path)
+            link_metadata
+                .as_ref()
                 .map(|metadata| metadata.len())
+                .or_else(|| resolved_metadata.as_ref().map(|metadata| metadata.len()))
                 .unwrap_or(0)
         };
 
         items.push(FileItem {
             name,
-            is_dir: file_type.is_dir(),
+            is_dir,
             size,
         });
     }

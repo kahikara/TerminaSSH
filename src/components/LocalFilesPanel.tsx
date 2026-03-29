@@ -334,6 +334,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderValue, setNewFolderValue] = useState("")
   const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
+  const [errorText, setErrorText] = useState("")
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -344,13 +345,21 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     return sortFiles(filtered, sortMode)
   }, [files, showHidden, sortMode])
 
+  function toErrorText(error: unknown, deFallback: string, enFallback: string) {
+    const detail = error instanceof Error ? error.message.trim() : String(error || "").trim()
+    return detail || (lang === "de" ? deFallback : enFallback)
+  }
+
   async function load(nextPath: string) {
     try {
       const res = await invoke("local_list_dir", { path: nextPath }) as FileItem[]
       setFiles(Array.isArray(res) ? res : [])
       setPath(nextPath)
+      setErrorText("")
     } catch (e) {
       console.error(e)
+      setFiles([])
+      setErrorText(toErrorText(e, "Ordner konnte nicht geladen werden", "Failed to load folder"))
     }
   }
 
@@ -446,6 +455,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       })
     } catch (e) {
       console.error(e)
+      setErrorText(toErrorText(e, "Editor konnte nicht geöffnet werden", "Failed to open editor"))
     }
   }
 
@@ -461,6 +471,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       await load(path)
     } catch (e) {
       console.error(e)
+      setErrorText(toErrorText(e, "Umbenennen fehlgeschlagen", "Rename failed"))
     }
   }
 
@@ -474,6 +485,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       await load(path)
     } catch (e) {
       console.error(e)
+      setErrorText(toErrorText(e, "Löschen fehlgeschlagen", "Delete failed"))
     }
   }
 
@@ -488,6 +500,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       await load(path)
     } catch (e) {
       console.error(e)
+      setErrorText(toErrorText(e, "Ordner konnte nicht erstellt werden", "Failed to create folder"))
     }
   }
 
@@ -665,6 +678,37 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           </div>
         </div>
       </div>
+
+      {errorText && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(239,68,68,0.22)",
+            background: "rgba(127,29,29,0.18)",
+            color: "#fecaca",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 12,
+            lineHeight: 1.4
+          }}
+        >
+          <span style={{ flex: 1 }}>{errorText}</span>
+          <button
+            style={{
+              ...iconBtn,
+              width: 28,
+              height: 28,
+              flexShrink: 0
+            }}
+            onClick={() => setErrorText("")}
+            title={t("dismiss", lang)}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       <div
         style={{
