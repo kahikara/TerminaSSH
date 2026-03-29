@@ -557,6 +557,19 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }, [visible, navigableEntries, selectedItem])
 
   useEffect(() => {
+    if (!visible || !selectedItem) return
+
+    const listEl = listRef.current
+    if (!listEl) return
+
+    const rows = Array.from(
+      listEl.querySelectorAll<HTMLElement>("[data-local-entry-key]")
+    )
+    const target = rows.find((row) => row.dataset.localEntryKey === selectedItem)
+    target?.scrollIntoView({ block: "nearest" })
+  }, [visible, selectedItem, path, visibleFiles])
+
+  useEffect(() => {
     persistPanelWidth(panelWidth)
   }, [panelWidth])
 
@@ -1159,7 +1172,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   textOverflow: "ellipsis"
                 }}
               >
-                <span>{i === 0 ? "/" : part.label}</span>
+                <span>{part.label}</span>
               </button>
               {i < arr.length - 1 && <ChevronRight size={12} />}
             </React.Fragment>
@@ -1183,6 +1196,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       >
         {hasLocalParentPath(path) && (
           <div
+            data-local-entry-key="__parent__"
             style={entryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
@@ -1228,6 +1242,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         {visibleFiles.map((f) => (
           <div
             key={f.name}
+            data-local-entry-key={f.name}
             style={entryStyle(hoveredItem === f.name, selectedItem === f.name)}
             onMouseEnter={() => setHoveredItem(f.name)}
             onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
