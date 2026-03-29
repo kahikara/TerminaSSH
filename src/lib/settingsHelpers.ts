@@ -23,12 +23,18 @@ export async function encryptData(text: string, password: string) {
 }
 
 export async function decryptData(base64: string, password: string) {
-  const binary = atob(base64)
+  const binary = atob(base64.trim())
   const bundle = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bundle[i] = binary.charCodeAt(i)
+
+  if (bundle.length < 29) {
+    throw new Error("Encrypted backup payload is too short")
+  }
+
   const salt = bundle.slice(0, 16)
   const iv = bundle.slice(16, 28)
   const cipher = bundle.slice(28)
+
   const enc = new TextEncoder()
   const keyMaterial = await window.crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"])
   const key = await window.crypto.subtle.deriveKey(
@@ -38,6 +44,7 @@ export async function decryptData(base64: string, password: string) {
     false,
     ["decrypt"]
   )
+
   const plain = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher)
   return new TextDecoder().decode(plain)
 }
