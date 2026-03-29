@@ -88,8 +88,8 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       if (!canSubmit || busy) return
 
       setBusy(true)
-
-      if (dialog.type === "prompt") {
+      try {
+        if (dialog.type === "prompt") {
         if (needsDoubleInput) {
           if (checkboxLabel) {
             await Promise.resolve(dialog.onConfirm(val, confirmVal, { checked: checkVal }))
