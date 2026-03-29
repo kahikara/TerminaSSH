@@ -769,6 +769,16 @@ export default function App() {
     );
   };
 
+  const getConnectionIdentity = (server: ConnectionItem | null | undefined) => {
+    if (isLocalConnection(server)) return '__local__';
+    if (server?.id != null) return `id:${String(server.id)}`;
+    return [
+      String(server?.username || '').trim(),
+      String(server?.host || '').trim(),
+      String(server?.port || 22)
+    ].join('@');
+  };
+
   const openTerminal = async (
     server: ConnectionItem,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
@@ -886,6 +896,22 @@ export default function App() {
     const currentTab = openTabs.find((tab) => tab.tabId === activeTabId);
     if (!currentTab) {
       await openTerminal(server);
+      return;
+    }
+
+    const currentPaneServers = currentTab.splitMode
+      ? (currentTab.paneServers || []).filter(Boolean)
+      : [currentTab];
+    const currentPaneIdentities = new Set(currentPaneServers.map((item) => getConnectionIdentity(item)));
+    const targetIdentity = getConnectionIdentity(server);
+
+    if (currentTab.splitMode && currentPaneIdentities.size >= 2 && !currentPaneIdentities.has(targetIdentity)) {
+      showToast(
+        settings.lang === 'de'
+          ? 'Ein Split Tab kann nur zwei verschiedene Verbindungen enthalten'
+          : 'A split tab can only contain two different connections',
+        true
+      );
       return;
     }
 
