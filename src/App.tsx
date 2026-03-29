@@ -920,7 +920,11 @@ export default function App() {
     const currentPaneIdentities = new Set(currentPaneServers.map((item) => getConnectionIdentity(item)));
     const targetIdentity = getConnectionIdentity(server);
 
-    if (currentTab.splitMode && currentPaneIdentities.size >= 2 && !currentPaneIdentities.has(targetIdentity)) {
+    if (
+      currentTab.splitMode &&
+      currentPaneServers.length >= 2 &&
+      (currentPaneIdentities.size >= 2 || currentPaneIdentities.has(targetIdentity))
+    ) {
       showToast(
         settings.lang === 'de'
           ? 'Ein Split Tab kann nur zwei verschiedene Verbindungen enthalten'
