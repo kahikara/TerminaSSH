@@ -254,6 +254,7 @@ export default function SftpEditorWindow() {
   const contentRef = useRef("")
   const originalRef = useRef("")
   const channelRef = useRef<BroadcastChannel | null>(null)
+  const uiTimerRef = useRef<number | null>(null)
 
   async function applyTheme() {
     try {
@@ -266,6 +267,18 @@ export default function SftpEditorWindow() {
     } catch (e) {
       console.error(e)
     }
+  }
+
+  function replaceUiTimer(callback: () => void) {
+    if (uiTimerRef.current !== null) {
+      clearTimeout(uiTimerRef.current)
+      uiTimerRef.current = null
+    }
+
+    uiTimerRef.current = window.setTimeout(() => {
+      uiTimerRef.current = null
+      callback()
+    }, 0)
   }
 
   function updateCursor() {
@@ -550,35 +563,37 @@ export default function SftpEditorWindow() {
 
     setSearchOpen(true)
     setReplaceOpen(false)
-    setTimeout(() => {
+    replaceUiTimer(() => {
       searchInputRef.current?.focus()
       searchInputRef.current?.select()
-    }, 0)
+    })
   }
 
   function toggleReplace() {
     if (replaceOpen) {
       setReplaceOpen(false)
       setSearchOpen(true)
-      setTimeout(() => {
+      replaceUiTimer(() => {
         searchInputRef.current?.focus()
-      }, 0)
+      })
       return
     }
 
     setSearchOpen(true)
     setReplaceOpen(true)
-    setTimeout(() => {
+    replaceUiTimer(() => {
       replaceInputRef.current?.focus()
       replaceInputRef.current?.select()
-    }, 0)
+    })
   }
 
   function closeSearchAndReplace() {
     setSearchOpen(false)
     setReplaceOpen(false)
     setSearchInfo("")
-    setTimeout(() => textareaRef.current?.focus(), 0)
+    replaceUiTimer(() => {
+      textareaRef.current?.focus()
+    })
   }
 
   function findNext(backwards = false) {
@@ -786,6 +801,15 @@ export default function SftpEditorWindow() {
   useEffect(() => {
     applyTheme()
     void loadFile(true)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (uiTimerRef.current !== null) {
+        clearTimeout(uiTimerRef.current)
+        uiTimerRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
