@@ -67,7 +67,11 @@ export default function NotesPanel({
 
     saveTimerRef.current = window.setTimeout(() => {
       try {
-        localStorage.setItem(storageKey, text)
+        if (text) {
+          localStorage.setItem(storageKey, text)
+        } else {
+          localStorage.removeItem(storageKey)
+        }
         setStatus("saved")
       } catch {}
     }, 220)
