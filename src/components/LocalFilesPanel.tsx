@@ -410,6 +410,25 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }, [visible])
 
   useEffect(() => {
+    if (visible) return
+
+    loadSeqRef.current += 1
+    setIsLoading(false)
+    setActionBusy(false)
+    setMenuItem(null)
+    setMenuStyle(null)
+    setSortMenuOpen(false)
+    setSortMenuStyle(null)
+    setHoveredItem(null)
+    setRenameItem(null)
+    setRenameValue("")
+    setNewFolderOpen(false)
+    setNewFolderValue("")
+    setDeleteItem(null)
+    setErrorText("")
+  }, [visible])
+
+  useEffect(() => {
     persistPanelWidth(panelWidth)
   }, [panelWidth])
 
