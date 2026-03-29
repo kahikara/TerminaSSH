@@ -1199,6 +1199,67 @@ fn validate_connection(connection: &SshConnection) -> Result<(), String> {
     Ok(())
 }
 
+fn ensure_connection_exists(conn: &Connection, id: i32) -> Result<(), String> {
+    let exists: Option<i32> = conn
+        .query_row(
+            "SELECT id FROM connections WHERE id = ?1 LIMIT 1",
+            [&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if exists.is_some() {
+        Ok(())
+    } else {
+        Err("Connection not found".to_string())
+    }
+}
+
+fn ensure_tunnel_route_is_unique(
+    conn: &Connection,
+    tunnel: &SshTunnel,
+    bind_host: &str,
+    exclude_id: Option<i32>,
+) -> Result<(), String> {
+    let existing: Option<String> = if let Some(exclude_id) = exclude_id {
+        conn.query_row(
+            "SELECT name FROM ssh_tunnels WHERE server_id = ?1 AND local_port = ?2 AND remote_host = ?3 AND remote_port = ?4 AND bind_host = ?5 AND id != ?6 LIMIT 1",
+            (
+                &tunnel.server_id,
+                &tunnel.local_port,
+                &tunnel.remote_host,
+                &tunnel.remote_port,
+                &bind_host,
+                &exclude_id,
+            ),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(
+            "SELECT name FROM ssh_tunnels WHERE server_id = ?1 AND local_port = ?2 AND remote_host = ?3 AND remote_port = ?4 AND bind_host = ?5 LIMIT 1",
+            (
+                &tunnel.server_id,
+                &tunnel.local_port,
+                &tunnel.remote_host,
+                &tunnel.remote_port,
+                &bind_host,
+            ),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    };
+
+    if let Some(name) = existing {
+        Err(format!("A tunnel with the same route already exists: {}", name))
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<String, String> {
     normalize_connection_fields(&mut connection);
@@ -2251,6 +2312,9 @@ fn save_tunnel(mut tunnel: SshTunnel) -> Result<String, String> {
     };
 
     let conn = open_db()?;
+    ensure_connection_exists(&conn, tunnel.server_id)?;
+    ensure_tunnel_route_is_unique(&conn, &tunnel, &bind_host, None)?;
+
     conn.execute(
         "INSERT INTO ssh_tunnels (server_id, name, local_port, remote_host, remote_port, bind_host, auto_start)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -2303,6 +2367,9 @@ fn update_tunnel(id: i32, mut tunnel: SshTunnel, state: State<'_, SshState>) -> 
     };
 
     let conn = open_db()?;
+    ensure_connection_exists(&conn, tunnel.server_id)?;
+    ensure_tunnel_route_is_unique(&conn, &tunnel, &bind_host, Some(id))?;
+
     conn.execute(
         "UPDATE ssh_tunnels
          SET server_id = ?1, name = ?2, local_port = ?3, remote_host = ?4, remote_port = ?5, bind_host = ?6, auto_start = ?7
@@ -2614,6 +2681,9 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
     if tunnel.local_port == 0 || tunnel.remote_port == 0 {
         return Err("Tunnel ports must be greater than 0".to_string());
     }
+
+    let conn = open_db()?;
+    ensure_connection_exists(&conn, tunnel.server_id)?;
 
     let bind_host = if tunnel.bind_host.trim().is_empty() {
         "127.0.0.1".to_string()
