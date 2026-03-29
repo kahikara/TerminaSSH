@@ -2832,13 +2832,25 @@ fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
             continue;
         }
 
-        let entry_metadata =
-            fs::metadata(&entry_path).map_err(|e| map_local_fs_error(&e, "Read metadata", &entry_path))?;
+        let (is_dir, size) = match fs::metadata(&entry_path) {
+            Ok(entry_metadata) => (
+                entry_metadata.is_dir(),
+                if entry_metadata.is_dir() { 0 } else { entry_metadata.len() },
+            ),
+            Err(_) => {
+                let file_type = match entry.file_type() {
+                    Ok(file_type) => file_type,
+                    Err(_) => continue,
+                };
+
+                (file_type.is_dir(), 0)
+            }
+        };
 
         items.push(FileItem {
             name,
-            is_dir: entry_metadata.is_dir(),
-            size: if entry_metadata.is_dir() { 0 } else { entry_metadata.len() },
+            is_dir,
+            size,
         });
     }
 
