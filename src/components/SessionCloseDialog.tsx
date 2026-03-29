@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { t } from "../lib/i18n"
 
 type TabLike = {
@@ -23,6 +24,14 @@ export default function SessionCloseDialog({
   onCancel,
   onConfirm
 }: Props) {
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) {
+      setBusy(false)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
@@ -58,14 +67,24 @@ export default function SessionCloseDialog({
         <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] flex items-center justify-end gap-2 bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))]">
           <button
             onClick={onCancel}
-            className="min-h-9 px-4 py-2 rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] text-[var(--text-main)] text-[13px] transition-colors hover:bg-[var(--bg-hover)]"
+            disabled={busy}
+            className="min-h-9 px-4 py-2 rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] text-[var(--text-main)] text-[13px] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60"
           >
             {t("cancel", lang)}
           </button>
 
           <button
-            onClick={() => void onConfirm()}
-            className="min-h-9 px-4 py-2 rounded-xl border border-yellow-500 bg-yellow-500 text-black text-[13px] font-medium transition-opacity hover:opacity-90"
+            onClick={async () => {
+              if (busy) return
+              setBusy(true)
+              try {
+                await Promise.resolve(onConfirm())
+              } finally {
+                setBusy(false)
+              }
+            }}
+            disabled={busy}
+            className="min-h-9 px-4 py-2 rounded-xl border border-yellow-500 bg-yellow-500 text-black text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {t("closeAnyway", lang)}
           </button>
