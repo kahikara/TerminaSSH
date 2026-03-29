@@ -347,8 +347,8 @@ export default function TerminalPane(props: TerminalPaneProps) {
   const showSplit = settings.showSplit !== false && !isMultiServerSplit
   const showSftpBtn = settings.showSftp !== false && !activePaneIsLocal
   const showTunnelsBtn = settings.showTunnels !== false && !activePaneIsLocal
-  const showSnippetsBtn = settings.showSnippets !== false && !activePaneIsLocal
-  const showNotesBtn = settings.showNotes !== false && !activePaneIsLocal
+  const showSnippetsBtn = settings.showSnippets !== false
+  const showNotesBtn = settings.showNotes !== false
   const showSearchBtn = settings.showSearch !== false
   const showStatusBar = settings.showStatusBar !== false
   const showStatusBarSession = settings.showStatusBarSession !== false
@@ -1321,25 +1321,23 @@ export default function TerminalPane(props: TerminalPaneProps) {
         />
       )}
 
-      {!isLocalServer(activePaneServer) && (
-        <SnippetsPanel
-          lang={settings?.lang || "en"}
-          showDialog={props.showDialog}
-          visible={showSnippets}
-          onClose={() => setShowSnippets(false)}
-          onExecute={async (command: string) => {
-            const targetSessionId = getSearchTargetSessionId()
-            try {
-              await invoke("write_to_pty", {
-                sessionId: targetSessionId,
-                input: command.endsWith("\n") ? command : `${command}\n`
-              })
-              const entry = terminalStore[targetSessionId]
-              entry?.term?.focus()
-            } catch {}
-          }}
-        />
-      )}
+      <SnippetsPanel
+        lang={settings?.lang || "en"}
+        showDialog={props.showDialog}
+        visible={showSnippets}
+        onClose={() => setShowSnippets(false)}
+        onExecute={async (command: string) => {
+          const targetSessionId = getSearchTargetSessionId()
+          try {
+            await invoke("write_to_pty", {
+              sessionId: targetSessionId,
+              input: command.endsWith("\n") ? command : `${command}\n`
+            })
+            const entry = terminalStore[targetSessionId]
+            entry?.term?.focus()
+          } catch {}
+        }}
+      />
 
       {!isLocalServer(activePaneServer) && (
         <TunnelPanel
@@ -1350,15 +1348,13 @@ export default function TerminalPane(props: TerminalPaneProps) {
         />
       )}
 
-      {!isLocalServer(activePaneServer) && (
-        <NotesPanel
-          server={activePaneServer}
-          lang={settings?.lang || "en"}
-          visible={showNotes}
-          onClose={() => setShowNotes(false)}
-          showDialog={props.showDialog}
-        />
-      )}
+      <NotesPanel
+        server={activePaneServer}
+        lang={settings?.lang || "en"}
+        visible={showNotes}
+        onClose={() => setShowNotes(false)}
+        showDialog={props.showDialog}
+      />
     </div>
   )
 }
