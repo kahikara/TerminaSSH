@@ -2909,6 +2909,16 @@ fn local_write_file(path: String, content_base64: String) -> Result<String, Stri
 }
 
 #[tauri::command]
+fn get_local_home_dir() -> Result<String, String> {
+    Ok(
+        home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .to_string_lossy()
+            .to_string(),
+    )
+}
+
+#[tauri::command]
 fn test_connection(
     mut connection: SshConnection,
     check_sftp: Option<bool>,
@@ -4213,6 +4223,7 @@ pub fn run() {
             local_delete,
             local_read_file,
             local_write_file,
+            get_local_home_dir,
             close_session,
             measure_tcp_latency,
             get_linux_window_mode,
