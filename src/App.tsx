@@ -118,6 +118,14 @@ type HostKeyCheckInfo = {
 
 type ConnectionGroups = Record<string, ConnectionItem[]>
 
+const LOCAL_TERMINAL_CONNECTION: ConnectionItem = {
+  id: 'local',
+  isLocal: true,
+  name: 'Local Terminal',
+  username: 'local',
+  host: '__local__'
+}
+
 const createClosedDialogState = (): GlobalDialogState => ({
   isOpen: false,
   type: 'alert',
@@ -389,9 +397,7 @@ export default function App() {
   }, [connections, settings.customFolders]);
 
   const collapsedConnections = useMemo<ConnectionItem[]>(() => {
-    const items: ConnectionItem[] = [
-      { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }
-    ];
+    const items: ConnectionItem[] = [LOCAL_TERMINAL_CONNECTION];
 
     rootServers.forEach((conn) => items.push(conn));
     Object.keys(groups).sort().forEach((group) => {
@@ -432,7 +438,7 @@ export default function App() {
 
   const sidebarVisibleGroups = isSidebarSearching ? filteredGroups : groups;
   const sidebarVisibleRootServers = isSidebarSearching ? filteredRootServers : rootServers;
-  const sidebarSearchLocalVisible = !isSidebarSearching || matchesSidebarSearch({ name: 'Local Terminal', username: 'local', host: 'localhost' });
+  const sidebarSearchLocalVisible = !isSidebarSearching || matchesSidebarSearch(LOCAL_TERMINAL_CONNECTION);
 
   const effectiveFolderCollapsed = (group: string) => {
     if (!isSidebarSearching) return Boolean(collapsedFolders[group]);
@@ -1338,9 +1344,9 @@ export default function App() {
                   return (
                     <button
                       key={`${conn.id || conn.name || 'item'}_${idx}`}
-                      onContextMenu={(e) => openSidebarContextMenu(e, localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, localItem)}
-                      onClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn)}
-                      onDoubleClick={() => void openTerminal(localItem ? { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' } : conn, { forceNewTab: true })}
+                      onContextMenu={(e) => openSidebarContextMenu(e, localItem ? LOCAL_TERMINAL_CONNECTION : conn, localItem)}
+                      onClick={() => void openTerminal(localItem ? LOCAL_TERMINAL_CONNECTION : conn)}
+                      onDoubleClick={() => void openTerminal(localItem ? LOCAL_TERMINAL_CONNECTION : conn, { forceNewTab: true })}
                       title={localItem ? t('localTerminal', settings.lang) : conn.name}
                       className={`group/item flex items-center justify-center w-full h-9 rounded-xl border transition-all ${
                         active
@@ -1376,9 +1382,9 @@ export default function App() {
                     }`}
                   >
                     <button
-                      onContextMenu={(e) => openSidebarContextMenu(e, { id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }, true)}
-                      onClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' })}
-                      onDoubleClick={() => void openTerminal({ id: 'local', isLocal: true, name: 'Local Terminal', username: 'local', host: 'localhost' }, { forceNewTab: true })}
+                      onContextMenu={(e) => openSidebarContextMenu(e, LOCAL_TERMINAL_CONNECTION, true)}
+                      onClick={() => void openTerminal(LOCAL_TERMINAL_CONNECTION)}
+                      onDoubleClick={() => void openTerminal(LOCAL_TERMINAL_CONNECTION, { forceNewTab: true })}
                       className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
                         isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
