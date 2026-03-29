@@ -90,27 +90,28 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       setBusy(true)
       try {
         if (dialog.type === "prompt") {
-        if (needsDoubleInput) {
-          if (checkboxLabel) {
-            await Promise.resolve(dialog.onConfirm(val, confirmVal, { checked: checkVal }))
+          if (needsDoubleInput) {
+            if (checkboxLabel) {
+              await Promise.resolve(dialog.onConfirm(val, confirmVal, { checked: checkVal }))
+            } else {
+              await Promise.resolve(dialog.onConfirm(val, confirmVal))
+            }
           } else {
-            await Promise.resolve(dialog.onConfirm(val, confirmVal))
+            if (checkboxLabel) {
+              await Promise.resolve(dialog.onConfirm(val, { checked: checkVal }))
+            } else {
+              await Promise.resolve(dialog.onConfirm(val))
+            }
           }
         } else {
-          if (checkboxLabel) {
-            await Promise.resolve(dialog.onConfirm(val, { checked: checkVal }))
-          } else {
-            await Promise.resolve(dialog.onConfirm(val))
-          }
+          await Promise.resolve(dialog.onConfirm(val))
         }
-      } else {
-        await Promise.resolve(dialog.onConfirm(val))
-      }
 
-      onClose()
-    } catch (error) {
-      setBusy(false)
-      throw error
+        onClose()
+      } catch (error) {
+        setBusy(false)
+        throw error
+      }
     }
 
     return (
