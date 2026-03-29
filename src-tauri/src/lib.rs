@@ -3136,7 +3136,7 @@ async fn sftp_upload(
         .map_err(|_| "SFTP transfer state lock failed".to_string())?
         .insert(session_id.clone(), Arc::clone(&cancel_flag));
     let s_id = session_id.clone();
-    let inner_result = tauri::async_runtime::spawn_blocking(move || {
+    let join_result = tauri::async_runtime::spawn_blocking(move || {
         let sess = connect_ssh_session(id)?;
         let sftp = sess.sftp().map_err(|e| e.to_string())?;
         let mut transferred = 0;
@@ -3152,13 +3152,13 @@ async fn sftp_upload(
         )?;
         Ok("Upload completed".to_string())
     })
-    .await
-    .map_err(|_| "Thread Error".to_string())?;
-    state
-        .transfers
-        .lock()
-        .map_err(|_| "SFTP transfer state lock failed".to_string())?
-        .remove(&session_id);
+    .await;
+
+    if let Ok(mut transfers) = state.transfers.lock() {
+        transfers.remove(&session_id);
+    }
+
+    let inner_result = join_result.map_err(|_| "Thread Error".to_string())?;
     inner_result
 }
 
@@ -3259,7 +3259,7 @@ async fn sftp_download(
         .map_err(|_| "SFTP transfer state lock failed".to_string())?
         .insert(session_id.clone(), Arc::clone(&cancel_flag));
     let s_id = session_id.clone();
-    let inner_result = tauri::async_runtime::spawn_blocking(move || {
+    let join_result = tauri::async_runtime::spawn_blocking(move || {
         let sess = connect_ssh_session(id)?;
         let sftp = sess.sftp().map_err(|e| e.to_string())?;
         let mut transferred = 0;
@@ -3275,13 +3275,13 @@ async fn sftp_download(
         )?;
         Ok("Download completed".to_string())
     })
-    .await
-    .map_err(|_| "Thread Error".to_string())?;
-    state
-        .transfers
-        .lock()
-        .map_err(|_| "SFTP transfer state lock failed".to_string())?
-        .remove(&session_id);
+    .await;
+
+    if let Ok(mut transfers) = state.transfers.lock() {
+        transfers.remove(&session_id);
+    }
+
+    let inner_result = join_result.map_err(|_| "Thread Error".to_string())?;
     inner_result
 }
 
