@@ -328,7 +328,7 @@ export default function SnippetsPanel({
                         title: t("confirmDelete", lang),
                         onConfirm: async () => {
                           await invoke("delete_snippet", { id: s.id })
-                          loadSnippets()
+                          await loadSnippets()
                         }
                       })
                     }
