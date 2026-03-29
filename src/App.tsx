@@ -126,6 +126,8 @@ const LOCAL_TERMINAL_CONNECTION: ConnectionItem = {
   host: '__local__'
 }
 
+const createTabId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+
 const createClosedDialogState = (): GlobalDialogState => ({
   isOpen: false,
   type: 'alert',
@@ -846,7 +848,7 @@ export default function App() {
             }
           }
 
-          const tabId = Math.random().toString(36).substring(7);
+          const tabId = createTabId();
           const resolvedServer = applyPromptPasswordToServer(server, pwd);
           const newTab: AppTab = {
             ...resolvedServer,
@@ -871,7 +873,7 @@ export default function App() {
   }, []);
 
   const buildSplitTabFromServers = (leftServer: ConnectionItem, rightServer: ConnectionItem, existingTabId?: string): AppTab => {
-    const tabId = existingTabId || Math.random().toString(36).substring(7);
+    const tabId = existingTabId || createTabId();
     const leftSessionId = `${tabId}__pane_0`;
     const rightSessionId = `${tabId}__pane_1`;
 
