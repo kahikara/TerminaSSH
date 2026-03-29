@@ -566,7 +566,21 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       listEl.querySelectorAll<HTMLElement>("[data-local-entry-key]")
     )
     const target = rows.find((row) => row.dataset.localEntryKey === selectedItem)
-    target?.scrollIntoView({ block: "nearest" })
+    if (!target) return
+
+    const top = target.offsetTop
+    const bottom = top + target.offsetHeight
+    const viewTop = listEl.scrollTop
+    const viewBottom = viewTop + listEl.clientHeight
+
+    if (top < viewTop) {
+      listEl.scrollTop = top
+      return
+    }
+
+    if (bottom > viewBottom) {
+      listEl.scrollTop = bottom - listEl.clientHeight
+    }
   }, [visible, selectedItem, path, visibleFiles])
 
   useEffect(() => {
