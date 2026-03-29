@@ -12,12 +12,24 @@ import type { TerminalServer, TerminalStoreEntry } from "./terminalTypes"
 export type StoreEntry = TerminalStoreEntry
 
 const pendingDestroyTimers: Record<string, number> = {}
+const pendingDestroyEntries: Record<string, StoreEntry | undefined> = {}
 
 export function scheduleDestroySession(sessionId: string) {
   cancelDestroySession(sessionId)
+
+  const expectedEntry = terminalStore[sessionId]
+  pendingDestroyEntries[sessionId] = expectedEntry
+
   pendingDestroyTimers[sessionId] = window.setTimeout(() => {
-    destroyTerminal(sessionId)
+    const currentEntry = terminalStore[sessionId]
+    const expected = pendingDestroyEntries[sessionId]
+
+    if (currentEntry && currentEntry === expected) {
+      destroyTerminal(sessionId)
+    }
+
     delete pendingDestroyTimers[sessionId]
+    delete pendingDestroyEntries[sessionId]
   }, 250)
 }
 
@@ -27,6 +39,7 @@ export function cancelDestroySession(sessionId: string) {
     clearTimeout(timer)
     delete pendingDestroyTimers[sessionId]
   }
+  delete pendingDestroyEntries[sessionId]
 }
 
 export function isLocalServer(server: TerminalServer | null | undefined) {
@@ -265,6 +278,8 @@ export function syncSize(sessionId: string, entry: StoreEntry) {
 }
 
 export function destroyTerminal(sessionId: string) {
+  delete pendingDestroyEntries[sessionId]
+
   const entry: StoreEntry | undefined = terminalStore[sessionId]
   if (!entry) return
   try { entry.unlisten?.() } catch {}
