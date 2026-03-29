@@ -320,6 +320,7 @@ type LocalFilesPanelProps = {
 
 export default function LocalFilesPanel({ visible, onClose, lang = "de" }: LocalFilesPanelProps) {
   const [path, setPath] = useState("/")
+  const [homePath, setHomePath] = useState("/")
   const [files, setFiles] = useState<FileItem[]>([])
   const [showHidden, setShowHidden] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
@@ -358,8 +359,15 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (!visible) return
 
     invoke("get_local_home_dir")
-      .then((home) => load(String(home || "/")))
-      .catch(() => load("/"))
+      .then((home) => {
+        const resolvedHome = String(home || "/")
+        setHomePath(resolvedHome)
+        return load(resolvedHome)
+      })
+      .catch(() => {
+        setHomePath("/")
+        return load("/")
+      })
   }, [visible])
 
   useEffect(() => {
@@ -546,6 +554,14 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           }}
         >
           <button
+            onClick={() => load(homePath || "/")}
+            style={{ ...iconBtn, flexShrink: 0 }}
+            title={lang === "de" ? "Home Verzeichnis" : "Home directory"}
+          >
+            <Home size={14} />
+          </button>
+
+          <button
             onClick={() => setShowHidden((prev) => !prev)}
             style={{ ...iconBtn, flexShrink: 0 }}
             title={showHidden ? t("hiddenOn", lang) : t("hiddenOff", lang)}
@@ -683,8 +699,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   textOverflow: "ellipsis"
                 }}
               >
-                {i === 0 ? <Home size={12} /> : null}
-                <span>{part.label}</span>
+                {i === 0 ? <span>/</span> : null}
+                <span>{i === 0 ? "/" : part.label}</span>
               </button>
               {i < arr.length - 1 && <ChevronRight size={12} />}
             </React.Fragment>
