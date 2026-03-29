@@ -1,11 +1,12 @@
+import { useState } from "react"
 import { Save, Download as DownloadIcon, Database } from "lucide-react"
 
 type Props = {
   lang: string
   cardStyle: React.CSSProperties
-  onExportPlain: () => void
-  onExportEncrypted: () => void
-  onImport: () => void
+  onExportPlain: () => void | Promise<void>
+  onExportEncrypted: () => void | Promise<void>
+  onImport: () => void | Promise<void>
   importLabel: string
 }
 
@@ -17,6 +18,31 @@ export default function SettingsBackupCards({
   onImport,
   importLabel
 }: Props) {
+  const [busy, setBusy] = useState(false)
+
+  async function runAction(action: () => void | Promise<void>) {
+    if (busy) return
+    setBusy(true)
+    try {
+      await Promise.resolve(action())
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const buttonStyle: React.CSSProperties = {
+    ...cardStyle,
+    background: "var(--bg-app)",
+    cursor: busy ? "not-allowed" : "pointer",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    minHeight: 140,
+    opacity: busy ? 0.6 : 1
+  }
+
   return (
     <div
       style={{
@@ -26,18 +52,9 @@ export default function SettingsBackupCards({
       }}
     >
       <button
-        onClick={onExportPlain}
-        style={{
-          ...cardStyle,
-          background: "var(--bg-app)",
-          cursor: "pointer",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          minHeight: 140
-        }}
+        onClick={() => { void runAction(onExportPlain) }}
+        disabled={busy}
+        style={buttonStyle}
       >
         <Save size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
@@ -51,18 +68,9 @@ export default function SettingsBackupCards({
       </button>
 
       <button
-        onClick={onExportEncrypted}
-        style={{
-          ...cardStyle,
-          background: "var(--bg-app)",
-          cursor: "pointer",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          minHeight: 140
-        }}
+        onClick={() => { void runAction(onExportEncrypted) }}
+        disabled={busy}
+        style={buttonStyle}
       >
         <Database size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
@@ -76,18 +84,9 @@ export default function SettingsBackupCards({
       </button>
 
       <button
-        onClick={onImport}
-        style={{
-          ...cardStyle,
-          background: "var(--bg-app)",
-          cursor: "pointer",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          minHeight: 140
-        }}
+        onClick={() => { void runAction(onImport) }}
+        disabled={busy}
+        style={buttonStyle}
       >
         <DownloadIcon size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
