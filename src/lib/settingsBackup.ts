@@ -524,10 +524,11 @@ export async function buildExportPayload(settings: any): Promise<string> {
   })
 }
 
-export async function saveBackupFile() {
+export async function saveBackupFile(encrypted = false) {
   const { save } = await import("@tauri-apps/plugin-dialog")
   const dateStr = new Date().toISOString().replace(/T/, "_").replace(/:/g, "-").split(".")[0]
-  return await save({ defaultPath: `backup_termina_${dateStr}.json` })
+  const ext = encrypted ? "bak" : "json"
+  return await save({ defaultPath: `backup_termina_${dateStr}.${ext}` })
 }
 
 export async function handleExportPlainConfig({
@@ -538,7 +539,7 @@ export async function handleExportPlainConfig({
   lang
 }: Pick<BackupDeps, "settings" | "showToast" | "showDialog" | "ui" | "lang">) {
   try {
-    const path = await saveBackupFile()
+    const path = await saveBackupFile(false)
     if (!path) return
 
     const exportPayload = await buildExportPayload(settings)
@@ -575,7 +576,7 @@ export function handleExportEncryptedConfig({
     },
     onConfirm: async (pwd: string) => {
       try {
-        const path = await saveBackupFile()
+        const path = await saveBackupFile(true)
         if (!path) return
 
         const exportPayload = await buildExportPayload(settings)
