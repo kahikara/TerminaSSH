@@ -234,7 +234,7 @@ export default function ConnectionModal({
       } else {
         await invoke("save_connection", { connection: normalizedForm })
       }
-      onSuccess()
+      await Promise.resolve(onSuccess())
       onClose()
     } catch (e) {
       showToast(String(e), true)
@@ -276,7 +276,7 @@ export default function ConnectionModal({
       onConfirm: async () => {
         try {
           await invoke("delete_connection", { id: serverId, name: serverName })
-          onSuccess()
+          await Promise.resolve(onSuccess())
           onClose()
         } catch (e) {
           showToast(String(e), true)
