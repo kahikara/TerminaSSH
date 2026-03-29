@@ -1008,7 +1008,7 @@ export default function App() {
           : undefined
       }}
     >
-      <GlobalDialog dialog={dialog} onClose={() => setDialog({...dialog, isOpen: false})} />
+      <GlobalDialog dialog={dialog} onClose={() => setDialog((prev) => ({ ...prev, isOpen: false }))} />
 
       {useCustomLinuxTitlebar && (
         <>
