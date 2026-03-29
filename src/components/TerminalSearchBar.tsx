@@ -1,4 +1,4 @@
-import type { RefObject } from "react"
+import { useEffect, useRef, type RefObject } from "react"
 import { ChevronUp, ChevronDown, X } from "lucide-react"
 import { t } from "../lib/i18n"
 
@@ -49,6 +49,16 @@ export default function TerminalSearchBar({
   runSearch,
   closeSearchBar
 }: Props) {
+  const searchTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current !== null) {
+        clearTimeout(searchTimerRef.current)
+      }
+    }
+  }, [])
+
   return (
     <div
       style={{
@@ -67,8 +77,17 @@ export default function TerminalSearchBar({
         onChange={(e) => {
           const next = e.target.value
           setSearchQuery(next)
+
+          if (searchTimerRef.current !== null) {
+            clearTimeout(searchTimerRef.current)
+            searchTimerRef.current = null
+          }
+
           if (next.trim()) {
-            setTimeout(() => runSearch(false, next, false), 0)
+            searchTimerRef.current = window.setTimeout(() => {
+              runSearch(false, next, false)
+              searchTimerRef.current = null
+            }, 0)
           }
         }}
         onKeyDown={(e) => {
