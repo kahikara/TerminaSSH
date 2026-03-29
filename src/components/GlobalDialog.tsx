@@ -20,6 +20,19 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
     }
   }, [dialog.isOpen, dialog.defaultValue, dialog.defaultConfirmValue, dialog.checkboxDefaultChecked])
 
+  useEffect(() => {
+    if (!dialog.isOpen) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      void cancel()
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [dialog.isOpen, dialog.type, dialog.onCancel])
+
   if (!dialog.isOpen) return null
 
     const isDanger = dialog.tone === "danger"
@@ -54,6 +67,13 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
     ? "min-h-9 px-4 py-2 rounded-xl border border-[var(--danger)] bg-[var(--danger)] text-white text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
     : "ui-btn-primary disabled:opacity-60"
 
+    const cancel = async () => {
+      if (dialog.type !== "alert") {
+        await Promise.resolve(dialog.onCancel())
+      }
+      onClose()
+    }
+
     const submit = async () => {
       if (!canSubmit) return
 
@@ -86,7 +106,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       {title}
       </div>
 
-      <button onClick={onClose} className="ui-icon-btn" title="Close">
+      <button onClick={() => { void cancel() }} className="ui-icon-btn" title="Close">
       <X size={15} />
       </button>
       </div>
@@ -153,10 +173,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-end gap-2">
       {dialog.type !== "alert" && (
         <button
-        onClick={() => {
-          if (dialog.onCancel) dialog.onCancel()
-            onClose()
-        }}
+        onClick={() => { void cancel() }}
         className="ui-btn-ghost"
         >
         {cancelLabel}
