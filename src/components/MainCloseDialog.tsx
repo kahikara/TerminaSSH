@@ -16,6 +16,10 @@ type Props = {
   onConfirm: () => void
 }
 
+function getDirtyEditorKey(item: DirtyEditorItem) {
+  return `${String(item.label || "")}::${String(item.fileName || "")}::${String(item.remotePath || "")}`
+}
+
 export default function MainCloseDialog({
   isOpen,
   busy,
@@ -42,7 +46,7 @@ export default function MainCloseDialog({
           <div className="flex flex-col gap-3">
             {dirtyEditors.map((item) => (
               <div
-                key={item.label}
+                key={getDirtyEditorKey(item)}
                 className="rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_84%,var(--bg-app))] px-3 py-2.5"
               >
                 <div className="text-sm font-medium text-[var(--text-main)] break-words">
