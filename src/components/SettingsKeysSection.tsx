@@ -125,8 +125,13 @@ export default function SettingsKeysSection({
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <button
                   onClick={() => void copySshPublicKey({ publicKey: k.public_key, lang, showToast })}
-                  style={actionBtnStyle}
-                  title={t("copy", lang)}
+                  style={{
+                    ...actionBtnStyle,
+                    opacity: k.public_key ? 1 : 0.5,
+                    cursor: k.public_key ? "pointer" : "not-allowed"
+                  }}
+                  title={k.public_key ? t("copy", lang) : (lang === "de" ? "Kein öffentlicher Schlüssel verfügbar" : "No public key available")}
+                  disabled={!k.public_key}
                 >
                   <Copy size={14} />
                 </button>
