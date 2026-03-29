@@ -238,6 +238,15 @@ export default function App() {
     } catch {}
   }, [recentConnectionIds]);
 
+  useEffect(() => {
+    const validIds = new Set(connections.map((conn: any) => String(conn.id)));
+
+    setRecentConnectionIds((prev) => {
+      const next = prev.filter((id) => validIds.has(String(id)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [connections]);
+
   const { groups, rootServers } = useMemo(() => {
     const grps: Record<string, any[]> = {};
     const root: any[] = [];
