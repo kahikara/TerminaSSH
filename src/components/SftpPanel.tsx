@@ -594,7 +594,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     if (file.is_dir) return
 
     try {
-      const label = `sftp-editor-${Date.now()}`
+      const label = `sftp-editor-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
       const qs = new URLSearchParams({
         editor: "sftp",
         serverId: String(server.id),

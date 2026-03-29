@@ -832,7 +832,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (file.is_dir) return
 
     try {
-      const label = `local-editor-${Date.now()}`
+      const label = `local-editor-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
       const qs = new URLSearchParams({
         editor: "local",
         path: buildLocalPath(path, file.name),
