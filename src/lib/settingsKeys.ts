@@ -16,6 +16,7 @@ export async function loadSshKeys({ setKeys }: LoadKeysDeps) {
   try {
     setKeys(await invoke("get_ssh_keys"))
   } catch {
+    setKeys([])
   }
 }
 
