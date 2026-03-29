@@ -97,7 +97,10 @@ export function useAppSettings() {
   })
 
   useEffect(() => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    } catch {}
+
     document.documentElement.setAttribute("data-theme", settings.theme)
   }, [settings])
 
