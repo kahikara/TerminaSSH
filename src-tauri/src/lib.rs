@@ -1173,6 +1173,12 @@ fn normalize_connection_fields(connection: &mut SshConnection) {
     connection.group_name = connection.group_name.trim().to_string();
 }
 
+fn normalize_tunnel_fields(tunnel: &mut SshTunnel) {
+    tunnel.name = tunnel.name.trim().to_string();
+    tunnel.remote_host = tunnel.remote_host.trim().to_string();
+    tunnel.bind_host = tunnel.bind_host.trim().to_string();
+}
+
 fn validate_connection(connection: &SshConnection) -> Result<(), String> {
     if connection.name.is_empty() {
         return Err("Connection name is required".to_string());
@@ -2225,21 +2231,23 @@ fn get_tunnels(server_id: i32) -> Result<Vec<TunnelItem>, String> {
 }
 
 #[tauri::command]
-fn save_tunnel(tunnel: SshTunnel) -> Result<String, String> {
-    if tunnel.name.trim().is_empty() {
+fn save_tunnel(mut tunnel: SshTunnel) -> Result<String, String> {
+    normalize_tunnel_fields(&mut tunnel);
+
+    if tunnel.name.is_empty() {
         return Err("Tunnel name is empty".to_string());
     }
-    if tunnel.remote_host.trim().is_empty() {
+    if tunnel.remote_host.is_empty() {
         return Err("Remote host is empty".to_string());
     }
     if tunnel.local_port == 0 || tunnel.remote_port == 0 {
         return Err("Ports must be greater than 0".to_string());
     }
 
-    let bind_host = if tunnel.bind_host.trim().is_empty() {
+    let bind_host = if tunnel.bind_host.is_empty() {
         "127.0.0.1".to_string()
     } else {
-        tunnel.bind_host.trim().to_string()
+        tunnel.bind_host.clone()
     };
 
     let conn = open_db()?;
@@ -2259,23 +2267,39 @@ fn save_tunnel(tunnel: SshTunnel) -> Result<String, String> {
 
     Ok("Tunnel saved".to_string())
 }
-
 #[tauri::command]
-fn update_tunnel(id: i32, tunnel: SshTunnel) -> Result<String, String> {
-    if tunnel.name.trim().is_empty() {
+fn update_tunnel(id: i32, mut tunnel: SshTunnel, state: State<'_, SshState>) -> Result<String, String> {
+    normalize_tunnel_fields(&mut tunnel);
+
+    if tunnel.name.is_empty() {
         return Err("Tunnel name is empty".to_string());
     }
-    if tunnel.remote_host.trim().is_empty() {
+    if tunnel.remote_host.is_empty() {
         return Err("Remote host is empty".to_string());
     }
     if tunnel.local_port == 0 || tunnel.remote_port == 0 {
         return Err("Ports must be greater than 0".to_string());
     }
 
-    let bind_host = if tunnel.bind_host.trim().is_empty() {
+    let finished_entries = take_finished_tunnel_entries(&state)?;
+    for entry in finished_entries {
+        let _ = entry.handle.join();
+    }
+
+    {
+        let map = state
+            .tunnel_runtime
+            .lock()
+            .map_err(|_| "Tunnel state lock failed".to_string())?;
+        if map.contains_key(&id) {
+            return Err("Stop the tunnel before editing it".to_string());
+        }
+    }
+
+    let bind_host = if tunnel.bind_host.is_empty() {
         "127.0.0.1".to_string()
     } else {
-        tunnel.bind_host.trim().to_string()
+        tunnel.bind_host.clone()
     };
 
     let conn = open_db()?;
@@ -2297,7 +2321,6 @@ fn update_tunnel(id: i32, tunnel: SshTunnel) -> Result<String, String> {
 
     Ok("Tunnel updated".to_string())
 }
-
 #[tauri::command]
 fn delete_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
     let entry = {
@@ -2585,6 +2608,13 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
     }
 
     let tunnel = get_tunnel_by_id(id)?;
+    if tunnel.remote_host.trim().is_empty() {
+        return Err("Remote host is empty".to_string());
+    }
+    if tunnel.local_port == 0 || tunnel.remote_port == 0 {
+        return Err("Tunnel ports must be greater than 0".to_string());
+    }
+
     let bind_host = if tunnel.bind_host.trim().is_empty() {
         "127.0.0.1".to_string()
     } else {
@@ -2599,7 +2629,7 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
     let stop_flag_thread = Arc::clone(&stop_flag);
 
     let server_id = tunnel.server_id;
-    let remote_host = tunnel.remote_host.clone();
+    let remote_host = tunnel.remote_host.trim().to_string();
     let remote_port = tunnel.remote_port;
 
     let handle = thread::spawn(move || loop {
