@@ -184,7 +184,7 @@ export function useInputContextMenu({ lang, showToast }: UseInputContextMenuArgs
       window.removeEventListener("resize", handleWindowChange)
       window.removeEventListener("scroll", handleWindowChange, true)
     }
-  }, [lang, inputMenu.target])
+  }, [])
 
   return {
     inputMenu,
