@@ -2084,6 +2084,20 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         }
 
+        if remote_host.is_empty() || local_port == 0 || remote_port == 0 {
+            warnings.push(format!(
+                "Tunnel '{}' was skipped because its route is invalid.",
+                name
+            ));
+            continue;
+        }
+
+        let bind_host = if bind_host.is_empty() {
+            "127.0.0.1".to_string()
+        } else {
+            bind_host
+        };
+
         let primary_map_key = format!(
             "{}|{}|{}|{}|{}",
             server_name, server_host, server_port, server_username, server_group_name
@@ -2103,17 +2117,37 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         };
 
-        let existing_tunnel_id: Option<i32> = tx
+        let existing_bind_tunnel: Option<String> = tx
             .query_row(
-                "SELECT id FROM ssh_tunnels WHERE server_id = ?1 AND name = ?2 AND local_port = ?3 AND remote_host = ?4 AND remote_port = ?5 AND bind_host = ?6 LIMIT 1",
-                (&server_id, &name, &local_port, &remote_host, &remote_port, &bind_host),
+                "SELECT name FROM ssh_tunnels WHERE bind_host = ?1 AND local_port = ?2 LIMIT 1",
+                (&bind_host, &local_port),
                 |row| row.get(0),
             )
             .optional()
             .map_err(|e| e.to_string())?;
 
-        if existing_tunnel_id.is_some() {
-            warnings.push(format!("Tunnel '{}' already exists and was skipped.", name));
+        if let Some(existing_name) = existing_bind_tunnel {
+            warnings.push(format!(
+                "Tunnel '{}' was skipped because local bind address is already used by '{}'.",
+                name, existing_name
+            ));
+            continue;
+        }
+
+        let existing_route_tunnel: Option<String> = tx
+            .query_row(
+                "SELECT name FROM ssh_tunnels WHERE server_id = ?1 AND local_port = ?2 AND remote_host = ?3 AND remote_port = ?4 AND bind_host = ?5 LIMIT 1",
+                (&server_id, &local_port, &remote_host, &remote_port, &bind_host),
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        if let Some(existing_name) = existing_route_tunnel {
+            warnings.push(format!(
+                "Tunnel '{}' was skipped because the same route already exists as '{}'.",
+                name, existing_name
+            ));
             continue;
         }
 
