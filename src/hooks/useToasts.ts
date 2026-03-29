@@ -4,6 +4,7 @@ import type { ToastItem } from "../lib/types"
 export function useToasts() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const timeoutIdsRef = useRef<number[]>([])
+  const nextToastIdRef = useRef(1)
 
   useEffect(() => {
     return () => {
@@ -18,7 +19,7 @@ export function useToasts() {
     const trimmed = String(msg || "").trim()
     if (!trimmed) return
 
-    const id = Date.now() + Math.floor(Math.random() * 1000)
+    const id = nextToastIdRef.current++
 
     setToasts((prev) => [...prev, { id, msg: trimmed, isErr }])
 
