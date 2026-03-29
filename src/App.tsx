@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Minus, Square } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { t } from './lib/i18n';
+import type { GlobalDialogState } from './lib/types';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
@@ -99,6 +100,47 @@ type EditableConnection = {
   group_name?: string
 }
 
+type PaneStatePayload = {
+  paneServers: ConnectionItem[]
+  paneSessionIds: string[]
+  focusedPaneId?: string | null
+}
+
+type HostKeyCheckInfo = {
+  host: string
+  port: number
+  display_host: string
+  key_type: string
+  fingerprint: string
+  status: string
+  known_hosts_path: string
+}
+
+const createClosedDialogState = (): GlobalDialogState => ({
+  isOpen: false,
+  type: 'alert',
+  tone: undefined,
+  title: '',
+  description: '',
+  placeholder: '',
+  defaultValue: '',
+  defaultConfirmValue: '',
+  confirmPlaceholder: '',
+  isPassword: false,
+  requireConfirm: false,
+  allowEmpty: false,
+  checkboxLabel: '',
+  checkboxDefaultChecked: false,
+  confirmLabel: '',
+  cancelLabel: '',
+  secondaryLabel: '',
+  tertiaryLabel: '',
+  onConfirm: async () => {},
+  onCancel: () => {},
+  onSecondary: undefined,
+  onTertiary: undefined,
+  validate: undefined
+})
 
 const isDashboardConnection = (
   value: ConnectionItem | null | undefined
@@ -192,56 +234,11 @@ export default function App() {
     });
   }, [settings.closeToTray, settings.lang, showToast]);
 
-  const [dialog, setDialog] = useState({
-    isOpen: false,
-    type: 'alert',
-    tone: undefined,
-    title: '',
-    description: '',
-    placeholder: '',
-    defaultValue: '',
-    defaultConfirmValue: '',
-    confirmPlaceholder: '',
-    isPassword: false,
-    requireConfirm: false,
-    allowEmpty: false,
-    checkboxLabel: '',
-    checkboxDefaultChecked: false,
-    confirmLabel: '',
-    cancelLabel: '',
-    secondaryLabel: '',
-    tertiaryLabel: '',
-    onConfirm: (_v:any)=>{},
-    onCancel: ()=>{},
-    onSecondary: undefined,
-    onTertiary: undefined,
-    validate: undefined
-  });
-  const showDialog = (config: any) => setDialog({
-    isOpen: true,
-    type: 'alert',
-    tone: undefined,
-    title: '',
-    description: '',
-    placeholder: '',
-    defaultValue: '',
-    defaultConfirmValue: '',
-    confirmPlaceholder: '',
-    isPassword: false,
-    requireConfirm: false,
-    allowEmpty: false,
-    checkboxLabel: '',
-    checkboxDefaultChecked: false,
-    confirmLabel: '',
-    cancelLabel: '',
-    secondaryLabel: '',
-    tertiaryLabel: '',
-    onConfirm: (_v:any)=>{},
-    onCancel: ()=>{},
-    onSecondary: undefined,
-    onTertiary: undefined,
-    validate: undefined,
-    ...config
+  const [dialog, setDialog] = useState<GlobalDialogState>(createClosedDialogState());
+  const showDialog = (config: Partial<GlobalDialogState>) => setDialog({
+    ...createClosedDialogState(),
+    ...config,
+    isOpen: true
   });
 
   const isDragging = useRef(false);
@@ -595,7 +592,7 @@ export default function App() {
       const info = await invoke('check_host_key', {
         host,
         port
-      }) as any;
+      }) as HostKeyCheckInfo;
 
       if (info?.status === 'match') {
         return true;
@@ -773,12 +770,12 @@ export default function App() {
       if (server?.isQuickConnect) return null;
 
       if (isLocalConnection(server)) {
-        const existingLocal = openTabs.find((tab: any) => tab?.isLocal);
+        const existingLocal = openTabs.find((tab) => tab?.isLocal);
         return existingLocal?.tabId || null;
       }
 
       if (server?.id != null) {
-        const existingServer = openTabs.find((tab: any) => String(tab?.id) === String(server.id));
+        const existingServer = openTabs.find((tab) => String(tab?.id) === String(server.id));
         return existingServer?.tabId || null;
       }
 
@@ -810,7 +807,7 @@ export default function App() {
         placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
         isPassword: true,
         checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
-        onConfirm: async (pwd: string, meta?: any) => {
+        onConfirm: async (pwd: string, meta?: { checked?: boolean }) => {
           if (!pwd) return;
 
           if (meta?.checked && server?.id != null) {
@@ -855,7 +852,7 @@ export default function App() {
     setSidebarContextMenu(null);
   }, []);
 
-  const buildSplitTabFromServers = (leftServer: any, rightServer: any, existingTabId?: string) => {
+  const buildSplitTabFromServers = (leftServer: ConnectionItem, rightServer: ConnectionItem, existingTabId?: string): AppTab => {
     const tabId = existingTabId || Math.random().toString(36).substring(7);
     const leftSessionId = `${tabId}__pane_0`;
     const rightSessionId = `${tabId}__pane_1`;
@@ -872,7 +869,7 @@ export default function App() {
     };
   };
 
-  const openServerInSplit = async (server: any) => {
+  const openServerInSplit = async (server: ConnectionItem) => {
     if (!activeTabId) {
       await openTerminal(server);
       return;
@@ -900,7 +897,7 @@ export default function App() {
         placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
         isPassword: true,
         checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
-        onConfirm: async (pwd: string, meta?: any) => {
+        onConfirm: async (pwd: string, meta?: { checked?: boolean }) => {
           if (!pwd) return;
 
           if (meta?.checked && server?.id != null) {
@@ -1031,11 +1028,7 @@ export default function App() {
 
   const updateTabFromPaneState = useCallback((
     tabId: string,
-    payload: {
-      paneServers: any[];
-      paneSessionIds: string[];
-      focusedPaneId?: string | null;
-    }
+    payload: PaneStatePayload
   ) => {
     setOpenTabs((prev) =>
       prev.map((tab) => {
@@ -1571,8 +1564,8 @@ export default function App() {
           <div className="h-10 flex bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
             <div className="flex overflow-x-auto h-full scrollbar-hide w-full items-end pt-1 px-2 gap-1.5">
               {openTabs.map((tab) => {
-                const dragIndex = tabDragId ? openTabs.findIndex((t: any) => t.tabId === tabDragId) : -1
-                const dropIndex = tabDropId ? openTabs.findIndex((t: any) => t.tabId === tabDropId) : -1
+                const dragIndex = tabDragId ? openTabs.findIndex((t) => t.tabId === tabDragId) : -1
+                const dropIndex = tabDropId ? openTabs.findIndex((t) => t.tabId === tabDropId) : -1
                 const isDragged = tabDragId === tab.tabId && tabPointerDragging
                 const isDropTarget = tabDropId === tab.tabId && tabDragId !== tab.tabId && tabPointerDragging
                 const dropOnLeft = isDropTarget && dragIndex > dropIndex
@@ -1638,7 +1631,7 @@ export default function App() {
                    settings={settings}
                    showToast={showToast}
                    onCloseTab={() => closeTab(tab.tabId)}
-                   onPaneStateChange={(payload: any) => updateTabFromPaneState(tab.tabId, payload)}
+                   onPaneStateChange={(payload: PaneStatePayload) => updateTabFromPaneState(tab.tabId, payload)}
                    isActive={activeTabId === tab.tabId}
                    showDialog={showDialog}
                  />

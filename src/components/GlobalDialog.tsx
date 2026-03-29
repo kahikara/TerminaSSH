@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react"
 import { X } from "lucide-react"
+import type { GlobalDialogState } from "../lib/types"
 
-export default function GlobalDialog({ dialog, onClose }: any) {
+type GlobalDialogProps = {
+  dialog: GlobalDialogState
+  onClose: () => void
+}
+
+export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
   const [val, setVal] = useState("")
   const [confirmVal, setConfirmVal] = useState("")
   const [checkVal, setCheckVal] = useState(false)
@@ -160,7 +166,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
       {secondaryLabel && dialog.onSecondary && (
         <button
         onClick={async () => {
-          await dialog.onSecondary(val)
+          await dialog.onSecondary?.(val)
         }}
         className="ui-btn-ghost"
         >
@@ -171,7 +177,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
       {tertiaryLabel && dialog.onTertiary && (
         <button
         onClick={async () => {
-          await dialog.onTertiary(val)
+          await dialog.onTertiary?.(val)
         }}
         className="ui-btn-ghost"
         >

@@ -61,3 +61,29 @@ export type ToastItem = {
   msg: string
   isErr: boolean
 }
+
+export type GlobalDialogState = {
+  isOpen: boolean
+  type: "alert" | "confirm" | "prompt"
+  tone?: "danger"
+  title: string
+  description: string
+  placeholder: string
+  defaultValue: string
+  defaultConfirmValue: string
+  confirmPlaceholder: string
+  isPassword: boolean
+  requireConfirm: boolean
+  allowEmpty: boolean
+  checkboxLabel: string
+  checkboxDefaultChecked: boolean
+  confirmLabel: string
+  cancelLabel: string
+  secondaryLabel: string
+  tertiaryLabel: string
+  onConfirm: (...args: any[]) => void | Promise<void>
+  onCancel: () => void
+  onSecondary?: (value?: string) => void | Promise<void>
+  onTertiary?: (value?: string) => void | Promise<void>
+  validate?: (value: string, confirmValue: string) => string
+}
