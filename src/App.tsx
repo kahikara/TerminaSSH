@@ -158,6 +158,7 @@ export default function App() {
   const expandedSidebarWidthRef = useRef(260);
   const settingsRef = useRef(settings);
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const sidebarSearchFocusTimerRef = useRef<number | null>(null);
   const tabDragStartXRef = useRef<number | null>(null);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
@@ -168,6 +169,14 @@ export default function App() {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarSearchFocusTimerRef.current !== null) {
+        clearTimeout(sidebarSearchFocusTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     invoke('get_linux_window_mode')
@@ -394,6 +403,11 @@ export default function App() {
   }, [isSidebarCollapsed, sidebarWidth]);
 
   const closeSidebarSearch = useCallback(() => {
+    if (sidebarSearchFocusTimerRef.current !== null) {
+      clearTimeout(sidebarSearchFocusTimerRef.current);
+      sidebarSearchFocusTimerRef.current = null;
+    }
+
     setShowSidebarSearch(false);
     setSidebarSearchQuery("");
   }, []);
@@ -404,10 +418,16 @@ export default function App() {
       return;
     }
 
+    if (sidebarSearchFocusTimerRef.current !== null) {
+      clearTimeout(sidebarSearchFocusTimerRef.current);
+      sidebarSearchFocusTimerRef.current = null;
+    }
+
     setShowSidebarSearch(true);
-    window.setTimeout(() => {
+    sidebarSearchFocusTimerRef.current = window.setTimeout(() => {
       sidebarSearchInputRef.current?.focus();
       sidebarSearchInputRef.current?.select();
+      sidebarSearchFocusTimerRef.current = null;
     }, 0);
   }, [showSidebarSearch, closeSidebarSearch]);
 
