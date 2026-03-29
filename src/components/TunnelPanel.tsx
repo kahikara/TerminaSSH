@@ -28,11 +28,16 @@ type TunnelItem = {
 type TunnelForm = {
   name: string
   server_id: number
-  local_port: number
+  local_port: string | number
   remote_host: string
-  remote_port: number
+  remote_port: string | number
   bind_host: string
   auto_start: boolean
+}
+
+type NormalizedTunnelForm = Omit<TunnelForm, "local_port" | "remote_port"> & {
+  local_port: number
+  remote_port: number
 }
 
 const TUNNEL_PANEL_WIDTH_KEY = "termina_tunnel_panel_width"
@@ -81,9 +86,9 @@ function defaultForm(serverId: number): TunnelForm {
   return {
     name: "",
     server_id: serverId,
-    local_port: 5433,
+    local_port: "5433",
     remote_host: "127.0.0.1",
-    remote_port: 5432,
+    remote_port: "5432",
     bind_host: "127.0.0.1",
     auto_start: false
   }
@@ -214,30 +219,71 @@ export default function TunnelPanel({
     setForm({
       name: item.name,
       server_id: item.server_id,
-      local_port: item.local_port,
+      local_port: String(item.local_port),
       remote_host: item.remote_host,
-      remote_port: item.remote_port,
+      remote_port: String(item.remote_port),
       bind_host: item.bind_host,
       auto_start: item.auto_start
     })
     setEditorOpen(true)
   }
 
+  function buildNormalizedForm(): NormalizedTunnelForm {
+    const localPort = parseInt(String(form.local_port || "0").trim() || "0", 10)
+    const remotePort = parseInt(String(form.remote_port || "0").trim() || "0", 10)
+
+    return {
+      ...form,
+      name: String(form.name || "").trim(),
+      bind_host: String(form.bind_host || "").trim(),
+      remote_host: String(form.remote_host || "").trim(),
+      local_port: Number.isFinite(localPort) ? localPort : 0,
+      remote_port: Number.isFinite(remotePort) ? remotePort : 0
+    }
+  }
+
+  function getValidationError(normalizedForm: NormalizedTunnelForm) {
+    if (!normalizedForm.name) {
+      return "Tunnel name is required"
+    }
+
+    if (!normalizedForm.bind_host) {
+      return "Bind host is required"
+    }
+
+    if (!normalizedForm.remote_host) {
+      return "Target host is required"
+    }
+
+    if (!Number.isInteger(normalizedForm.local_port) || normalizedForm.local_port < 1 || normalizedForm.local_port > 65535) {
+      return "Local port must be between 1 and 65535"
+    }
+
+    if (!Number.isInteger(normalizedForm.remote_port) || normalizedForm.remote_port < 1 || normalizedForm.remote_port > 65535) {
+      return "Target port must be between 1 and 65535"
+    }
+
+    return ""
+  }
+
   async function saveCurrent() {
     try {
-      if (!form.name.trim()) {
-        showToast?.("Tunnel name is required", true)
+      const normalizedForm = buildNormalizedForm()
+      const validationError = getValidationError(normalizedForm)
+
+      if (validationError) {
+        showToast?.(validationError, true)
         return
       }
 
       if (editingItem) {
         await invoke("update_tunnel", {
           id: editingItem.id,
-          tunnel: form
+          tunnel: normalizedForm
         })
       } else {
         await invoke("save_tunnel", {
-          tunnel: form
+          tunnel: normalizedForm
         })
       }
 
@@ -608,7 +654,19 @@ export default function TunnelPanel({
                     <input
                       type="number"
                       value={form.local_port}
-                      onChange={(e) => setForm({ ...form, local_port: parseInt(e.target.value || "0", 10) })}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        if (next === "" || /^\d+$/.test(next)) {
+                          setForm({ ...form, local_port: next })
+                        }
+                      }}
+                      onBlur={() => {
+                        const parsed = parseInt(String(form.local_port || "0").trim() || "0", 10)
+                        setForm({
+                          ...form,
+                          local_port: String(Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : 5433)
+                        })
+                      }}
                       placeholder="5433"
                       className="ui-input"
                     />
@@ -632,7 +690,19 @@ export default function TunnelPanel({
                     <input
                       type="number"
                       value={form.remote_port}
-                      onChange={(e) => setForm({ ...form, remote_port: parseInt(e.target.value || "0", 10) })}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        if (next === "" || /^\d+$/.test(next)) {
+                          setForm({ ...form, remote_port: next })
+                        }
+                      }}
+                      onBlur={() => {
+                        const parsed = parseInt(String(form.remote_port || "0").trim() || "0", 10)
+                        setForm({
+                          ...form,
+                          remote_port: String(Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : 5432)
+                        })
+                      }}
                       placeholder="5432"
                       className="ui-input"
                     />
