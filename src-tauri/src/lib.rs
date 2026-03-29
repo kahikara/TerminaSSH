@@ -2889,10 +2889,13 @@ fn local_rename(old_path: String, new_path: String) -> Result<String, String> {
 #[tauri::command]
 fn local_delete(path: String) -> Result<String, String> {
     let path = normalize_local_path(&path)?;
-    let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "Delete target", &path))?;
+    let link_metadata =
+        fs::symlink_metadata(&path).map_err(|e| map_local_fs_error(&e, "Delete target", &path))?;
 
-    if metadata.is_dir() {
-        fs::remove_dir(&path).map_err(|e| map_local_fs_error(&e, "Delete folder", &path))?;
+    if link_metadata.file_type().is_symlink() {
+        fs::remove_file(&path).map_err(|e| map_local_fs_error(&e, "Delete link", &path))?;
+    } else if link_metadata.is_dir() {
+        fs::remove_dir_all(&path).map_err(|e| map_local_fs_error(&e, "Delete folder", &path))?;
     } else {
         fs::remove_file(&path).map_err(|e| map_local_fs_error(&e, "Delete file", &path))?;
     }
