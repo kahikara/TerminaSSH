@@ -479,6 +479,25 @@ fn open_db() -> Result<Connection, String> {
 fn get_key_path() -> String {
     format!("{}/master.key", get_app_dir())
 }
+
+#[cfg(unix)]
+fn set_private_file_permissions(path: &Path) -> Result<(), String> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(not(unix))]
+fn set_private_file_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+fn harden_master_key_permissions() {
+    let key_path = PathBuf::from(get_key_path());
+    if key_path.exists() {
+        let _ = set_private_file_permissions(&key_path);
+    }
+}
+
 fn get_keys_dir() -> String {
     let dir = format!("{}/keys", get_app_dir());
     let _ = fs::create_dir_all(&dir);
@@ -662,8 +681,11 @@ fn probe_host_key(
 }
 
 fn get_or_create_key() -> [u8; 32] {
-    let key_path = get_key_path();
+    let key_path = PathBuf::from(get_key_path());
+
     if let Ok(key_base64) = fs::read_to_string(&key_path) {
+        let _ = set_private_file_permissions(&key_path);
+
         if let Ok(key_bytes) = STANDARD.decode(key_base64.trim()) {
             if key_bytes.len() == 32 {
                 let mut key = [0u8; 32];
@@ -672,9 +694,14 @@ fn get_or_create_key() -> [u8; 32] {
             }
         }
     }
+
     let mut key = [0u8; 32];
     OsRng.fill_bytes(&mut key);
-    fs::write(key_path, STANDARD.encode(key)).unwrap_or_default();
+
+    if fs::write(&key_path, STANDARD.encode(key)).is_ok() {
+        let _ = set_private_file_permissions(&key_path);
+    }
+
     key
 }
 
@@ -3393,6 +3420,8 @@ fn get_status_bar_info(server_id: i32) -> Result<StatusBarInfo, String> {
 pub fn run() {
     #[cfg(target_os = "linux")]
     maybe_relaunch_appimage_with_wayland_preload();
+
+    harden_master_key_permissions();
 
     if let Err(e) = init_db() {
         eprintln!("Database init failed: {}", e);
