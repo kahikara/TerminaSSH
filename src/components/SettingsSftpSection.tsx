@@ -10,6 +10,12 @@ type Props = {
   uniformSelectStyle: React.CSSProperties
 }
 
+function normalizeSftpSort(value: AppSettings["sftpSort"] | string | undefined): AppSettings["sftpSort"] {
+  if (value === "az" || value === "za") return "name"
+  if (value === "folders" || value === "name" || value === "size" || value === "type") return value
+  return "folders"
+}
+
 export default function SettingsSftpSection({
   lang,
   ui,
@@ -28,8 +34,8 @@ export default function SettingsSftpSection({
 
       <FieldRow label={t("sortOrder", lang)} desc={ui.sortOrderDesc}>
         <select
-          value={settings.sftpSort}
-          onChange={(e) => setSettings({ ...settings, sftpSort: e.target.value as AppSettings["sftpSort"] })}
+          value={normalizeSftpSort(settings.sftpSort)}
+          onChange={(e) => setSettings({ ...settings, sftpSort: normalizeSftpSort(e.target.value) })}
           style={uniformSelectStyle}
         >
           <option value="folders">{t("foldersFirst", lang)}</option>
