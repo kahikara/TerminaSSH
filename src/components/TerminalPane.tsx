@@ -74,6 +74,7 @@ type TerminalInstanceProps = {
   showToast?: ToastFn
   lang?: string
   onFocus?: () => void
+  onInteract?: () => void
 }
 
 type TerminalPaneProps = {
@@ -95,7 +96,8 @@ function TerminalInstance({
   onClose,
   showToast,
   lang = "de",
-  onFocus
+  onFocus,
+  onInteract
 }: TerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const onCloseRef = useRef<(() => void) | undefined>(onClose)
@@ -194,6 +196,7 @@ function TerminalInstance({
       }}
       onClick={() => {
         try {
+          onInteract?.()
           onFocus?.()
           const entry = terminalStore[sessionId]
           entry?.term?.focus()
@@ -210,6 +213,7 @@ function TerminalInstance({
         e.stopPropagation()
 
         try {
+          onInteract?.()
           const entry = terminalStore[sessionId]
           const term = entry?.term
           if (!term) return
@@ -231,6 +235,7 @@ function TerminalInstance({
         e.stopPropagation()
 
         try {
+          onInteract?.()
           const entry = terminalStore[sessionId]
           const term = entry?.term
           if (!term) return
@@ -719,13 +724,23 @@ export default function TerminalPane(props: TerminalPaneProps) {
     focusSearchInput()
   }
 
-  const closeSearchBar = () => {
+  const closeSearchBarForSession = (targetSessionId?: string) => {
     setShowSearch(false)
     setSearchQuery("")
+
+    const nextSessionId =
+      targetSessionId && paneIdsRef.current.includes(targetSessionId)
+        ? targetSessionId
+        : getSearchTargetSessionId()
+
     try {
-      const entry = terminalStore[getSearchTargetSessionId()]
+      const entry = terminalStore[nextSessionId]
       entry?.term?.focus()
     } catch {}
+  }
+
+  const closeSearchBar = () => {
+    closeSearchBarForSession()
   }
 
   const toggleSearchBar = () => {
@@ -1132,6 +1147,11 @@ export default function TerminalPane(props: TerminalPaneProps) {
                 showToast={props.showToast}
                 lang={settings?.lang || "en"}
                 onFocus={() => setFocusedPaneId(paneIds[0])}
+                onInteract={() => {
+                  if (showSearch) {
+                    closeSearchBarForSession(paneIds[0])
+                  }
+                }}
               />
             </div>
           </div>
@@ -1243,6 +1263,11 @@ export default function TerminalPane(props: TerminalPaneProps) {
                     showToast={props.showToast}
                     lang={settings?.lang || "en"}
                     onFocus={() => setFocusedPaneId(paneIds[1])}
+                    onInteract={() => {
+                      if (showSearch) {
+                        closeSearchBarForSession(paneIds[1])
+                      }
+                    }}
                   />
                 </div>
               </div>
