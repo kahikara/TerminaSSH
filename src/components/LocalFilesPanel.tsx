@@ -86,10 +86,43 @@ function formatBytes(bytes: number) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
+function getLocalSeparator(path: string) {
+  const normalized = String(path || "")
+  if (/^[A-Za-z]:\\/.test(normalized) || (normalized.includes("\\") && !normalized.includes("/"))) {
+    return "\\"
+  }
+  return "/"
+}
+
+function trimTrailingLocalSeparators(path: string, separator: string) {
+  let next = path
+  if (!next) return next
+
+  if (separator === "\\") {
+    if (/^[A-Za-z]:\\$/.test(next)) return next
+    while (next.endsWith("\\") && !/^[A-Za-z]:\\$/.test(next) && next.length > 1) {
+      next = next.slice(0, -1)
+    }
+    return next
+  }
+
+  while (next.length > 1 && next.endsWith("/")) {
+    next = next.slice(0, -1)
+  }
+
+  return next
+}
+
 function buildLocalPath(path: string, name: string) {
   if (!path) return name
-  const trimmed = path.endsWith("/") ? path.slice(0, -1) : path
-  return trimmed === "" ? `/${name}` : `${trimmed}/${name}`
+  const separator = getLocalSeparator(path)
+  const trimmed = trimTrailingLocalSeparators(path, separator)
+
+  if (!trimmed) return name
+  if (separator === "/" && trimmed === "/") return `/${name}`
+  if (separator === "\\" && /^[A-Za-z]:\\$/.test(trimmed)) return `${trimmed}${name}`
+
+  return `${trimmed}${separator}${name}`
 }
 
 function isValidLocalEntryName(value: string) {
@@ -104,18 +137,65 @@ function isValidLocalEntryName(value: string) {
 }
 
 function pathParts(path: string) {
-  if (!path || path === "/") return [{ label: "/", full: "/" }]
+  const normalized = String(path || "")
+  if (!normalized) return [{ label: "/", full: "/" }]
 
-  const parts = path.split("/").filter(Boolean)
+  const separator = getLocalSeparator(normalized)
+  const trimmed = trimTrailingLocalSeparators(normalized, separator)
+
+  if (separator === "\\") {
+    const driveMatch = trimmed.match(/^[A-Za-z]:\\/)
+
+    if (driveMatch) {
+      const root = driveMatch[0]
+      const rest = trimmed.slice(root.length).split("\\").filter(Boolean)
+      const out = [{ label: root, full: root }] as { label: string; full: string }[]
+      let cur = root
+
+      for (const part of rest) {
+        cur = cur.endsWith("\\") ? `${cur}${part}` : `${cur}\\${part}`
+        out.push({ label: part, full: cur })
+      }
+
+      return out
+    }
+
+    const parts = trimmed.split("\\").filter(Boolean)
+    if (parts.length === 0) return [{ label: "\\", full: "\\" }]
+
+    const out = [{ label: "\\", full: "\\" }] as { label: string; full: string }[]
+    let cur = "\\"
+
+    for (const part of parts) {
+      cur = cur === "\\" ? `\\${part}` : `${cur}\\${part}`
+      out.push({ label: part, full: cur })
+    }
+
+    return out
+  }
+
+  if (trimmed === "/") return [{ label: "/", full: "/" }]
+
+  const parts = trimmed.split("/").filter(Boolean)
   const out = [{ label: "/", full: "/" }] as { label: string; full: string }[]
   let cur = ""
 
-  for (const p of parts) {
-    cur += "/" + p
-    out.push({ label: p, full: cur })
+  for (const part of parts) {
+    cur += "/" + part
+    out.push({ label: part, full: cur })
   }
 
   return out
+}
+
+function getParentLocalPath(path: string) {
+  const parts = pathParts(path)
+  if (parts.length <= 1) return parts[0]?.full || "/"
+  return parts[parts.length - 2].full
+}
+
+function hasLocalParentPath(path: string) {
+  return pathParts(path).length > 1
 }
 
 function sortFiles(items: FileItem[], mode: LocalSortMode) {
@@ -306,17 +386,21 @@ const menuButtonStyle: React.CSSProperties = {
   transition: "background 140ms ease"
 }
 
-function entryStyle(hovered: boolean): React.CSSProperties {
+function entryStyle(hovered: boolean, selected = false): React.CSSProperties {
   return {
     ...row,
     position: "relative",
     borderRadius: 12,
-    border: hovered
-      ? "1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle))"
-      : "1px solid transparent",
-    background: hovered
-      ? "color-mix(in srgb, var(--bg-hover) 72%, transparent)"
-      : "transparent",
+    border: selected
+      ? "1px solid color-mix(in srgb, var(--accent) 38%, var(--border-subtle))"
+      : hovered
+        ? "1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle))"
+        : "1px solid transparent",
+    background: selected
+      ? "color-mix(in srgb, var(--accent) 16%, transparent)"
+      : hovered
+        ? "color-mix(in srgb, var(--bg-hover) 72%, transparent)"
+        : "transparent",
     borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 68%, transparent)",
     margin: 0,
     transition: "background 140ms ease, border-color 140ms ease"
@@ -346,8 +430,10 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [newFolderValue, setNewFolderValue] = useState("")
   const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
   const [errorText, setErrorText] = useState("")
+  const [successText, setSuccessText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -368,6 +454,35 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   )
   const newFolderValid = isValidLocalEntryName(newFolderTrimmed)
 
+  const navigableEntries = useMemo(() => {
+    const entries = visibleFiles.map((f) => f.name)
+    return hasLocalParentPath(path) ? ["__parent__", ...entries] : entries
+  }, [path, visibleFiles])
+
+  function clearTransientChrome() {
+    setMenuItem(null)
+    setMenuStyle(null)
+    setSortMenuOpen(false)
+    setSortMenuStyle(null)
+  }
+
+  function activateEntry(entryName: string) {
+    if (entryName === "__parent__") {
+      void load(getParentLocalPath(path))
+      return
+    }
+
+    const entry = visibleFiles.find((f) => f.name === entryName)
+    if (!entry) return
+
+    if (entry.is_dir) {
+      void load(buildLocalPath(path, entry.name))
+      return
+    }
+
+    void openEditor(entry)
+  }
+
   function toErrorText(error: unknown, deFallback: string, enFallback: string) {
     const detail = error instanceof Error ? error.message.trim() : String(error || "").trim()
     return detail || (lang === "de" ? deFallback : enFallback)
@@ -377,6 +492,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     const seq = loadSeqRef.current + 1
     loadSeqRef.current = seq
     setIsLoading(true)
+    setSuccessText("")
 
     try {
       const res = await invoke("local_list_dir", { path: nextPath }) as FileItem[]
@@ -389,6 +505,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       console.error(e)
       setFiles([])
       setErrorText(toErrorText(e, "Ordner konnte nicht geladen werden", "Failed to load folder"))
+      setSuccessText("")
     } finally {
       if (loadSeqRef.current === seq) {
         setIsLoading(false)
@@ -415,18 +532,29 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     loadSeqRef.current += 1
     setIsLoading(false)
     setActionBusy(false)
-    setMenuItem(null)
-    setMenuStyle(null)
-    setSortMenuOpen(false)
-    setSortMenuStyle(null)
+    clearTransientChrome()
     setHoveredItem(null)
+    setSelectedItem(null)
     setRenameItem(null)
     setRenameValue("")
     setNewFolderOpen(false)
     setNewFolderValue("")
     setDeleteItem(null)
     setErrorText("")
+    setSuccessText("")
   }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
+
+    if (!navigableEntries.length) {
+      setSelectedItem(null)
+      return
+    }
+
+    if (selectedItem && navigableEntries.includes(selectedItem)) return
+    setSelectedItem(navigableEntries[0])
+  }, [visible, navigableEntries, selectedItem])
 
   useEffect(() => {
     persistPanelWidth(panelWidth)
@@ -464,6 +592,165 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       window.removeEventListener("mouseup", onUp)
     }
   }, [])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      const isTyping = tag === "input" || tag === "textarea" || Boolean(target?.isContentEditable)
+
+      if (renameItem) {
+        if (e.key === "Escape" && !actionBusy) {
+          e.preventDefault()
+          e.stopPropagation()
+          setRenameItem(null)
+          setRenameValue("")
+          return
+        }
+
+        if (e.key === "Enter" && !actionBusy && renameValid) {
+          e.preventDefault()
+          e.stopPropagation()
+          void doRename()
+        }
+
+        return
+      }
+
+      if (newFolderOpen) {
+        if (e.key === "Escape" && !actionBusy) {
+          e.preventDefault()
+          e.stopPropagation()
+          setNewFolderOpen(false)
+          setNewFolderValue("")
+          return
+        }
+
+        if (e.key === "Enter" && !actionBusy && newFolderValid) {
+          e.preventDefault()
+          e.stopPropagation()
+          void doNewFolder()
+        }
+
+        return
+      }
+
+      if (deleteItem) {
+        if (e.key === "Escape" && !actionBusy) {
+          e.preventDefault()
+          e.stopPropagation()
+          setDeleteItem(null)
+          return
+        }
+
+        if (e.key === "Enter" && !actionBusy) {
+          e.preventDefault()
+          e.stopPropagation()
+          void doDelete()
+        }
+
+        return
+      }
+
+      if (isTyping) return
+
+      if (e.key === "Escape") {
+        e.preventDefault()
+        e.stopPropagation()
+
+        if (menuItem || sortMenuOpen) {
+          clearTransientChrome()
+          return
+        }
+
+        if (errorText) {
+          setErrorText("")
+          return
+        }
+
+        if (successText) {
+          setSuccessText("")
+          return
+        }
+
+        onClose?.()
+        return
+      }
+
+      if (!navigableEntries.length) return
+
+      const current = selectedItem && navigableEntries.includes(selectedItem)
+        ? selectedItem
+        : navigableEntries[0]
+
+      const currentIndex = navigableEntries.indexOf(current)
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedItem(navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)])
+        return
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedItem(navigableEntries[Math.max(currentIndex - 1, 0)])
+        return
+      }
+
+      if (e.key === "Enter" && current) {
+        e.preventDefault()
+        e.stopPropagation()
+        activateEntry(current)
+        return
+      }
+
+      if (e.key === "F2" && current && current !== "__parent__") {
+        const entry = visibleFiles.find((f) => f.name === current)
+        if (!entry) return
+
+        e.preventDefault()
+        e.stopPropagation()
+        setRenameItem(entry)
+        setRenameValue(entry.name)
+        clearTransientChrome()
+        return
+      }
+
+      if (e.key === "Delete" && current && current !== "__parent__") {
+        const entry = visibleFiles.find((f) => f.name === current)
+        if (!entry) return
+
+        e.preventDefault()
+        e.stopPropagation()
+        setDeleteItem(entry)
+        clearTransientChrome()
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [
+    visible,
+    renameItem,
+    newFolderOpen,
+    deleteItem,
+    actionBusy,
+    renameValid,
+    newFolderValid,
+    menuItem,
+    sortMenuOpen,
+    errorText,
+    successText,
+    navigableEntries,
+    selectedItem,
+    visibleFiles,
+    lang,
+    onClose
+  ])
 
   async function openEditor(file: FileItem) {
     if (file.is_dir) return
@@ -517,6 +804,9 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       setErrorText(lang === "de" ? "Ungültiger Name für Umbenennen" : "Invalid rename target")
       return
     }
+
+    const previousName = renameItem.name
+
     setActionBusy(true)
     try {
       await invoke("local_rename", {
@@ -526,6 +816,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       setRenameItem(null)
       setRenameValue("")
       await load(path)
+      setSuccessText(
+        lang === "de"
+          ? `Eintrag umbenannt: ${previousName}`
+          : `Renamed entry: ${previousName}`
+      )
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Umbenennen fehlgeschlagen", "Rename failed"))
@@ -536,6 +831,9 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
   async function doDelete() {
     if (!deleteItem || actionBusy) return
+
+    const targetName = deleteItem.name
+
     setActionBusy(true)
     try {
       await invoke("local_delete", {
@@ -543,6 +841,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       })
       setDeleteItem(null)
       await load(path)
+      setSuccessText(
+        lang === "de"
+          ? `Eintrag gelöscht: ${targetName}`
+          : `Deleted entry: ${targetName}`
+      )
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Löschen fehlgeschlagen", "Delete failed"))
@@ -557,6 +860,9 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       setErrorText(lang === "de" ? "Ungültiger Ordnername" : "Invalid folder name")
       return
     }
+
+    const folderName = newFolderTrimmed
+
     setActionBusy(true)
     try {
       await invoke("local_mkdir", {
@@ -565,6 +871,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       setNewFolderOpen(false)
       setNewFolderValue("")
       await load(path)
+      setSuccessText(
+        lang === "de"
+          ? `Ordner erstellt: ${folderName}`
+          : `Created folder: ${folderName}`
+      )
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Ordner konnte nicht erstellt werden", "Failed to create folder"))
@@ -779,6 +1090,37 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         </div>
       )}
 
+      {successText && (
+        <div
+          style={{
+            padding: "10px 12px",
+            borderBottom: "1px solid rgba(34,197,94,0.22)",
+            background: "rgba(21,128,61,0.16)",
+            color: "#bbf7d0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 12,
+            lineHeight: 1.4
+          }}
+        >
+          <span style={{ flex: 1 }}>{successText}</span>
+          <button
+            style={{
+              ...iconBtn,
+              width: 28,
+              height: 28,
+              flexShrink: 0
+            }}
+            onClick={() => setSuccessText("")}
+            title={t("dismiss", lang)}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       <div
         style={{
           padding: "10px 12px",
@@ -839,14 +1181,14 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           background: "color-mix(in srgb, var(--bg-app) 90%, var(--bg-sidebar))"
         }}
       >
-        {path !== "/" && (
+        {hasLocalParentPath(path) && (
           <div
-            style={entryStyle(hoveredItem === "__parent__")}
+            style={entryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
             onClick={() => {
-              const parent = path.split("/").slice(0, -2).join("/") || "/"
-              load(parent)
+              setSelectedItem("__parent__")
+              void load(getParentLocalPath(path))
             }}
           >
             <ArrowLeft size={14} />
@@ -886,19 +1228,21 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         {visibleFiles.map((f) => (
           <div
             key={f.name}
-            style={entryStyle(hoveredItem === f.name)}
+            style={entryStyle(hoveredItem === f.name, selectedItem === f.name)}
             onMouseEnter={() => setHoveredItem(f.name)}
             onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
             onDoubleClick={() => {
+              setSelectedItem(f.name)
               if (f.is_dir) {
-                load(buildLocalPath(path, f.name))
+                void load(buildLocalPath(path, f.name))
               } else {
                 void openEditor(f)
               }
             }}
             onClick={() => {
+              setSelectedItem(f.name)
               if (f.is_dir) {
-                load(buildLocalPath(path, f.name))
+                void load(buildLocalPath(path, f.name))
               }
             }}
           >
@@ -934,6 +1278,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   setMenuStyle(null)
                   return
                 }
+
+                setSelectedItem(f.name)
 
                 const listEl = listRef.current
                 const buttonEl = e.currentTarget as HTMLButtonElement
