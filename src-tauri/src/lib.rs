@@ -1177,8 +1177,13 @@ fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<
 #[tauri::command]
 fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, String> {
     let conn = open_db()?;
+
+    conn.execute("DELETE FROM ssh_tunnels WHERE server_id = ?1", [&id])
+        .map_err(|e| e.to_string())?;
+
     conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
+
     let _ = app.emit("connection-saved", ());
     Ok(format!("Connection '{}' deleted", name))
 }
