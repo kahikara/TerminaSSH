@@ -1260,6 +1260,37 @@ fn ensure_tunnel_route_is_unique(
     }
 }
 
+fn ensure_tunnel_bind_target_is_unique(
+    conn: &Connection,
+    bind_host: &str,
+    local_port: u16,
+    exclude_id: Option<i32>,
+) -> Result<(), String> {
+    let existing: Option<String> = if let Some(exclude_id) = exclude_id {
+        conn.query_row(
+            "SELECT name FROM ssh_tunnels WHERE bind_host = ?1 AND local_port = ?2 AND id != ?3 LIMIT 1",
+            (&bind_host, &local_port, &exclude_id),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    } else {
+        conn.query_row(
+            "SELECT name FROM ssh_tunnels WHERE bind_host = ?1 AND local_port = ?2 LIMIT 1",
+            (&bind_host, &local_port),
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+    };
+
+    if let Some(name) = existing {
+        Err(format!("Local bind address is already used by tunnel: {}", name))
+    } else {
+        Ok(())
+    }
+}
+
 #[tauri::command]
 fn save_connection(mut connection: SshConnection, app: AppHandle) -> Result<String, String> {
     normalize_connection_fields(&mut connection);
@@ -2313,6 +2344,7 @@ fn save_tunnel(mut tunnel: SshTunnel) -> Result<String, String> {
 
     let conn = open_db()?;
     ensure_connection_exists(&conn, tunnel.server_id)?;
+    ensure_tunnel_bind_target_is_unique(&conn, &bind_host, tunnel.local_port, None)?;
     ensure_tunnel_route_is_unique(&conn, &tunnel, &bind_host, None)?;
 
     conn.execute(
@@ -2368,9 +2400,10 @@ fn update_tunnel(id: i32, mut tunnel: SshTunnel, state: State<'_, SshState>) -> 
 
     let conn = open_db()?;
     ensure_connection_exists(&conn, tunnel.server_id)?;
+    ensure_tunnel_bind_target_is_unique(&conn, &bind_host, tunnel.local_port, Some(id))?;
     ensure_tunnel_route_is_unique(&conn, &tunnel, &bind_host, Some(id))?;
 
-    conn.execute(
+    let updated = conn.execute(
         "UPDATE ssh_tunnels
          SET server_id = ?1, name = ?2, local_port = ?3, remote_host = ?4, remote_port = ?5, bind_host = ?6, auto_start = ?7
          WHERE id = ?8",
@@ -2385,6 +2418,10 @@ fn update_tunnel(id: i32, mut tunnel: SshTunnel, state: State<'_, SshState>) -> 
             &id,
         )
     ).map_err(|e| e.to_string())?;
+
+    if updated == 0 {
+        return Err("Tunnel not found".to_string());
+    }
 
     Ok("Tunnel updated".to_string())
 }
