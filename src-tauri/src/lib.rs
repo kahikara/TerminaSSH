@@ -2072,6 +2072,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             .get("group_name")
             .and_then(|v| v.as_str())
             .unwrap_or("")
+            .trim()
             .to_string();
 
         if name.is_empty() || host.is_empty() || username.is_empty() {
@@ -2098,19 +2099,21 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             private_key.clear();
         }
 
-        let map_key = format!("{}|{}|{}|{}|{}", name, host, port, username, group_name);
+        let primary_map_key = format!("{}|{}|{}|{}|{}", name, host, port, username, group_name);
+        let legacy_map_key = format!("{}|{}|{}", name, host, username);
 
         let existing_connection_id: Option<i32> = tx
             .query_row(
-                "SELECT id FROM connections WHERE name = ?1 AND host = ?2 AND port = ?3 AND username = ?4 AND group_name = ?5 LIMIT 1",
-                (&name, &host, &port, &username, &group_name),
+                "SELECT id FROM connections WHERE host = ?1 AND port = ?2 AND username = ?3 AND group_name = ?4 LIMIT 1",
+                (&host, &port, &username, &group_name),
                 |row| row.get(0),
             )
             .optional()
             .map_err(|e| e.to_string())?;
 
         if let Some(existing_id) = existing_connection_id {
-            connection_id_map.insert(map_key, existing_id);
+            connection_id_map.insert(primary_map_key, existing_id);
+            connection_id_map.insert(legacy_map_key, existing_id);
             warnings.push(format!(
                 "Connection '{}' already exists and was skipped.",
                 name
@@ -2128,7 +2131,8 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
         .map_err(|e| e.to_string())?;
 
         let new_id = tx.last_insert_rowid() as i32;
-        connection_id_map.insert(map_key, new_id);
+        connection_id_map.insert(primary_map_key, new_id);
+        connection_id_map.insert(legacy_map_key, new_id);
         connections_imported += 1;
     }
 
@@ -2213,6 +2217,7 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             .get("server_group_name")
             .and_then(|v| v.as_str())
             .unwrap_or("")
+            .trim()
             .to_string();
         let local_port = item.get("local_port").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
         let remote_host = item
