@@ -2797,6 +2797,117 @@ fn normalize_local_path(path: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(trimmed))
 }
 
+fn map_local_fs_error(err: &std::io::Error, action: &str, path: &Path) -> String {
+    let display = path.to_string_lossy();
+
+    match err.kind() {
+        std::io::ErrorKind::NotFound => format!("{} not found: {}", action, display),
+        std::io::ErrorKind::PermissionDenied => {
+            format!("{} permission denied: {}", action, display)
+        }
+        std::io::ErrorKind::AlreadyExists => format!("{} already exists: {}", action, display),
+        _ => format!("{} failed for {}: {}", action, display, err),
+    }
+}
+
+#[tauri::command]
+fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
+    let path = normalize_local_path(&path)?;
+
+    let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "List directory", &path))?;
+    if !metadata.is_dir() {
+        return Err(format!("List directory failed for {}: Not a directory", path.to_string_lossy()));
+    }
+
+    let mut items = Vec::new();
+    for entry in fs::read_dir(&path).map_err(|e| map_local_fs_error(&e, "List directory", &path))? {
+        let entry = entry.map_err(|e| map_local_fs_error(&e, "List directory", &path))?;
+        let entry_path = entry.path();
+        let name = entry
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+
+        if name == "." || name == ".." {
+            continue;
+        }
+
+        let entry_metadata =
+            fs::metadata(&entry_path).map_err(|e| map_local_fs_error(&e, "Read metadata", &entry_path))?;
+
+        items.push(FileItem {
+            name,
+            is_dir: entry_metadata.is_dir(),
+            size: if entry_metadata.is_dir() { 0 } else { entry_metadata.len() },
+        });
+    }
+
+    items.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
+    Ok(items)
+}
+
+#[tauri::command]
+fn local_mkdir(path: String) -> Result<String, String> {
+    let path = normalize_local_path(&path)?;
+    fs::create_dir(&path).map_err(|e| map_local_fs_error(&e, "Create folder", &path))?;
+    Ok("Folder created".to_string())
+}
+
+#[tauri::command]
+fn local_rename(old_path: String, new_path: String) -> Result<String, String> {
+    let old_path = normalize_local_path(&old_path)?;
+    let new_path = normalize_local_path(&new_path)?;
+    fs::rename(&old_path, &new_path).map_err(|e| map_local_fs_error(&e, "Rename", &old_path))?;
+    Ok("Renamed".to_string())
+}
+
+#[tauri::command]
+fn local_delete(path: String) -> Result<String, String> {
+    let path = normalize_local_path(&path)?;
+    let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "Delete target", &path))?;
+
+    if metadata.is_dir() {
+        fs::remove_dir(&path).map_err(|e| map_local_fs_error(&e, "Delete folder", &path))?;
+    } else {
+        fs::remove_file(&path).map_err(|e| map_local_fs_error(&e, "Delete file", &path))?;
+    }
+
+    Ok("Deleted".to_string())
+}
+
+#[tauri::command]
+fn local_read_file(path: String) -> Result<SftpReadFilePayload, String> {
+    let path = normalize_local_path(&path)?;
+    let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "Read file", &path))?;
+
+    if metadata.is_dir() {
+        return Err(format!("Read file failed for {}: Path is a directory", path.to_string_lossy()));
+    }
+
+    let bytes = fs::read(&path).map_err(|e| map_local_fs_error(&e, "Read file", &path))?;
+    Ok(SftpReadFilePayload {
+        content_base64: STANDARD.encode(bytes),
+    })
+}
+
+#[tauri::command]
+fn local_write_file(path: String, content_base64: String) -> Result<String, String> {
+    let path = normalize_local_path(&path)?;
+    let bytes = STANDARD
+        .decode(content_base64.as_bytes())
+        .map_err(|e| format!("Invalid base64 content: {}", e))?;
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)
+                .map_err(|e| map_local_fs_error(&e, "Prepare parent folder", parent))?;
+        }
+    }
+
+    fs::write(&path, bytes).map_err(|e| map_local_fs_error(&e, "Write file", &path))?;
+    Ok("Saved".to_string())
+}
+
 #[tauri::command]
 fn test_connection(
     mut connection: SshConnection,
@@ -4096,6 +4207,12 @@ pub fn run() {
             sftp_write_file,
             sftp_upload,
             sftp_download,
+            local_list_dir,
+            local_mkdir,
+            local_rename,
+            local_delete,
+            local_read_file,
+            local_write_file,
             close_session,
             measure_tcp_latency,
             get_linux_window_mode,
