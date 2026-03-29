@@ -1085,7 +1085,7 @@ fn read_clipboard(app: AppHandle) -> Result<String, String> {
 fn get_snippets() -> Result<Vec<SnippetItem>, String> {
     let conn = open_db()?;
     let mut stmt = conn
-        .prepare("SELECT id, name, command FROM snippets ORDER BY name ASC")
+        .prepare("SELECT id, name, command FROM snippets ORDER BY name COLLATE NOCASE ASC")
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map([], |row| {
@@ -1104,6 +1104,9 @@ fn get_snippets() -> Result<Vec<SnippetItem>, String> {
 }
 #[tauri::command]
 fn add_snippet(name: String, command: String, app: AppHandle) -> Result<String, String> {
+    let name = normalize_snippet_name(&name);
+    validate_snippet(&name, &command)?;
+
     let conn = open_db()?;
     conn.execute(
         "INSERT INTO snippets (name, command) VALUES (?1, ?2)",
@@ -1120,20 +1123,33 @@ fn update_snippet(
     command: String,
     app: AppHandle,
 ) -> Result<String, String> {
+    let name = normalize_snippet_name(&name);
+    validate_snippet(&name, &command)?;
+
     let conn = open_db()?;
-    conn.execute(
+    let updated = conn.execute(
         "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
         (&name, &command, &id),
     )
     .map_err(|e| e.to_string())?;
+
+    if updated == 0 {
+        return Err("Snippet not found".to_string());
+    }
+
     let _ = app.emit("snippets-updated", ());
     Ok("Snippet updated".to_string())
 }
 #[tauri::command]
 fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
     let conn = open_db()?;
-    conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
+    let deleted = conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
+
+    if deleted == 0 {
+        return Err("Snippet not found".to_string());
+    }
+
     let _ = app.emit("snippets-updated", ());
     Ok("Snippet deleted".to_string())
 }
@@ -1340,6 +1356,22 @@ fn ensure_connection_identity_unique(
     } else {
         Ok(())
     }
+}
+
+fn normalize_snippet_name(name: &str) -> String {
+    name.trim().to_string()
+}
+
+fn validate_snippet(name: &str, command: &str) -> Result<(), String> {
+    if name.trim().is_empty() {
+        return Err("Snippet name is empty".to_string());
+    }
+
+    if command.trim().is_empty() {
+        return Err("Snippet command is empty".to_string());
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -2063,8 +2095,8 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             .unwrap_or("")
             .to_string();
 
-        if name.is_empty() {
-            warnings.push("One snippet was skipped because its name was empty.".to_string());
+        if let Err(err) = validate_snippet(&name, &command) {
+            warnings.push(format!("One snippet was skipped: {}", err));
             continue;
         }
 
