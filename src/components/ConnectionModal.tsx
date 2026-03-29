@@ -11,12 +11,16 @@ type DialogFn = (config: Record<string, unknown>) => void
 type ConnectionForm = {
   name: string
   host: string
-  port: number
+  port: string | number
   username: string
   password: string
   private_key: string
   passphrase: string
   group_name: string
+}
+
+type NormalizedConnectionForm = Omit<ConnectionForm, "port"> & {
+  port: number
 }
 
 type EditableConnection = Partial<ConnectionForm> & {
@@ -65,7 +69,7 @@ export default function ConnectionModal({
   const [form, setForm] = useState<ConnectionForm>({
     name: "",
     host: "",
-    port: 22,
+    port: "22",
     username: "",
     password: "",
     private_key: "",
@@ -84,7 +88,7 @@ export default function ConnectionModal({
       setForm({
         name: String(serverToEdit.name || ""),
         host: String(serverToEdit.host || ""),
-        port: Number(serverToEdit.port) || 22,
+        port: String(Number(serverToEdit.port) || 22),
         username: String(serverToEdit.username || ""),
         password: "",
         private_key: String(serverToEdit.private_key || ""),
@@ -98,7 +102,7 @@ export default function ConnectionModal({
       setForm({
         name: String(initialConnection.name || ""),
         host: String(initialConnection.host || ""),
-        port: Number(initialConnection.port) || 22,
+        port: String(Number(initialConnection.port) || 22),
         username: String(initialConnection.username || ""),
         password: String(initialConnection.password || ""),
         private_key: String(initialConnection.private_key || ""),
@@ -108,19 +112,19 @@ export default function ConnectionModal({
       return
     }
 
-    setForm({ name: "", host: "", port: 22, username: "", password: "", private_key: "", passphrase: "", group_name: "" })
+    setForm({ name: "", host: "", port: "22", username: "", password: "", private_key: "", passphrase: "", group_name: "" })
   }, [serverToEdit, initialConnection, isOpen])
 
   if (!isOpen) return null
 
-  function buildNormalizedForm() {
-    const normalizedPort = Number(form.port)
+  function buildNormalizedForm(): NormalizedConnectionForm {
+    const parsedPort = parseInt(String(form.port || "22").trim() || "22", 10)
 
     return {
       ...form,
       name: String(form.name || "").trim(),
       host: String(form.host || "").trim(),
-      port: Number.isFinite(normalizedPort) ? normalizedPort : 22,
+      port: Number.isFinite(parsedPort) ? parsedPort : 22,
       username: String(form.username || "").trim(),
       private_key: String(form.private_key || "").trim(),
       passphrase: String(form.passphrase || ""),
@@ -128,7 +132,7 @@ export default function ConnectionModal({
     }
   }
 
-  function getValidationError(normalizedForm: ConnectionForm) {
+  function getValidationError(normalizedForm: NormalizedConnectionForm) {
     if (!normalizedForm.name) {
       return lang === "de" ? "Name fehlt" : "Name is required"
     }
@@ -367,7 +371,19 @@ export default function ConnectionModal({
                 <input
                   type="number"
                   value={form.port}
-                  onChange={e => setForm({ ...form, port: parseInt(e.target.value || "22", 10) })}
+                  onChange={e => {
+                    const next = e.target.value
+                    if (next === "" || /^\d+$/.test(next)) {
+                      setForm({ ...form, port: next })
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = parseInt(String(form.port || "22").trim() || "22", 10)
+                    setForm({
+                      ...form,
+                      port: String(Number.isFinite(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : 22)
+                    })
+                  }}
                   className={fieldClass}
                   min={1}
                   max={65535}
