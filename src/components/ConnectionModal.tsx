@@ -79,6 +79,7 @@ export default function ConnectionModal({
   const [clearStoredPassword, setClearStoredPassword] = useState(false)
   const [clearStoredPassphrase, setClearStoredPassphrase] = useState(false)
   const [testBusy, setTestBusy] = useState(false)
+  const [saveBusy, setSaveBusy] = useState(false)
 
   useEffect(() => {
     setClearStoredPassword(false)
@@ -218,6 +219,8 @@ export default function ConnectionModal({
   }
 
   async function handleSave() {
+    if (saveBusy) return
+
     const normalizedForm = buildNormalizedForm()
     const validationError = getValidationError(normalizedForm)
 
@@ -225,6 +228,8 @@ export default function ConnectionModal({
       showToast(validationError, true)
       return
     }
+
+    setSaveBusy(true)
 
     try {
       if (serverToEdit) {
@@ -242,6 +247,8 @@ export default function ConnectionModal({
       onClose()
     } catch (e) {
       showToast(String(e), true)
+    } finally {
+      setSaveBusy(false)
     }
   }
 
@@ -278,12 +285,18 @@ export default function ConnectionModal({
       confirmLabel: lang === "de" ? "Löschen" : "Delete",
       cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",
       onConfirm: async () => {
+        if (saveBusy) return
+
+        setSaveBusy(true)
+
         try {
           await invoke("delete_connection", { id: serverId, name: serverName })
           await Promise.resolve(onSuccess())
           onClose()
         } catch (e) {
           showToast(String(e), true)
+        } finally {
+          setSaveBusy(false)
         }
       }
     })
@@ -484,7 +497,7 @@ export default function ConnectionModal({
 
         <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-between items-center">
           {serverToEdit ? (
-            <button onClick={handleDelete} className="ui-btn-ghost" style={{ color: "var(--danger)" }}>
+            <button onClick={handleDelete} className="ui-btn-ghost" style={{ color: "var(--danger)" }} disabled={saveBusy || testBusy}>
               {t("delete", lang)}
             </button>
           ) : (
@@ -492,26 +505,26 @@ export default function ConnectionModal({
           )}
 
           <div className="flex gap-2 flex-wrap justify-end">
-            <button onClick={onClose} className="ui-btn-ghost">
+            <button onClick={onClose} className="ui-btn-ghost" disabled={saveBusy}>
               {t("cancel", lang)}
             </button>
             <button
               onClick={() => void handleTestConnection()}
               className="ui-btn-ghost"
-              disabled={!canSave || testBusy}
-              aria-disabled={!canSave || testBusy}
-              style={!canSave || testBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+              disabled={!canSave || testBusy || saveBusy}
+              aria-disabled={!canSave || testBusy || saveBusy}
+              style={!canSave || testBusy || saveBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
               {testBusy ? (lang === "de" ? "Teste..." : "Testing...") : (lang === "de" ? "Testen" : "Test")}
             </button>
             <button
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               className="ui-btn-primary"
-              disabled={!canSave || testBusy}
-              aria-disabled={!canSave || testBusy}
-              style={!canSave || testBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+              disabled={!canSave || testBusy || saveBusy}
+              aria-disabled={!canSave || testBusy || saveBusy}
+              style={!canSave || testBusy || saveBusy ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
             >
-              {t("save", lang)}
+              {saveBusy ? (lang === "de" ? "Speichere..." : "Saving...") : t("save", lang)}
             </button>
           </div>
         </div>
