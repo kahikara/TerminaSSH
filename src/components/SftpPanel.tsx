@@ -254,12 +254,18 @@ function getMenuPosition(buttonRect: DOMRect, listRect: DOMRect): React.CSSPrope
   }
 }
 
-function getFixedContextMenuPosition(clientX: number, clientY: number, width: number, height: number): React.CSSProperties {
-  const left = Math.max(8, Math.min(clientX, window.innerWidth - width - 8))
-  const top = Math.max(8, Math.min(clientY, window.innerHeight - height - 8))
+function getPanelContextMenuPosition(
+  panelRect: DOMRect,
+  clientX: number,
+  clientY: number,
+  width: number,
+  height: number
+): React.CSSProperties {
+  const left = Math.max(8, Math.min(clientX - panelRect.left, panelRect.width - width - 8))
+  const top = Math.max(8, Math.min(clientY - panelRect.top, panelRect.height - height - 8))
 
   return {
-    position: "fixed",
+    position: "absolute",
     left,
     top,
     width,
@@ -446,13 +452,19 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
   }
 
   function openBrowserContextMenu(clientX: number, clientY: number) {
-    setBrowserMenuStyle(getFixedContextMenuPosition(clientX, clientY, 176, 160))
+    const panelRect = panelRef.current?.getBoundingClientRect()
+    if (!panelRect) return
+
+    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 160))
     setBrowserMenuOpen(true)
   }
 
   function openEntryContextMenu(entry: FileItem, clientX: number, clientY: number) {
+    const panelRect = panelRef.current?.getBoundingClientRect()
+    if (!panelRect) return
+
     setMenuItem(entry.name)
-    setMenuStyle(getFixedContextMenuPosition(clientX, clientY, 156, entry.is_dir ? 118 : 190))
+    setMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 156, entry.is_dir ? 118 : 190))
   }
 
   async function load(p: string) {
@@ -1294,7 +1306,19 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       {browserMenuOpen && (
         <div
           data-sftp-context-menu="true"
-          style={browserMenuStyle || getFixedContextMenuPosition(16, 16, 176, 160)}
+          style={browserMenuStyle || {
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 176,
+            minWidth: 176,
+            borderRadius: 10,
+            border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+            background: "var(--bg-app, #020617)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+            overflow: "hidden",
+            zIndex: 80
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
