@@ -2441,8 +2441,11 @@ fn delete_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> 
     }
 
     let conn = open_db()?;
-    conn.execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
+    let deleted = conn.execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
+    if deleted == 0 {
+        return Err("Tunnel not found".to_string());
+    }
     Ok("Tunnel deleted".to_string())
 }
 
@@ -2467,7 +2470,10 @@ fn get_tunnel_by_id(id: i32) -> Result<TunnelItem, String> {
             auto_start: auto_start_raw != 0,
         })
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => "Tunnel not found".to_string(),
+        _ => e.to_string(),
+    })
 }
 
 fn connect_quick_session(
@@ -2727,6 +2733,7 @@ fn start_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
     } else {
         tunnel.bind_host.trim().to_string()
     };
+    ensure_tunnel_bind_target_is_unique(&conn, &bind_host, tunnel.local_port, Some(id))?;
     let bind_addr = format!("{}:{}", bind_host, tunnel.local_port);
     let listener = TcpListener::bind(&bind_addr)
         .map_err(|e| format!("Failed to bind {}: {}", bind_addr, e))?;
@@ -2816,7 +2823,21 @@ fn stop_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> {
         return Ok("Tunnel stopped".to_string());
     }
 
-    Ok("Tunnel was not running".to_string())
+    let conn = open_db()?;
+    let exists: Option<i32> = conn
+        .query_row(
+            "SELECT id FROM ssh_tunnels WHERE id = ?1 LIMIT 1",
+            [&id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if exists.is_some() {
+        Ok("Tunnel was not running".to_string())
+    } else {
+        Err("Tunnel not found".to_string())
+    }
 }
 
 #[tauri::command]
