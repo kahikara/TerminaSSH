@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core"
 
 import { Columns, Folder, SplitSquareVertical, SplitSquareHorizontal, Cable, ScrollText, Search as SearchIcon, FileText, ArrowLeftRight, X } from "lucide-react"
 import SftpPanel from "./SftpPanel"
+import LocalFilesPanel from "./LocalFilesPanel"
 import TunnelPanel from "./TunnelPanel"
 import SnippetsPanel from "./SnippetsPanel"
 import NotesPanel from "./NotesPanel"
@@ -312,6 +313,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
       : [sessionId]
 
   const [showSftp, setShowSftp] = useState(false)
+  const [showLocalFiles, setShowLocalFiles] = useState(false)
   const [showTunnels, setShowTunnels] = useState(false)
   const [showSnippets, setShowSnippets] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
@@ -346,6 +348,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
   const isActive = Boolean(props.isActive)
   const showSplit = settings.showSplit !== false && !isMultiServerSplit
   const showSftpBtn = settings.showSftp !== false && !activePaneIsLocal
+  const showLocalFilesBtn = settings.showSftp !== false && activePaneIsLocal
   const showTunnelsBtn = settings.showTunnels !== false && !activePaneIsLocal
   const showSnippetsBtn = settings.showSnippets !== false
   const showNotesBtn = settings.showNotes !== false
@@ -936,6 +939,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                 setShowSftp((v) => {
                   const next = !v
                   if (next) {
+                    setShowLocalFiles(false)
                     setShowTunnels(false)
                     setShowSnippets(false)
                     setShowNotes(false)
@@ -955,6 +959,32 @@ export default function TerminalPane(props: TerminalPaneProps) {
             </button>
           )}
 
+          {showLocalFilesBtn && (
+            <button
+              onClick={() => {
+                setShowLocalFiles((v) => {
+                  const next = !v
+                  if (next) {
+                    setShowSftp(false)
+                    setShowTunnels(false)
+                    setShowSnippets(false)
+                    setShowNotes(false)
+                  }
+                  return next
+                })
+              }}
+              title={settings?.lang === "de" ? "Dateien" : "Files"}
+              style={{
+                ...toolBtnStyle,
+                background: showLocalFiles ? "var(--bg-hover, #1f2937)" : "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
+                color: showLocalFiles ? "var(--text-main, #e5e7eb)" : "var(--text-muted, #94a3b8)"
+              }}
+            >
+              <Folder size={13} />
+              <span>{settings?.lang === "de" ? "Dateien" : "Files"}</span>
+            </button>
+          )}
+
           {showSnippetsBtn && (
             <button
               onClick={() => {
@@ -962,6 +992,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   const next = !v
                   if (next) {
                     setShowSftp(false)
+                    setShowLocalFiles(false)
                     setShowTunnels(false)
                     setShowNotes(false)
                   }
@@ -987,6 +1018,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   const next = !v
                   if (next) {
                     setShowSftp(false)
+                    setShowLocalFiles(false)
                     setShowSnippets(false)
                     setShowNotes(false)
                   }
@@ -1012,6 +1044,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
                   const next = !v
                   if (next) {
                     setShowSftp(false)
+                    setShowLocalFiles(false)
                     setShowSnippets(false)
                     setShowTunnels(false)
                   }
@@ -1318,6 +1351,14 @@ export default function TerminalPane(props: TerminalPaneProps) {
           lang={settings?.lang || "en"}
           visible={showSftp}
           onClose={() => setShowSftp(false)}
+        />
+      )}
+
+      {isLocalServer(activePaneServer) && (
+        <LocalFilesPanel
+          lang={settings?.lang || "en"}
+          visible={showLocalFiles}
+          onClose={() => setShowLocalFiles(false)}
         />
       )}
 

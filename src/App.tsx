@@ -171,7 +171,7 @@ const isEditableConnection = (
 
 export default function App() {
   const params = new URLSearchParams(window.location.search)
-  if (params.get("editor") === "sftp") {
+  if (params.get("editor") === "sftp" || params.get("editor") === "local") {
     return <SftpEditorWindow />
   }
 

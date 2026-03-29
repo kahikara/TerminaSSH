@@ -191,6 +191,8 @@ function escapeRegExp(value: string) {
 }
 
 export default function SftpEditorWindow() {
+  const editorMode = useMemo(() => qp("editor") || "sftp", [])
+  const isLocalEditor = editorMode === "local"
   const serverId = useMemo(() => Number(qp("serverId")), [])
   const remotePath = useMemo(() => qp("path"), [])
   const fileName = useMemo(() => qp("file"), [])
@@ -448,10 +450,12 @@ export default function SftpEditorWindow() {
       setUtf8Unsafe(false)
       setEditorReadOnlyReason("")
 
-      const payload = await invoke("sftp_read_file", {
-        id: serverId,
-        path: remotePath
-      }) as SftpReadFilePayload
+      const payload = await invoke(
+        isLocalEditor ? "local_read_file" : "sftp_read_file",
+        isLocalEditor
+          ? { path: remotePath }
+          : { id: serverId, path: remotePath }
+      ) as SftpReadFilePayload
 
       const contentBase64 = String(payload?.content_base64 || payload?.contentBase64 || "")
       const bytes = base64ToBytes(contentBase64)
@@ -539,11 +543,19 @@ export default function SftpEditorWindow() {
       setErrorText("")
       setSaving(true)
 
-      await invoke("sftp_write_file", {
-        id: serverId,
-        path: remotePath,
-        contentBase64: utf8ToBase64(nextContent)
-      })
+      await invoke(
+        isLocalEditor ? "local_write_file" : "sftp_write_file",
+        isLocalEditor
+          ? {
+              path: remotePath,
+              contentBase64: utf8ToBase64(nextContent)
+            }
+          : {
+              id: serverId,
+              path: remotePath,
+              contentBase64: utf8ToBase64(nextContent)
+            }
+      )
 
       setEditorOriginal(nextContent)
       setStatus("saved")
@@ -1127,7 +1139,7 @@ export default function SftpEditorWindow() {
               textOverflow: "ellipsis"
             }}
           >
-            Termina SSH · {fileName || "Editor"}
+            Termina SSH · {fileName || (isLocalEditor ? (lang === "de" ? "Lokaler Editor" : "Local Editor") : "Editor")}
           </div>
         </div>
 
@@ -1261,7 +1273,7 @@ export default function SftpEditorWindow() {
               textOverflow: "ellipsis"
             }}
           >
-            {fileName}
+            {fileName || (isLocalEditor ? (lang === "de" ? "Lokale Datei" : "Local file") : "")}
           </div>
           <div style={{ fontSize: 11, color: "var(--text-muted, #94a3b8)" }}>
             {remotePath}
