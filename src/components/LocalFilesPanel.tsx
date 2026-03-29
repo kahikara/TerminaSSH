@@ -336,6 +336,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
   const [errorText, setErrorText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [actionBusy, setActionBusy] = useState(false)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -472,7 +473,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }
 
   async function doRename() {
-    if (!renameItem || !renameValue.trim()) return
+    if (!renameItem || !renameValue.trim() || actionBusy) return
+    setActionBusy(true)
     try {
       await invoke("local_rename", {
         oldPath: buildLocalPath(path, renameItem.name),
@@ -484,11 +486,14 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Umbenennen fehlgeschlagen", "Rename failed"))
+    } finally {
+      setActionBusy(false)
     }
   }
 
   async function doDelete() {
-    if (!deleteItem) return
+    if (!deleteItem || actionBusy) return
+    setActionBusy(true)
     try {
       await invoke("local_delete", {
         path: buildLocalPath(path, deleteItem.name)
@@ -498,11 +503,14 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Löschen fehlgeschlagen", "Delete failed"))
+    } finally {
+      setActionBusy(false)
     }
   }
 
   async function doNewFolder() {
-    if (!newFolderValue.trim()) return
+    if (!newFolderValue.trim() || actionBusy) return
+    setActionBusy(true)
     try {
       await invoke("local_mkdir", {
         path: buildLocalPath(path, newFolderValue.trim())
@@ -513,6 +521,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     } catch (e) {
       console.error(e)
       setErrorText(toErrorText(e, "Ordner konnte nicht erstellt werden", "Failed to create folder"))
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -938,6 +948,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             <input
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
+              disabled={actionBusy}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -951,8 +962,20 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               }}
             />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
-              <button style={modalBtn} onClick={() => { setRenameItem(null); setRenameValue("") }}>{t("cancel", lang)}</button>
-              <button style={modalBtn} onClick={() => void doRename()}>{t("save", lang)}</button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
+                onClick={() => { if (!actionBusy) { setRenameItem(null); setRenameValue("") } }}
+                disabled={actionBusy}
+              >
+                {t("cancel", lang)}
+              </button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy || !renameValue.trim() ? 0.6 : 1, cursor: actionBusy || !renameValue.trim() ? "not-allowed" : "pointer" }}
+                onClick={() => void doRename()}
+                disabled={actionBusy || !renameValue.trim()}
+              >
+                {actionBusy ? (lang === "de" ? "Speichert..." : "Saving...") : t("save", lang)}
+              </button>
             </div>
           </div>
         </div>
@@ -965,6 +988,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             <input
               value={newFolderValue}
               onChange={(e) => setNewFolderValue(e.target.value)}
+              disabled={actionBusy}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -978,8 +1002,20 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               }}
             />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={modalBtn} onClick={() => { setNewFolderOpen(false); setNewFolderValue("") }}>{t("cancel", lang)}</button>
-              <button style={modalBtn} onClick={() => void doNewFolder()}>{t("create", lang)}</button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
+                onClick={() => { if (!actionBusy) { setNewFolderOpen(false); setNewFolderValue("") } }}
+                disabled={actionBusy}
+              >
+                {t("cancel", lang)}
+              </button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy || !newFolderValue.trim() ? 0.6 : 1, cursor: actionBusy || !newFolderValue.trim() ? "not-allowed" : "pointer" }}
+                onClick={() => void doNewFolder()}
+                disabled={actionBusy || !newFolderValue.trim()}
+              >
+                {actionBusy ? (lang === "de" ? "Erstellt..." : "Creating...") : t("create", lang)}
+              </button>
             </div>
           </div>
         </div>
@@ -993,8 +1029,20 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               {t("deleteText", lang).replace("{name}", deleteItem.name)}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={modalBtn} onClick={() => setDeleteItem(null)}>{t("cancel", lang)}</button>
-              <button style={modalBtn} onClick={() => void doDelete()}>{t("delete", lang)}</button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
+                onClick={() => { if (!actionBusy) setDeleteItem(null) }}
+                disabled={actionBusy}
+              >
+                {t("cancel", lang)}
+              </button>
+              <button
+                style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
+                onClick={() => void doDelete()}
+                disabled={actionBusy}
+              >
+                {actionBusy ? (lang === "de" ? "Löscht..." : "Deleting...") : t("delete", lang)}
+              </button>
             </div>
           </div>
         </div>
