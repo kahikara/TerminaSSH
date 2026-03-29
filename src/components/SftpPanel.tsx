@@ -429,10 +429,11 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
   }
 
   useEffect(() => {
-    if (visible && server?.id) {
-      load(path || "/")
-    }
-  }, [visible, server])
+    if (!visible || !server?.id) return
+
+    setPath("/")
+    void load("/")
+  }, [visible, server?.id])
 
   useEffect(() => {
     writeTerminaSettings({
