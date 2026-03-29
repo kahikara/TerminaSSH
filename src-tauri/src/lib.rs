@@ -2434,6 +2434,24 @@ fn test_connection(
     let host_key_status = check_known_host_status_for_session(&sess, &host, port, &key)?;
     let key_type_label = host_key_type_label(key_type);
 
+    if host_key_status != "match" {
+        let message = match host_key_status.as_str() {
+            "not_found" => "Host key is not trusted yet".to_string(),
+            "mismatch" => "Stored host key does not match the current server".to_string(),
+            _ => "Host key verification failed".to_string(),
+        };
+
+        return Ok(ConnectionTestResult {
+            success: false,
+            auth_ok: false,
+            sftp_ok: false,
+            host_key_status,
+            key_type: key_type_label,
+            fingerprint,
+            message,
+        });
+    }
+
     let auth_ok = authenticate_session(
         &sess,
         &connection.username,
@@ -2470,24 +2488,6 @@ fn test_connection(
             key_type: key_type_label,
             fingerprint,
             message: "SSH login succeeded, but SFTP could not be opened".to_string(),
-        });
-    }
-
-    if host_key_status != "match" {
-        let message = match host_key_status.as_str() {
-            "not_found" => "SSH login succeeded, but the host key is not trusted yet".to_string(),
-            "mismatch" => "SSH login succeeded, but the stored host key does not match the current server".to_string(),
-            _ => "SSH login succeeded, but host key verification failed".to_string(),
-        };
-
-        return Ok(ConnectionTestResult {
-            success: false,
-            auth_ok: true,
-            sftp_ok,
-            host_key_status,
-            key_type: key_type_label,
-            fingerprint,
-            message,
         });
     }
 
