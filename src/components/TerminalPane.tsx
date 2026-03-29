@@ -641,20 +641,56 @@ export default function TerminalPane(props: TerminalPaneProps) {
   }, [paneIds, paneServers, focusedPaneId, props])
 
   const toggleSplit = useCallback(() => {
-    setPaneIds((prev) => {
-      if (prev.length > 1) {
-        const [, second] = prev
-        if (second) destroyTerminal(second)
-        setPaneServers((prevServers) => [prevServers[0] || server])
-        return [prev[0]]
-      }
+    const currentPaneIds = paneIdsRef.current
+    const currentPaneServers = paneServersRef.current
+    const currentFocusedPaneId = focusedPaneIdRef.current
 
-      const newSessionId = `${sessionId}__split_${splitCounter + 1}`
-      setSplitCounter((v) => v + 1)
-      setPaneServers((prevServers) => [prevServers[0] || server, prevServers[0] || server])
-      return [prev[0], newSessionId]
+    if (currentPaneIds.length > 1) {
+      const [, second] = currentPaneIds
+      if (second) destroyTerminal(second)
+
+      const nextPaneIds = [currentPaneIds[0]]
+      const nextPaneServers = [currentPaneServers[0] || server]
+      const nextFocusedPaneId = nextPaneIds[0] || sessionId
+
+      paneIdsRef.current = nextPaneIds
+      paneServersRef.current = nextPaneServers
+      focusedPaneIdRef.current = nextFocusedPaneId
+
+      setPaneIds(nextPaneIds)
+      setPaneServers(nextPaneServers)
+      setFocusedPaneId(nextFocusedPaneId)
+
+      props.onPaneStateChange?.({
+        paneServers: nextPaneServers,
+        paneSessionIds: nextPaneIds,
+        focusedPaneId: nextFocusedPaneId
+      })
+      return
+    }
+
+    const newSessionId = `${sessionId}__split_${splitCounter + 1}`
+    const baseServer = currentPaneServers[0] || server
+    const nextPaneIds = [currentPaneIds[0], newSessionId]
+    const nextPaneServers = [baseServer, baseServer]
+    const nextFocusedPaneId = currentFocusedPaneId || currentPaneIds[0] || sessionId
+
+    setSplitCounter((v) => v + 1)
+
+    paneIdsRef.current = nextPaneIds
+    paneServersRef.current = nextPaneServers
+    focusedPaneIdRef.current = nextFocusedPaneId
+
+    setPaneIds(nextPaneIds)
+    setPaneServers(nextPaneServers)
+    setFocusedPaneId(nextFocusedPaneId)
+
+    props.onPaneStateChange?.({
+      paneServers: nextPaneServers,
+      paneSessionIds: nextPaneIds,
+      focusedPaneId: nextFocusedPaneId
     })
-  }, [sessionId, splitCounter, server])
+  }, [sessionId, splitCounter, server, props])
 
   const mainPaneStyle: CSSProperties =
     splitDirection === "vertical"
