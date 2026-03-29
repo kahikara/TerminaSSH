@@ -11,6 +11,11 @@ type Props = {
   uniformSelectStyle: React.CSSProperties
 }
 
+function clampNumber(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, value))
+}
+
 export default function SettingsTerminalSection({
   lang,
   ui,
@@ -25,7 +30,10 @@ export default function SettingsTerminalSection({
         <input
           type="number"
           value={settings.fontSize}
-          onChange={(e) => setSettings({ ...settings, fontSize: parseInt(e.target.value || "14", 10) })}
+          onChange={(e) => {
+            const next = clampNumber(parseInt(e.target.value || "14", 10), 8, 48, 14)
+            setSettings({ ...settings, fontSize: next })
+          }}
           style={uniformNumberInputStyle}
         />
       </FieldRow>
@@ -34,7 +42,10 @@ export default function SettingsTerminalSection({
         <input
           type="number"
           value={settings.scrollback}
-          onChange={(e) => setSettings({ ...settings, scrollback: parseInt(e.target.value || "10000", 10) })}
+          onChange={(e) => {
+            const next = clampNumber(parseInt(e.target.value || "10000", 10), 100, 200000, 10000)
+            setSettings({ ...settings, scrollback: next })
+          }}
           style={uniformNumberInputStyle}
         />
       </FieldRow>
