@@ -35,6 +35,14 @@ type DashboardProps = {
   activateTab?: (tabId: string) => void
 }
 
+function getRecentConnectionKey(connection: DashboardConnection) {
+  if (connection.id !== undefined && connection.id !== null && String(connection.id)) {
+    return `recent:${String(connection.id)}`
+  }
+
+  return `recent:${String(connection.name || "")}:${String(connection.username || "")}:${String(connection.host || "")}:${String(connection.port || "")}:${connection.isLocal ? "local" : "remote"}`
+}
+
 export default function Dashboard({
   lang,
   settings,
@@ -277,9 +285,9 @@ export default function Dashboard({
                       </div>
                     </div>
                   ) : (
-                    recentItems.map((c, i: number) => (
+                    recentItems.map((c) => (
                       <button
-                        key={i}
+                        key={getRecentConnectionKey(c)}
                         onClick={() => openTerminal(c)}
                         className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-app)] px-3.5 py-2.5 hover:border-[var(--accent)] hover:bg-[var(--bg-hover)] transition-all text-left group"
                       >
