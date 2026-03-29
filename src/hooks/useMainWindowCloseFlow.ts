@@ -60,6 +60,7 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
     const currentEditors = editorWindowsRef.current
 
     if (currentEditors.length === 0) {
+      mainWaitingForEditorsRef.current = false
       void finalizeMainClose()
       return
     }
@@ -119,6 +120,7 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
           const next = prev.filter((item) => item.label !== msg.label)
 
           if (mainWaitingForEditorsRef.current && next.length === 0) {
+            mainWaitingForEditorsRef.current = false
             window.setTimeout(() => {
               void finalizeMainClose()
             }, 0)
