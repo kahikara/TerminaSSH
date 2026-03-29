@@ -81,7 +81,15 @@ function normalizeSettings(parsed: any): AppSettings {
     showStatusBarLoad: parsed?.showStatusBarLoad !== false,
     showStatusBarRam: parsed?.showStatusBarRam !== false,
     closeToTray: parsed?.closeToTray === true,
-    customFolders: Array.isArray(parsed?.customFolders) ? parsed.customFolders : []
+    customFolders: Array.isArray(parsed?.customFolders)
+      ? Array.from(
+          new Set(
+            parsed.customFolders
+              .map((value: unknown) => String(value ?? "").trim())
+              .filter(Boolean)
+          )
+        )
+      : []
   }
 }
 
