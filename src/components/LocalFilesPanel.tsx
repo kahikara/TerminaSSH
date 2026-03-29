@@ -92,6 +92,17 @@ function buildLocalPath(path: string, name: string) {
   return trimmed === "" ? `/${name}` : `${trimmed}/${name}`
 }
 
+function isValidLocalEntryName(value: string) {
+  const trimmed = value.trim()
+  return (
+    trimmed.length > 0 &&
+    trimmed !== "." &&
+    trimmed !== ".." &&
+    !trimmed.includes("/") &&
+    !trimmed.includes("\\")
+  )
+}
+
 function pathParts(path: string) {
   if (!path || path === "/") return [{ label: "/", full: "/" }]
 
@@ -348,6 +359,15 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     return sortFiles(filtered, sortMode)
   }, [files, showHidden, sortMode])
 
+  const renameTrimmed = renameValue.trim()
+  const newFolderTrimmed = newFolderValue.trim()
+  const renameValid = Boolean(
+    renameItem &&
+    isValidLocalEntryName(renameTrimmed) &&
+    renameTrimmed !== renameItem.name
+  )
+  const newFolderValid = isValidLocalEntryName(newFolderTrimmed)
+
   function toErrorText(error: unknown, deFallback: string, enFallback: string) {
     const detail = error instanceof Error ? error.message.trim() : String(error || "").trim()
     return detail || (lang === "de" ? deFallback : enFallback)
@@ -473,12 +493,16 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }
 
   async function doRename() {
-    if (!renameItem || !renameValue.trim() || actionBusy) return
+    if (!renameItem || actionBusy) return
+    if (!renameValid) {
+      setErrorText(lang === "de" ? "Ungültiger Name für Umbenennen" : "Invalid rename target")
+      return
+    }
     setActionBusy(true)
     try {
       await invoke("local_rename", {
         oldPath: buildLocalPath(path, renameItem.name),
-        newPath: buildLocalPath(path, renameValue.trim())
+        newPath: buildLocalPath(path, renameTrimmed)
       })
       setRenameItem(null)
       setRenameValue("")
@@ -509,11 +533,15 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }
 
   async function doNewFolder() {
-    if (!newFolderValue.trim() || actionBusy) return
+    if (actionBusy) return
+    if (!newFolderValid) {
+      setErrorText(lang === "de" ? "Ungültiger Ordnername" : "Invalid folder name")
+      return
+    }
     setActionBusy(true)
     try {
       await invoke("local_mkdir", {
-        path: buildLocalPath(path, newFolderValue.trim())
+        path: buildLocalPath(path, newFolderTrimmed)
       })
       setNewFolderOpen(false)
       setNewFolderValue("")
@@ -970,9 +998,9 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                 {t("cancel", lang)}
               </button>
               <button
-                style={{ ...modalBtn, opacity: actionBusy || !renameValue.trim() ? 0.6 : 1, cursor: actionBusy || !renameValue.trim() ? "not-allowed" : "pointer" }}
+                style={{ ...modalBtn, opacity: actionBusy || !renameValid ? 0.6 : 1, cursor: actionBusy || !renameValid ? "not-allowed" : "pointer" }}
                 onClick={() => void doRename()}
-                disabled={actionBusy || !renameValue.trim()}
+                disabled={actionBusy || !renameValid}
               >
                 {actionBusy ? (lang === "de" ? "Speichert..." : "Saving...") : t("save", lang)}
               </button>
@@ -1010,9 +1038,9 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                 {t("cancel", lang)}
               </button>
               <button
-                style={{ ...modalBtn, opacity: actionBusy || !newFolderValue.trim() ? 0.6 : 1, cursor: actionBusy || !newFolderValue.trim() ? "not-allowed" : "pointer" }}
+                style={{ ...modalBtn, opacity: actionBusy || !newFolderValid ? 0.6 : 1, cursor: actionBusy || !newFolderValid ? "not-allowed" : "pointer" }}
                 onClick={() => void doNewFolder()}
-                disabled={actionBusy || !newFolderValue.trim()}
+                disabled={actionBusy || !newFolderValid}
               >
                 {actionBusy ? (lang === "de" ? "Erstellt..." : "Creating...") : t("create", lang)}
               </button>
