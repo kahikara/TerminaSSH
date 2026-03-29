@@ -1,12 +1,23 @@
+import React from "react"
 import type { InputContextMenuState } from "../hooks/useInputContextMenu"
+
+type ExtraInputContextAction = {
+  key: string
+  label: string
+  onClick: () => void | Promise<void>
+  separatorBefore?: boolean
+  danger?: boolean
+  disabled?: boolean
+}
 
 type Props = {
   inputMenu: InputContextMenuState
   lang: string
   onAction: (action: "copy" | "paste" | "cut" | "selectAll") => void | Promise<void>
+  extraActions?: ExtraInputContextAction[]
 }
 
-export default function InputContextMenu({ inputMenu, lang, onAction }: Props) {
+export default function InputContextMenu({ inputMenu, lang, onAction, extraActions = [] }: Props) {
   if (!inputMenu.open) return null
 
   return (
@@ -49,6 +60,35 @@ export default function InputContextMenu({ inputMenu, lang, onAction }: Props) {
       >
         {lang === "de" ? "Alles auswählen" : "Select all"}
       </button>
+
+      {extraActions.length > 0 && (
+        <>
+          <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
+
+          {extraActions.map((action) => (
+            <React.Fragment key={action.key}>
+              {action.separatorBefore && (
+                <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
+              )}
+
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  if (action.disabled) return
+                  void action.onClick()
+                }}
+                disabled={action.disabled}
+                className="w-full px-3 py-2.5 text-left text-[13px] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  color: action.danger ? "var(--danger, #ef4444)" : "var(--text-main)"
+                }}
+              >
+                {action.label}
+              </button>
+            </React.Fragment>
+          ))}
+        </>
+      )}
     </div>
   )
 }

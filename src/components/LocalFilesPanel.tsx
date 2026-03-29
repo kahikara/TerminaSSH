@@ -289,6 +289,25 @@ function getMenuPosition(buttonRect: DOMRect, listRect: DOMRect): React.CSSPrope
   }
 }
 
+function getFixedContextMenuPosition(clientX: number, clientY: number, width: number, height: number): React.CSSProperties {
+  const left = Math.max(8, Math.min(clientX, window.innerWidth - width - 8))
+  const top = Math.max(8, Math.min(clientY, window.innerHeight - height - 8))
+
+  return {
+    position: "fixed",
+    left,
+    top,
+    width,
+    minWidth: width,
+    borderRadius: 10,
+    border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+    background: "var(--bg-app, #020617)",
+    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+    overflow: "hidden",
+    zIndex: 80
+  }
+}
+
 const panelStyle: React.CSSProperties = {
   position: "absolute",
   top: 38,
@@ -419,6 +438,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [showHidden, setShowHidden] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [sortMenuStyle, setSortMenuStyle] = useState<React.CSSProperties | null>(null)
+  const [browserMenuOpen, setBrowserMenuOpen] = useState(false)
+  const [browserMenuStyle, setBrowserMenuStyle] = useState<React.CSSProperties | null>(null)
   const [panelWidth, setPanelWidth] = useState(readStoredPanelWidth())
   const [sortMode, setSortMode] = useState<LocalSortMode>("folders")
   const [menuItem, setMenuItem] = useState<string | null>(null)
@@ -464,6 +485,19 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     setMenuStyle(null)
     setSortMenuOpen(false)
     setSortMenuStyle(null)
+    setBrowserMenuOpen(false)
+    setBrowserMenuStyle(null)
+  }
+
+  function openBrowserContextMenu(clientX: number, clientY: number) {
+    setBrowserMenuStyle(getFixedContextMenuPosition(clientX, clientY, 176, 124))
+    setBrowserMenuOpen(true)
+  }
+
+  function openEntryContextMenu(entry: FileItem, clientX: number, clientY: number) {
+    setSelectedItem(entry.name)
+    setMenuItem(entry.name)
+    setMenuStyle(getFixedContextMenuPosition(clientX, clientY, 156, entry.is_dir ? 118 : 154))
   }
 
   function activateEntry(entryName: string) {
@@ -589,8 +623,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
   useEffect(() => {
     const closeMenu = () => {
-      setMenuItem(null)
-      setMenuStyle(null)
+      clearTransientChrome()
     }
 
     window.addEventListener("resize", closeMenu)
@@ -922,10 +955,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         pointerEvents: visible ? "auto" : "none"
       }}
       onClick={() => {
-        setMenuItem(null)
-        setMenuStyle(null)
-        setSortMenuOpen(false)
-        setSortMenuStyle(null)
+        clearTransientChrome()
       }}
     >
       <div
@@ -1201,6 +1231,16 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
       <div
         ref={listRef}
+        onContextMenu={(e) => {
+          const target = e.target as HTMLElement | null
+          if (target?.closest("[data-local-entry-key]")) return
+          if (target?.closest("[data-local-context-menu]")) return
+
+          e.preventDefault()
+          e.stopPropagation()
+          clearTransientChrome()
+          openBrowserContextMenu(e.clientX, e.clientY)
+        }}
         style={{
           flex: 1,
           overflow: "auto",
@@ -1260,6 +1300,12 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             style={entryStyle(hoveredItem === f.name, selectedItem === f.name)}
             onMouseEnter={() => setHoveredItem(f.name)}
             onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              clearTransientChrome()
+              openEntryContextMenu(f, e.clientX, e.clientY)
+            }}
             onDoubleClick={() => {
               setSelectedItem(f.name)
               if (f.is_dir) {
@@ -1346,15 +1392,36 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {!f.is_dir && (
-                  <button style={menuButtonStyle} onClick={() => { setMenuItem(null); void openEditor(f) }}>
-                    {t("edit", lang)}
-                  </button>
-                )}
-                <button style={menuButtonStyle} onClick={() => { setMenuItem(null); setRenameItem(f); setRenameValue(f.name) }}>
+                <button
+                  style={menuButtonStyle}
+                  onClick={() => {
+                    clearTransientChrome()
+                    if (f.is_dir) {
+                      void load(buildLocalPath(path, f.name))
+                    } else {
+                      void openEditor(f)
+                    }
+                  }}
+                >
+                  {f.is_dir ? (lang === "de" ? "Öffnen" : "Open") : t("edit", lang)}
+                </button>
+                <button
+                  style={menuButtonStyle}
+                  onClick={() => {
+                    clearTransientChrome()
+                    setRenameItem(f)
+                    setRenameValue(f.name)
+                  }}
+                >
                   {t("rename", lang)}
                 </button>
-                <button style={menuButtonStyle} onClick={() => { setMenuItem(null); setDeleteItem(f) }}>
+                <button
+                  style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
+                  onClick={() => {
+                    clearTransientChrome()
+                    setDeleteItem(f)
+                  }}
+                >
                   {t("delete", lang)}
                 </button>
               </div>
@@ -1362,6 +1429,42 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           </div>
         ))}
       </div>
+
+      {browserMenuOpen && (
+        <div
+          data-local-context-menu="true"
+          style={browserMenuStyle || getFixedContextMenuPosition(16, 16, 176, 124)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            style={menuButtonStyle}
+            onClick={() => {
+              clearTransientChrome()
+              setNewFolderOpen(true)
+            }}
+          >
+            {t("newFolder", lang)}
+          </button>
+          <button
+            style={menuButtonStyle}
+            onClick={() => {
+              clearTransientChrome()
+              void load(path)
+            }}
+          >
+            {t("refresh", lang)}
+          </button>
+          <button
+            style={menuButtonStyle}
+            onClick={() => {
+              setShowHidden((prev) => !prev)
+              clearTransientChrome()
+            }}
+          >
+            {showHidden ? (lang === "de" ? "Versteckte ausblenden" : "Hide hidden files") : (lang === "de" ? "Versteckte anzeigen" : "Show hidden files")}
+          </button>
+        </div>
+      )}
 
       {renameItem && (
         <div style={modalOverlay}>

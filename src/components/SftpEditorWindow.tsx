@@ -208,7 +208,7 @@ export default function SftpEditorWindow() {
   }, [])
 
   const lang = initialSettings?.lang || "de"
-  const { inputMenu, runInputMenuAction } = useInputContextMenu({ lang })
+  const { inputMenu, runInputMenuAction, closeInputMenu } = useInputContextMenu({ lang })
   const themeName = String(initialSettings?.theme || "catppuccin")
   const isLightTheme = themeName === "light"
 
@@ -1644,6 +1644,25 @@ export default function SftpEditorWindow() {
         inputMenu={inputMenu}
         lang={lang}
         onAction={runInputMenuAction}
+        extraActions={[
+          {
+            key: "editor-search",
+            label: t("search", lang),
+            onClick: () => {
+              closeInputMenu()
+              openSearchOnly()
+            },
+            separatorBefore: true
+          },
+          {
+            key: "editor-replace",
+            label: t("replace", lang),
+            onClick: () => {
+              closeInputMenu()
+              toggleReplace()
+            }
+          }
+        ]}
       />
     </div>
   )
