@@ -1173,9 +1173,15 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   setSortMenuStyle(null)
                 }
 
-                setSortMenuOpen(true)
                 setMenuItem(null)
                 setMenuStyle(null)
+                setContextMenuItem(null)
+                setContextMenuStyle(null)
+                setRootsMenuOpen(false)
+                setRootsMenuStyle(null)
+                setBrowserMenuOpen(false)
+                setBrowserMenuStyle(null)
+                setSortMenuOpen(true)
               }}
               style={{ ...iconBtn, flexShrink: 0 }}
               title={`${t("sortFiles", lang)}: ${sortModeLabel(sortMode, lang)}`}
