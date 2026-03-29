@@ -48,28 +48,28 @@ export default function GlobalDialog({ dialog, onClose }: any) {
     ? "min-h-9 px-4 py-2 rounded-xl border border-[var(--danger)] bg-[var(--danger)] text-white text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
     : "ui-btn-primary disabled:opacity-60"
 
-    const submit = () => {
+    const submit = async () => {
       if (!canSubmit) return
 
-        if (dialog.type === "prompt") {
-          if (needsDoubleInput) {
-            if (checkboxLabel) {
-              dialog.onConfirm(val, confirmVal, { checked: checkVal })
-            } else {
-              dialog.onConfirm(val, confirmVal)
-            }
+      if (dialog.type === "prompt") {
+        if (needsDoubleInput) {
+          if (checkboxLabel) {
+            await Promise.resolve(dialog.onConfirm(val, confirmVal, { checked: checkVal }))
           } else {
-            if (checkboxLabel) {
-              dialog.onConfirm(val, { checked: checkVal })
-            } else {
-              dialog.onConfirm(val)
-            }
+            await Promise.resolve(dialog.onConfirm(val, confirmVal))
           }
         } else {
-          dialog.onConfirm(val)
+          if (checkboxLabel) {
+            await Promise.resolve(dialog.onConfirm(val, { checked: checkVal }))
+          } else {
+            await Promise.resolve(dialog.onConfirm(val))
+          }
         }
+      } else {
+        await Promise.resolve(dialog.onConfirm(val))
+      }
 
-        onClose()
+      onClose()
     }
 
     return (
@@ -102,7 +102,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
         onChange={e => setVal(e.target.value)}
         onKeyDown={e => {
           if (e.key === "Enter" && canSubmit) {
-            submit()
+            void submit()
           }
         }}
         className="w-full h-9 px-3 rounded-[10px] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border border-[var(--border-subtle)] outline-none focus:border-[var(--accent)] text-[13px] text-[var(--text-main)]"
@@ -116,7 +116,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
           onChange={e => setConfirmVal(e.target.value)}
           onKeyDown={e => {
             if (e.key === "Enter" && canSubmit) {
-              submit()
+              void submit()
             }
           }}
           className="w-full h-9 px-3 rounded-[10px] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border border-[var(--border-subtle)] outline-none focus:border-[var(--accent)] text-[13px] text-[var(--text-main)]"
@@ -180,7 +180,7 @@ export default function GlobalDialog({ dialog, onClose }: any) {
       )}
 
       <button
-      onClick={submit}
+      onClick={() => { void submit() }}
       className={confirmBtnClass}
       disabled={!canSubmit}
       >
