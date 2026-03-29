@@ -1267,8 +1267,42 @@ fn set_connection_password(id: i32, password: String, app: AppHandle) -> Result<
 }
 
 #[tauri::command]
-fn delete_connection(id: i32, name: String, app: AppHandle) -> Result<String, String> {
+fn delete_connection(
+    id: i32,
+    name: String,
+    app: AppHandle,
+    state: State<'_, SshState>,
+) -> Result<String, String> {
     let conn = open_db()?;
+
+    let mut stmt = conn
+        .prepare("SELECT id FROM ssh_tunnels WHERE server_id = ?1")
+        .map_err(|e| e.to_string())?;
+    let tunnel_ids = stmt
+        .query_map([&id], |row| row.get::<_, i32>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let entries = {
+        let mut map = state
+            .tunnel_runtime
+            .lock()
+            .map_err(|_| "Tunnel state lock failed".to_string())?;
+
+        let mut entries = Vec::new();
+        for tunnel_id in &tunnel_ids {
+            if let Some(entry) = map.remove(tunnel_id) {
+                entries.push(entry);
+            }
+        }
+        entries
+    };
+
+    for entry in entries {
+        entry.stop_flag.store(true, Ordering::Relaxed);
+        let _ = entry.handle.join();
+    }
 
     conn.execute("DELETE FROM ssh_tunnels WHERE server_id = ?1", [&id])
         .map_err(|e| e.to_string())?;
