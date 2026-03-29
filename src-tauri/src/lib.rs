@@ -2789,6 +2789,14 @@ fn map_sftp_path_error(err: ssh2::Error, action: &str, path: &str) -> String {
     }
 }
 
+fn normalize_local_path(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Path is empty".to_string());
+    }
+    Ok(PathBuf::from(trimmed))
+}
+
 #[tauri::command]
 fn test_connection(
     mut connection: SshConnection,
@@ -3459,12 +3467,13 @@ fn start_ssh(
 }
 #[tauri::command]
 fn sftp_list_dir(id: i32, path: String) -> Result<Vec<FileItem>, String> {
+    let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
     let mut items = Vec::new();
     let dir_entries = sftp
         .readdir(Path::new(&path))
-        .map_err(|_| format!("Pfad '{}' nicht gefunden", path))?;
+        .map_err(|e| map_sftp_path_error(e, "List directory", &path))?;
     for (path_buf, stat) in dir_entries {
         if let Some(filename) = path_buf.file_name().and_then(|n| n.to_str()) {
             if filename == "." || filename == ".." {
@@ -3644,6 +3653,12 @@ async fn sftp_upload(
     app: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<String, String> {
+    let local_path = normalize_local_path(&local_path)?;
+    if !local_path.exists() {
+        return Err(format!("Path not found: {}", local_path.to_string_lossy()));
+    }
+
+    let remote_path = normalize_remote_path(&remote_path)?;
     let cancel_flag = Arc::new(AtomicBool::new(false));
     state
         .transfers
@@ -3657,7 +3672,7 @@ async fn sftp_upload(
         let mut transferred = 0;
         upload_recursive(
             &sftp,
-            Path::new(&local_path),
+            &local_path,
             Path::new(&remote_path),
             &cancel_flag,
             &app,
@@ -3767,6 +3782,15 @@ async fn sftp_download(
     app: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<String, String> {
+    let remote_path = normalize_remote_path(&remote_path)?;
+    let local_path = normalize_local_path(&local_path)?;
+
+    if let Some(parent) = local_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+
     let cancel_flag = Arc::new(AtomicBool::new(false));
     state
         .transfers
@@ -3781,7 +3805,7 @@ async fn sftp_download(
         download_recursive(
             &sftp,
             Path::new(&remote_path),
-            Path::new(&local_path),
+            &local_path,
             &cancel_flag,
             &app,
             &s_id,
