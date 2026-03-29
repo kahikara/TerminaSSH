@@ -17,6 +17,7 @@ import MainCloseDialog from './components/MainCloseDialog';
 import ToastStack from './components/ToastStack';
 import InputContextMenu from './components/InputContextMenu';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
+import { destroyTerminal } from './lib/terminalSession';
 
 const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections";
 
@@ -872,10 +873,22 @@ export default function App() {
     setSidebarContextMenu(null);
   }, []);
 
-  const buildSplitTabFromServers = (leftServer: ConnectionItem, rightServer: ConnectionItem, existingTabId?: string): AppTab => {
+  const buildSplitTabFromServers = (
+    leftServer: ConnectionItem,
+    rightServer: ConnectionItem,
+    existingTabId?: string,
+    existingPaneSessionIds?: string[],
+    forceNewRightSession = false
+  ): AppTab => {
     const tabId = existingTabId || createTabId();
-    const leftSessionId = `${tabId}__pane_0`;
-    const rightSessionId = `${tabId}__pane_1`;
+    const leftSessionId =
+      existingPaneSessionIds?.[0] && String(existingPaneSessionIds[0]).trim().length > 0
+        ? String(existingPaneSessionIds[0])
+        : tabId;
+    const rightSessionId =
+      !forceNewRightSession && existingPaneSessionIds?.[1] && String(existingPaneSessionIds[1]).trim().length > 0
+        ? String(existingPaneSessionIds[1])
+        : `${tabId}__pane_1_${Date.now().toString(36)}`;
 
     return {
       ...leftServer,
@@ -963,7 +976,26 @@ export default function App() {
 
             const baseTab = next[idx];
             const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
-            next[idx] = buildSplitTabFromServers(leftServer, rightServer, activeTabId);
+            const currentRightServer = baseTab?.splitMode ? baseTab.paneServers?.[1] || null : null;
+            const existingPaneSessionIds = baseTab?.splitMode
+              ? (baseTab.paneSessionIds || [])
+              : [baseTab.sessionId];
+            const reuseRightSession =
+              Boolean(baseTab?.splitMode) &&
+              currentRightServer != null &&
+              getConnectionIdentity(currentRightServer) === targetIdentity;
+
+            if (!reuseRightSession && existingPaneSessionIds[1]) {
+              destroyTerminal(String(existingPaneSessionIds[1]));
+            }
+
+            next[idx] = buildSplitTabFromServers(
+              leftServer,
+              rightServer,
+              activeTabId,
+              existingPaneSessionIds,
+              !reuseRightSession
+            );
             return next;
           });
 
@@ -980,7 +1012,26 @@ export default function App() {
 
       const baseTab = next[idx];
       const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
-      next[idx] = buildSplitTabFromServers(leftServer, server, activeTabId);
+      const currentRightServer = baseTab?.splitMode ? baseTab.paneServers?.[1] || null : null;
+      const existingPaneSessionIds = baseTab?.splitMode
+        ? (baseTab.paneSessionIds || [])
+        : [baseTab.sessionId];
+      const reuseRightSession =
+        Boolean(baseTab?.splitMode) &&
+        currentRightServer != null &&
+        getConnectionIdentity(currentRightServer) === targetIdentity;
+
+      if (!reuseRightSession && existingPaneSessionIds[1]) {
+        destroyTerminal(String(existingPaneSessionIds[1]));
+      }
+
+      next[idx] = buildSplitTabFromServers(
+        leftServer,
+        server,
+        activeTabId,
+        existingPaneSessionIds,
+        !reuseRightSession
+      );
       return next;
     });
 
