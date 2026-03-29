@@ -47,6 +47,7 @@ export function promptGenerateSshKey({
 }
 
 export async function importExistingSshKey({
+  lang,
   showToast,
   ui,
   loadKeys
@@ -58,11 +59,21 @@ export async function importExistingSshKey({
     const picked = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: "SSH Key", extensions: ["pem", "key", "pub", "id_rsa", "id_ed25519"] }]
+      filters: [{ name: "SSH Key", extensions: ["pem", "key"] }]
     })
 
     const filePath = Array.isArray(picked) ? picked[0] : picked
     if (!filePath || typeof filePath !== "string") return
+
+    if (filePath.toLowerCase().endsWith(".pub")) {
+      showToast(
+        ui.importFailed || (lang === "de"
+          ? "Bitte wähle eine private Schlüsseldatei und keine .pub Datei"
+          : "Please select a private key file, not a .pub file"),
+        true
+      )
+      return
+    }
 
     const fileName = getPathBaseName(filePath) || ui.importedLabel
 
@@ -76,7 +87,10 @@ export async function importExistingSshKey({
     await loadKeys()
     showToast(ui.imported)
   } catch (e: any) {
-    showToast(`Key import failed: ${String(e)}`, true)
+    showToast(
+      ui.importFailed ? `${ui.importFailed}: ${String(e)}` : `Key import failed: ${String(e)}`,
+      true
+    )
   }
 }
 
