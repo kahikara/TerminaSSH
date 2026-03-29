@@ -1042,36 +1042,65 @@ export default function App() {
       prev.map((tab) => {
         if (tab.tabId !== tabId) return tab;
 
-        const paneServers = Array.isArray(payload.paneServers) ? payload.paneServers.filter(Boolean) : [];
-        const paneSessionIds = Array.isArray(payload.paneSessionIds) ? payload.paneSessionIds.filter(Boolean) : [];
+        const rawPaneServers = Array.isArray(payload.paneServers) ? payload.paneServers.slice(0, 2) : [];
+        const rawPaneSessionIds = Array.isArray(payload.paneSessionIds) ? payload.paneSessionIds.slice(0, 2) : [];
 
-        if (paneServers.length <= 1) {
-          const singleServer = paneServers[0] || tab.paneServers?.[0] || tab;
-          const singleSessionId = paneSessionIds[0] || tab.paneSessionIds?.[0] || tab.sessionId || tab.tabId;
+        const normalizedEntries = rawPaneServers
+          .map((server, index) => {
+            if (!server) return null;
+
+            const rawSessionId = rawPaneSessionIds[index];
+            const sessionId =
+              typeof rawSessionId === 'string' && rawSessionId.trim().length > 0
+                ? rawSessionId
+                : `${tabId}__pane_${index}`;
+
+            return { server, sessionId };
+          })
+          .filter((entry): entry is { server: ConnectionItem; sessionId: string } => Boolean(entry));
+
+        if (normalizedEntries.length <= 1) {
+          const singleEntry = normalizedEntries[0];
+          const singleServer = singleEntry?.server || tab.paneServers?.[0] || tab;
+          const singleSessionId =
+            singleEntry?.sessionId || tab.paneSessionIds?.[0] || tab.sessionId || tab.tabId;
 
           return {
             ...singleServer,
             tabId,
-            sessionId: singleSessionId
+            sessionId: singleSessionId,
+            splitMode: false,
+            paneServers: undefined,
+            paneSessionIds: undefined,
+            focusedPaneIndex: undefined
           };
         }
 
-        const leftServer = paneServers[0];
-        const rightServer = paneServers[1];
+        const leftEntry = normalizedEntries[0];
+        const rightEntry = normalizedEntries[1];
+
+        if (!leftEntry || !rightEntry) {
+          return tab;
+        }
+
+        const focusedPaneIndex =
+          payload.focusedPaneId === rightEntry.sessionId
+            ? 1
+            : payload.focusedPaneId === leftEntry.sessionId
+            ? 0
+            : tab.focusedPaneIndex === 1
+            ? 1
+            : 0;
 
         return {
-          ...leftServer,
+          ...leftEntry.server,
           tabId,
-          sessionId: paneSessionIds[0] || `${tabId}__pane_0`,
+          sessionId: leftEntry.sessionId,
           splitMode: true,
-          paneServers: [leftServer, rightServer],
-          paneSessionIds: [
-            paneSessionIds[0] || `${tabId}__pane_0`,
-            paneSessionIds[1] || `${tabId}__pane_1`
-          ],
-          focusedPaneIndex:
-            payload.focusedPaneId && paneSessionIds[1] === payload.focusedPaneId ? 1 : 0,
-          name: `${leftServer?.name || leftServer?.host || 'Left'} | ${rightServer?.name || rightServer?.host || 'Right'}`
+          paneServers: [leftEntry.server, rightEntry.server],
+          paneSessionIds: [leftEntry.sessionId, rightEntry.sessionId],
+          focusedPaneIndex,
+          name: `${leftEntry.server?.name || leftEntry.server?.host || 'Left'} | ${rightEntry.server?.name || rightEntry.server?.host || 'Right'}`
         };
       })
     );
