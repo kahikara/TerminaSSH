@@ -335,10 +335,12 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [newFolderValue, setNewFolderValue] = useState("")
   const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
   const [errorText, setErrorText] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const resizeDragRef = useRef(false)
+  const loadSeqRef = useRef(0)
 
   const visibleFiles = useMemo(() => {
     const filtered = showHidden ? files : files.filter((f) => !f.name.startsWith("."))
@@ -351,15 +353,25 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }
 
   async function load(nextPath: string) {
+    const seq = loadSeqRef.current + 1
+    loadSeqRef.current = seq
+    setIsLoading(true)
+
     try {
       const res = await invoke("local_list_dir", { path: nextPath }) as FileItem[]
+      if (loadSeqRef.current !== seq) return
       setFiles(Array.isArray(res) ? res : [])
       setPath(nextPath)
       setErrorText("")
     } catch (e) {
+      if (loadSeqRef.current !== seq) return
       console.error(e)
       setFiles([])
       setErrorText(toErrorText(e, "Ordner konnte nicht geladen werden", "Failed to load folder"))
+    } finally {
+      if (loadSeqRef.current === seq) {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -756,7 +768,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         </div>
 
         <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
-          <span>{visibleFiles.length} {t("visibleCount", lang)}</span>
+          <span>{isLoading ? (lang === "de" ? "Lade…" : "Loading…") : `${visibleFiles.length} ${t("visibleCount", lang)}`}</span>
           <span>{showHidden ? t("hiddenFilesIncluded", lang) : t("hiddenFilesFiltered", lang)}</span>
         </div>
       </div>
