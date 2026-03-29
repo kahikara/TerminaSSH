@@ -286,7 +286,7 @@ export function syncSize(sessionId: string, entry: StoreEntry) {
 }
 
 export function destroyTerminal(sessionId: string) {
-  delete pendingDestroyEntries[sessionId]
+  cancelDestroySession(sessionId)
 
   const entry: StoreEntry | undefined = terminalStore[sessionId]
   if (!entry) return
