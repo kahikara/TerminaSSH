@@ -11,12 +11,14 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
   const [val, setVal] = useState("")
   const [confirmVal, setConfirmVal] = useState("")
   const [checkVal, setCheckVal] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (dialog.isOpen) {
       setVal(dialog.defaultValue || "")
       setConfirmVal(dialog.defaultConfirmValue || "")
       setCheckVal(Boolean(dialog.checkboxDefaultChecked))
+      setBusy(false)
     }
   }, [dialog.isOpen, dialog.defaultValue, dialog.defaultConfirmValue, dialog.checkboxDefaultChecked])
 
@@ -68,14 +70,24 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
     : "ui-btn-primary disabled:opacity-60"
 
     const cancel = async () => {
-      if (dialog.type !== "alert") {
-        await Promise.resolve(dialog.onCancel())
+      if (busy) return
+
+      setBusy(true)
+      try {
+        if (dialog.type !== "alert") {
+          await Promise.resolve(dialog.onCancel())
+        }
+        onClose()
+      } catch (error) {
+        setBusy(false)
+        throw error
       }
-      onClose()
     }
 
     const submit = async () => {
-      if (!canSubmit) return
+      if (!canSubmit || busy) return
+
+      setBusy(true)
 
       if (dialog.type === "prompt") {
         if (needsDoubleInput) {
@@ -96,6 +108,9 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       }
 
       onClose()
+    } catch (error) {
+      setBusy(false)
+      throw error
     }
 
     return (
@@ -106,7 +121,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       {title}
       </div>
 
-      <button onClick={() => { void cancel() }} className="ui-icon-btn" title="Close">
+      <button onClick={() => { void cancel() }} className="ui-icon-btn" title="Close" disabled={busy}>
       <X size={15} />
       </button>
       </div>
@@ -127,7 +142,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
         value={val}
         onChange={e => setVal(e.target.value)}
         onKeyDown={e => {
-          if (e.key === "Enter" && canSubmit) {
+          if (e.key === "Enter" && canSubmit && !busy) {
             void submit()
           }
         }}
@@ -141,7 +156,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
           value={confirmVal}
           onChange={e => setConfirmVal(e.target.value)}
           onKeyDown={e => {
-            if (e.key === "Enter" && canSubmit) {
+            if (e.key === "Enter" && canSubmit && !busy) {
               void submit()
             }
           }}
@@ -175,6 +190,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
         <button
         onClick={() => { void cancel() }}
         className="ui-btn-ghost"
+        disabled={busy}
         >
         {cancelLabel}
         </button>
@@ -183,9 +199,16 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       {secondaryLabel && dialog.onSecondary && (
         <button
         onClick={async () => {
-          await dialog.onSecondary?.(val)
+          if (busy) return
+          setBusy(true)
+          try {
+            await dialog.onSecondary?.(val)
+          } finally {
+            setBusy(false)
+          }
         }}
         className="ui-btn-ghost"
+        disabled={busy}
         >
         {secondaryLabel}
         </button>
@@ -194,9 +217,16 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       {tertiaryLabel && dialog.onTertiary && (
         <button
         onClick={async () => {
-          await dialog.onTertiary?.(val)
+          if (busy) return
+          setBusy(true)
+          try {
+            await dialog.onTertiary?.(val)
+          } finally {
+            setBusy(false)
+          }
         }}
         className="ui-btn-ghost"
+        disabled={busy}
         >
         {tertiaryLabel}
         </button>
@@ -205,7 +235,7 @@ export default function GlobalDialog({ dialog, onClose }: GlobalDialogProps) {
       <button
       onClick={() => { void submit() }}
       className={confirmBtnClass}
-      disabled={!canSubmit}
+      disabled={!canSubmit || busy}
       >
       {confirmLabel}
       </button>
