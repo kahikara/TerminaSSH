@@ -250,6 +250,26 @@ pub struct TunnelRuntimeEntry {
     handle: JoinHandle<()>,
 }
 
+
+pub struct VaultState {
+    runtime: Mutex<VaultRuntimeState>,
+}
+
+pub struct VaultRuntimeState {
+    is_unlocked: bool,
+    unlock_mode: String,
+    session_dek: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VaultStatus {
+    is_initialized: bool,
+    is_protected: bool,
+    is_unlocked: bool,
+    unlock_mode: String,
+    has_legacy_master_key: bool,
+}
+
 fn take_finished_tunnel_entries(
     state: &State<'_, SshState>,
 ) -> Result<Vec<TunnelRuntimeEntry>, String> {
@@ -371,6 +391,9 @@ const APP_DIR_NAME: &str = "terminassh";
 const LEGACY_APP_DIR_NAME: &str = "ssh-mgr";
 const SSH_CONNECT_TIMEOUT_SECS: u64 = 5;
 const DB_BUSY_TIMEOUT_SECS: u64 = 5;
+const VAULT_DB_FILE_NAME: &str = "vault.db";
+const VAULT_SCHEMA_VERSION: i64 = 1;
+const DEFAULT_VAULT_UNLOCK_MODE: &str = "demand";
 
 fn home_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
@@ -496,6 +519,120 @@ fn open_db() -> Result<Connection, String> {
     )
     .map_err(|e| e.to_string())?;
     Ok(conn)
+}
+
+fn get_vault_db_path() -> String {
+    format!("{}/{}", get_app_dir(), VAULT_DB_FILE_NAME)
+}
+
+fn open_vault_db() -> Result<Connection, String> {
+    let conn = Connection::open(get_vault_db_path()).map_err(|e| e.to_string())?;
+    conn.busy_timeout(Duration::from_secs(DB_BUSY_TIMEOUT_SECS))
+        .map_err(|e| e.to_string())?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA foreign_keys = ON;"
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(conn)
+}
+
+fn init_vault_db() -> Result<(), String> {
+    let conn = open_vault_db()?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS meta (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            schema_version INTEGER NOT NULL,
+            is_protected INTEGER NOT NULL DEFAULT 0,
+            unlock_mode TEXT NOT NULL DEFAULT 'demand',
+            salt BLOB NOT NULL DEFAULT X'',
+            encrypted_dek BLOB NOT NULL DEFAULT X'',
+            recovery_encrypted_dek BLOB NOT NULL DEFAULT X'',
+            kek_validation BLOB NOT NULL DEFAULT X'',
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS secrets (
+            connection_id INTEGER NOT NULL,
+            secret_type TEXT NOT NULL,
+            encrypted_data BLOB NOT NULL DEFAULT X'',
+            nonce BLOB NOT NULL DEFAULT X'',
+            PRIMARY KEY (connection_id, secret_type),
+            FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+        );"
+    )
+    .map_err(|e| e.to_string())?;
+
+    let meta_exists: Option<i64> = conn
+        .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if meta_exists.is_none() {
+        let now = current_export_timestamp();
+        conn.execute(
+            "INSERT INTO meta (
+                id,
+                schema_version,
+                is_protected,
+                unlock_mode,
+                created_at,
+                updated_at
+            ) VALUES (1, ?1, 0, ?2, ?3, ?3)",
+            (&VAULT_SCHEMA_VERSION, &DEFAULT_VAULT_UNLOCK_MODE, &now),
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        let now = current_export_timestamp();
+        conn.execute(
+            "UPDATE meta
+             SET schema_version = ?1,
+                 unlock_mode = CASE
+                     WHEN TRIM(COALESCE(unlock_mode, '')) = '' THEN ?2
+                     ELSE unlock_mode
+                 END,
+                 updated_at = CASE
+                     WHEN TRIM(COALESCE(updated_at, '')) = '' THEN ?3
+                     ELSE updated_at
+                 END
+             WHERE id = 1",
+            (&VAULT_SCHEMA_VERSION, &DEFAULT_VAULT_UNLOCK_MODE, &now),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn load_vault_status(conn: &Connection, runtime: &VaultRuntimeState) -> Result<VaultStatus, String> {
+    let row: Option<(i32, String)> = conn
+        .query_row(
+            "SELECT is_protected, unlock_mode FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let (is_protected, unlock_mode) =
+        row.unwrap_or((0, DEFAULT_VAULT_UNLOCK_MODE.to_string()));
+
+    let effective_unlock_mode = if unlock_mode.trim().is_empty() {
+        runtime.unlock_mode.clone()
+    } else {
+        unlock_mode
+    };
+
+    Ok(VaultStatus {
+        is_initialized: true,
+        is_protected: is_protected != 0,
+        is_unlocked: runtime.is_unlocked,
+        unlock_mode: effective_unlock_mode,
+        has_legacy_master_key: Path::new(&get_key_path()).exists(),
+    })
 }
 
 fn get_key_path() -> String {
@@ -1070,6 +1207,17 @@ fn init_db() -> Result<(), String> {
     ensure_ssh_tunnels_foreign_key(&conn)?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_vault_status(vault_state: State<'_, VaultState>) -> Result<VaultStatus, String> {
+    init_vault_db()?;
+    let conn = open_vault_db()?;
+    let runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    load_vault_status(&conn, &runtime)
 }
 
 #[tauri::command]
@@ -4235,6 +4383,10 @@ pub fn run() {
         eprintln!("Database init failed: {}", e);
     }
 
+    if let Err(e) = init_vault_db() {
+        eprintln!("Vault init failed: {}", e);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -4247,9 +4399,17 @@ pub fn run() {
             transfers: Mutex::new(HashMap::new()),
             tunnel_runtime: Mutex::new(HashMap::new()),
         })
+        .manage(VaultState {
+            runtime: Mutex::new(VaultRuntimeState {
+                is_unlocked: false,
+                unlock_mode: DEFAULT_VAULT_UNLOCK_MODE.to_string(),
+                session_dek: None,
+            }),
+        })
         .invoke_handler(tauri::generate_handler![
             save_connection,
             get_connections,
+            get_vault_status,
             update_connection,
             test_connection,
             set_connection_password,
