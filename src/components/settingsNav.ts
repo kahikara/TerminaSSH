@@ -5,7 +5,8 @@ import {
   Database,
   Info,
   Globe,
-  MonitorCog
+  MonitorCog,
+  Shield
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { t } from "../lib/i18n"
@@ -20,6 +21,7 @@ export type SettingsNavItem = {
 export function getSettingsNavItems(lang: string, ui: any): SettingsNavItem[] {
   return [
     { id: "general", icon: Globe, label: ui.general },
+    { id: "security", icon: Shield, label: ui.securityTitle },
     { id: "statusbar", icon: MonitorCog, label: ui.statusBar },
     { id: "terminal", icon: TermIcon, label: t("terminal", lang) },
     { id: "sftp", icon: Folder, label: t("sftp", lang) },

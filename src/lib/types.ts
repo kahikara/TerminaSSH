@@ -4,6 +4,7 @@ export type SftpSortName = "folders" | "name" | "size" | "type"
 
 export type SettingsSectionId =
   | "general"
+  | "security"
   | "statusbar"
   | "terminal"
   | "sftp"

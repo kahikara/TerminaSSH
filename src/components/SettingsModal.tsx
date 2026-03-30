@@ -7,6 +7,7 @@ import SettingsModalHeader from "./SettingsModalHeader"
 import SettingsKeysSection from "./SettingsKeysSection"
 import SettingsGeneralSection from "./SettingsGeneralSection"
 import SettingsStatusBarSection from "./SettingsStatusBarSection"
+import SettingsSecuritySection from "./SettingsSecuritySection"
 import SettingsTerminalSection from "./SettingsTerminalSection"
 import SettingsSftpSection from "./SettingsSftpSection"
 import SettingsBackupSection from "./SettingsBackupSection"
@@ -102,6 +103,19 @@ export default function SettingsModal({
                 settings={settings}
                 setSettings={setSettings}
                 uniformSelectStyle={uniformSelectStyle}
+              />
+            )}
+
+            {activeTab === "security" && (
+              <SettingsSecuritySection
+                lang={lang}
+                ui={ui}
+                showToast={showToast}
+                showDialog={showDialog}
+                cardStyle={cardStyle}
+                uniformSelectStyle={uniformSelectStyle}
+                primaryBtnStyle={primaryBtnStyle}
+                actionBtnStyle={actionBtnStyle}
               />
             )}
 
