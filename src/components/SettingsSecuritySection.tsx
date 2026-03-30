@@ -245,16 +245,30 @@ export default function SettingsSecuritySection({
   }
 
   const applyUnlockModeChange = async (nextMode: "demand" | "startup") => {
-    setUnlockMode(nextMode)
+    if (busy) return
 
     if (!isProtected) {
+      setUnlockMode(nextMode)
+      return
+    }
+
+    if (!isUnlocked) {
+      setUnlockMode(savedUnlockMode)
+      showToast(
+        lang === "de"
+          ? "Zum Ändern des Startverhaltens muss der Vault zuerst entsperrt werden"
+          : "Unlock the vault first to change the startup behavior",
+        true
+      )
       return
     }
 
     if (nextMode === savedUnlockMode) {
+      setUnlockMode(nextMode)
       return
     }
 
+    setUnlockMode(nextMode)
     setBusy(true)
     try {
       await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
@@ -740,7 +754,7 @@ export default function SettingsSecuritySection({
                 value={unlockMode}
                 onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
                 style={{ ...uniformSelectStyle, marginTop: 8 }}
-                disabled={busy}
+                disabled={busy || (isProtected && !isUnlocked)}
               >
                 <option value="demand">{ui.securityModeDemand}</option>
                 <option value="startup">{ui.securityModeStartup}</option>
@@ -836,7 +850,7 @@ export default function SettingsSecuritySection({
                     type="button"
                     onClick={unlockVault}
                     style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
-                    disabled={busy}
+                    disabled={busy || (isProtected && !isUnlocked)}
                   >
                     {ui.securityUnlockAction}
                   </button>
@@ -859,7 +873,11 @@ export default function SettingsSecuritySection({
                   {lang === "de" ? "Startverhalten" : "Startup behavior"}
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+                  {!isUnlocked
+                    ? (lang === "de"
+                        ? "Zum Ändern zuerst entsperren."
+                        : "Unlock first to change this.")
+                    : (unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc)}
                 </div>
               </div>
 
