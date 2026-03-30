@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import type { CSSProperties } from "react"
+import { Download, Copy, X } from "lucide-react"
 
 type VaultStatus = {
   is_initialized?: boolean
@@ -59,6 +60,15 @@ export default function SettingsSecuritySection({
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [unlockMode, setUnlockMode] = useState<"demand" | "startup">("demand")
+  const [recoveryDialog, setRecoveryDialog] = useState<{
+    isOpen: boolean
+    key: string
+    migrated: number
+  }>({
+    isOpen: false,
+    key: "",
+    migrated: 0
+  })
 
   const isProtected = Boolean(vaultStatus?.is_protected)
   const isUnlocked = Boolean(vaultStatus?.is_unlocked)
@@ -109,6 +119,68 @@ export default function SettingsSecuritySection({
     void refreshStatus()
   }, [])
 
+  useEffect(() => {
+    if (!recoveryDialog.isOpen) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      e.preventDefault()
+      setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [recoveryDialog.isOpen])
+
+  const copyRecoveryKey = async () => {
+    try {
+      await invoke("copy_text_to_clipboard", { text: recoveryDialog.key })
+      showToast(ui.securityRecoveryCopied)
+    } catch (e) {
+      showToast(
+        lang === "de"
+          ? `Recovery Key konnte nicht kopiert werden: ${String(e)}`
+          : `Could not copy recovery key: ${String(e)}`,
+        true
+      )
+    }
+  }
+
+  const downloadRecoveryKey = async () => {
+    try {
+      const fileName = "termina-ssh-recovery-key.txt"
+      const content = [
+        "Termina SSH Recovery Key",
+        "",
+        `Recovery Key: ${recoveryDialog.key}`,
+        `Migrated secret entries: ${recoveryDialog.migrated}`,
+        "",
+        "Store this file in a safe place."
+      ].join("\n")
+
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = fileName
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+
+      showToast(
+        lang === "de" ? "Recovery Key heruntergeladen" : "Recovery key downloaded"
+      )
+    } catch (e) {
+      showToast(
+        lang === "de"
+          ? `Recovery Key konnte nicht heruntergeladen werden: ${String(e)}`
+          : `Could not download recovery key: ${String(e)}`,
+        true
+      )
+    }
+  }
+
   const enableProtection = () => {
     showDialog({
       type: "prompt",
@@ -143,24 +215,11 @@ export default function SettingsSecuritySection({
 
           await refreshStatus()
 
-          const recoveryKey = String(result?.recovery_key || "")
-          const migrated = Number(result?.migrated_secret_entries || 0)
-
-          window.setTimeout(() => {
-            showDialog({
-              type: "alert",
-              title: ui.securityRecoveryTitle,
-              description:
-                `${ui.securityRecoveryDesc}\n\n${recoveryKey}\n\n${ui.securityMigratedPrefix}: ${migrated}`,
-              confirmLabel: ui.closeLabel,
-              secondaryLabel: ui.copyLabel,
-              onSecondary: async () => {
-                await invoke("copy_text_to_clipboard", { text: recoveryKey })
-                showToast(ui.securityRecoveryCopied)
-              },
-              onConfirm: async () => {}
-            })
-          }, 0)
+          setRecoveryDialog({
+            isOpen: true,
+            key: String(result?.recovery_key || ""),
+            migrated: Number(result?.migrated_secret_entries || 0)
+          })
 
           showToast(ui.securityEnabledToast)
         } catch (e) {
@@ -377,6 +436,75 @@ export default function SettingsSecuritySection({
                 {ui.securityLockAction}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {recoveryDialog.isOpen && (
+        <div
+          className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="min-h-[52px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
+              <div className="text-[14px] font-bold text-[var(--text-main)]">
+                {ui.securityRecoveryTitle}
+              </div>
+
+              <button
+                onClick={() => setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })}
+                className="ui-icon-btn"
+                title={ui.closeLabel}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-3">
+              <div className="text-[13px] leading-[1.5] text-[var(--text-muted)] whitespace-pre-line">
+                {ui.securityRecoveryDesc}
+              </div>
+
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-3 py-3 text-[13px] font-semibold tracking-[0.04em] text-[var(--text-main)] break-all">
+                {recoveryDialog.key}
+              </div>
+
+              <div className="text-[12px] text-[var(--text-muted)]">
+                {ui.securityMigratedPrefix}: {recoveryDialog.migrated}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-end gap-2 flex-wrap">
+              <button
+                onClick={() => void copyRecoveryKey()}
+                className="ui-btn-ghost inline-flex items-center gap-2"
+              >
+                <Copy size={14} />
+                <span>{ui.copyLabel}</span>
+              </button>
+
+              <button
+                onClick={() => void downloadRecoveryKey()}
+                className="ui-btn-ghost inline-flex items-center gap-2"
+              >
+                <Download size={14} />
+                <span>{lang === "de" ? "Download" : "Download"}</span>
+              </button>
+
+              <button
+                onClick={() => setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })}
+                className="ui-btn-primary"
+              >
+                {ui.closeLabel}
+              </button>
+            </div>
           </div>
         </div>
       )}
