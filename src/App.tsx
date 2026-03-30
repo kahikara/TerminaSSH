@@ -1485,7 +1485,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto py-2 px-3 flex flex-col gap-3 min-h-0">
           <div>
-            <div className={`flex items-center px-2 py-1 mb-2 rounded-xl hover:bg-[var(--bg-hover)] transition-colors ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+            <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
               {!isSidebarCollapsed && (
                 <h3 className="text-[11px] uppercase tracking-[0.08em] font-bold text-[var(--text-muted)] w-full py-1">
                   {t('connections', settings.lang)}
