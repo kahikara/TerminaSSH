@@ -1767,6 +1767,115 @@ fn enable_vault_protection(
 }
 
 #[tauri::command]
+fn reset_vault_master_password_with_recovery_key(
+    recovery_key: String,
+    new_master_password: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<EnableVaultProtectionResult, String> {
+    let normalized_recovery_key = recovery_key.trim().to_ascii_uppercase();
+    if normalized_recovery_key.is_empty() {
+        return Err("Recovery key is empty".to_string());
+    }
+
+    if new_master_password.trim().is_empty() {
+        return Err("Master password is empty".to_string());
+    }
+
+    if new_master_password.chars().count() < 6 {
+        return Err("Master password must be at least 6 characters".to_string());
+    }
+
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let row: (i32, String, Vec<u8>, Vec<u8>, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, unlock_mode, salt, recovery_encrypted_dek, kek_validation
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    if row.0 == 0 {
+        return Err("Vault protection is not enabled".to_string());
+    }
+
+    if row.3.is_empty() {
+        return Err("Recovery data is missing".to_string());
+    }
+
+    let recovery_wrap_key = derive_vault_key_from_secret(&normalized_recovery_key, &row.2)?;
+    let dek = vault_decrypt_combined(&recovery_wrap_key, &row.3)
+        .map_err(|_| "Recovery key is invalid".to_string())?;
+    let validation = vault_decrypt_combined(&dek, &row.4)
+        .map_err(|_| "Recovery key is invalid".to_string())?;
+
+    if validation.as_slice() != VAULT_VALIDATION_TEXT {
+        return Err("Recovery key is invalid".to_string());
+    }
+
+    let mut new_salt = [0u8; VAULT_SALT_LEN];
+    OsRng.fill_bytes(&mut new_salt);
+
+    let new_recovery_key = generate_recovery_key();
+    let new_master_key = derive_vault_key_from_secret(&new_master_password, &new_salt)?;
+    let new_recovery_wrap_key = derive_vault_key_from_secret(&new_recovery_key, &new_salt)?;
+
+    let encrypted_dek = vault_encrypt_combined(&new_master_key, &dek)?;
+    let recovery_encrypted_dek = vault_encrypt_combined(&new_recovery_wrap_key, &dek)?;
+    let kek_validation = vault_encrypt_combined(&dek, VAULT_VALIDATION_TEXT)?;
+
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&row.1);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET is_protected = 1,
+                 unlock_mode = ?1,
+                 salt = ?2,
+                 encrypted_dek = ?3,
+                 local_dek = X'',
+                 recovery_encrypted_dek = ?4,
+                 kek_validation = ?5,
+                 updated_at = ?6
+             WHERE id = 1",
+            (
+                &normalized_unlock_mode,
+                &new_salt.to_vec(),
+                &encrypted_dek,
+                &recovery_encrypted_dek,
+                &kek_validation,
+                &now,
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.is_unlocked = true;
+    runtime.unlock_mode = normalized_unlock_mode;
+    runtime.session_dek = Some(dek);
+
+    Ok(EnableVaultProtectionResult {
+        recovery_key: new_recovery_key,
+        migrated_secret_entries: 0,
+    })
+}
+
+#[tauri::command]
 fn unlock_vault(
     master_password: String,
     vault_state: State<'_, VaultState>,
@@ -5165,6 +5274,7 @@ pub fn run() {
             get_connections,
             get_vault_status,
             enable_vault_protection,
+            reset_vault_master_password_with_recovery_key,
             unlock_vault,
             lock_vault,
             update_connection,
