@@ -590,6 +590,20 @@ export default function App() {
   }, [showSidebarSearch, closeSidebarSearch]);
 
   useEffect(() => {
+    if (!isQuickConnectOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setQuickConnectOpen(false);
+      setQuickConnectDraft({ user: "", host: "", port: "22" });
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isQuickConnectOpen]);
+
+  useEffect(() => {
     if (!isSidebarCollapsed) return;
     if (!showSidebarSearch && !sidebarSearchQuery) return;
     setShowSidebarSearch(false);
