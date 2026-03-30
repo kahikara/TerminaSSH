@@ -890,7 +890,7 @@ fn delete_legacy_master_key() -> Result<(), String> {
     if !key_path.exists() {
         return Ok(());
     }
-    fs::remove_file(&key_path).map_err(|e| e.to_string())
+    wipe_and_remove_file(&key_path)
 }
 
 fn count_legacy_secret_entries(conn_db: &Connection) -> Result<usize, String> {
@@ -931,6 +931,7 @@ fn finalize_legacy_master_key_cleanup_with_dek(
     if count_legacy_secret_entries(conn_db)? > 0 {
         migrated = migrate_legacy_secrets_into_vault(conn_db, vault_conn, dek)?;
         clear_legacy_connection_secrets(conn_db)?;
+        let _ = conn_db.execute_batch("VACUUM;");
     }
 
     let key_path = PathBuf::from(get_key_path());
@@ -1993,6 +1994,10 @@ fn reset_vault_master_password_with_recovery_key(
         )
         .map_err(|e| e.to_string())?;
 
+    let conn_db = open_db()?;
+    let migrated_secret_entries =
+        finalize_legacy_master_key_cleanup_with_dek(&conn_db, &vault_conn, &dek)?;
+
     let mut runtime = vault_state
         .runtime
         .lock()
@@ -2003,7 +2008,7 @@ fn reset_vault_master_password_with_recovery_key(
 
     Ok(EnableVaultProtectionResult {
         recovery_key: new_recovery_key,
-        migrated_secret_entries: 0,
+        migrated_secret_entries,
     })
 }
 
@@ -2048,6 +2053,9 @@ fn unlock_vault(
     if validation.as_slice() != VAULT_VALIDATION_TEXT {
         return Err("Master password is invalid".to_string());
     }
+
+    let conn_db = open_db()?;
+    let _ = finalize_legacy_master_key_cleanup_with_dek(&conn_db, &vault_conn, &dek)?;
 
     let mut runtime = vault_state
         .runtime
