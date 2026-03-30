@@ -65,7 +65,7 @@ export function getSettingsUi(lang: string) {
       copyLink: "Link kopieren",
       copiedLink: "Link kopiert!",
       versionLabel: "Projektstatus",
-      versionValue: "UI und Workflow werden aktiv verfeinert.",
+      versionValue: "Kern Workflow ist stabil und wird aktiv erweitert.",
       settingsTitle: t("settings", lang)
     }
   }
@@ -133,7 +133,7 @@ export function getSettingsUi(lang: string) {
     copyLink: "Copy link",
     copiedLink: "Link copied!",
     versionLabel: "Project status",
-    versionValue: "UI and workflow are being actively refined.",
+    versionValue: "Core workflow is stable and actively expanding.",
     settingsTitle: t("settings", lang)
   }
 }

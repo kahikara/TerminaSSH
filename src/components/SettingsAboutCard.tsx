@@ -1,4 +1,4 @@
-import { Heart, MonitorCog, Copy } from "lucide-react"
+import { Heart, MonitorCog, Copy, Coffee } from "lucide-react"
 
 type Props = {
   ui: any
@@ -21,7 +21,7 @@ export default function SettingsAboutCard({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1.2fr 0.8fr",
+        gridTemplateColumns: "1.05fr 0.95fr",
         gap: 14
       }}
     >
@@ -125,15 +125,26 @@ export default function SettingsAboutCard({
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "row", gap: 9 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+            gap: 9
+          }}
+        >
           <button
             onClick={async () => {
               const ok = await openExternalLink("https://ko-fi.com/ming83")
               if (!ok) showToast("Could not open link", true)
             }}
-            style={primaryBtnStyle}
+            style={{
+              ...primaryBtnStyle,
+              width: "100%",
+              padding: "0 14px",
+              whiteSpace: "nowrap"
+            }}
           >
-            <Heart size={15} />
+            <Coffee size={15} />
             {ui.openKofi}
           </button>
 
@@ -143,7 +154,11 @@ export default function SettingsAboutCard({
               if (ok) showToast(ui.copiedLink)
               else showToast("Clipboard failed", true)
             }}
-            style={actionBtnStyle}
+            style={{
+              ...actionBtnStyle,
+              width: "100%",
+              whiteSpace: "nowrap"
+            }}
           >
             <Copy size={15} />
             {ui.copyLink}

@@ -33,9 +33,11 @@ export default function SettingsModalHeader({
         <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>
           {title}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-          {subtitle}
-        </div>
+        {subtitle.trim().length > 0 && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+            {subtitle}
+          </div>
+        )}
       </div>
 
       <button onClick={onClose} style={iconButton} title={closeLabel}>
