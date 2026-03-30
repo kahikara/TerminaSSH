@@ -1035,13 +1035,6 @@ fn set_private_file_permissions(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn harden_master_key_permissions() {
-    let key_path = PathBuf::from(get_key_path());
-    if key_path.exists() {
-        let _ = set_private_file_permissions(&key_path);
-    }
-}
-
 fn get_keys_dir() -> String {
     let dir = format!("{}/keys", get_app_dir());
     let _ = fs::create_dir_all(&dir);
@@ -1412,26 +1405,6 @@ fn authenticate_session(
     }
 
     false
-}
-
-fn encrypt_pw(pw: &str) -> Result<String, String> {
-    if pw.is_empty() {
-        return Ok(String::new());
-    }
-
-    let key = get_or_create_key();
-    let cipher = Aes256Gcm::new(&key.into());
-    let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes);
-
-    let ciphertext = cipher
-        .encrypt(nonce, pw.as_bytes())
-        .map_err(|e| e.to_string())?;
-
-    let mut combined = nonce_bytes.to_vec();
-    combined.extend_from_slice(&ciphertext);
-    Ok(STANDARD.encode(combined))
 }
 
 fn decrypt_pw(encoded: &str) -> Result<String, String> {
