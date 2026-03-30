@@ -876,7 +876,7 @@ export default function App() {
       return;
     }
 
-    const tabId = Math.random().toString(36).substring(7);
+    const tabId = createTabId();
     const newTab: AppTab = { ...server, tabId, sessionId: tabId };
     setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(tabId);
@@ -2109,83 +2109,6 @@ export default function App() {
               <X size={14} />
               <span>{settings.lang === 'de' ? 'Tab schließen' : 'Close tab'}</span>
             </button>
-          </div>
-        </div>
-      )}
-
-      {sidebarContextMenu && (
-        <div className="fixed inset-0 z-[260]" onMouseDown={closeSidebarContextMenu}>
-          <div
-            className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
-            style={{
-              left: Math.max(8, Math.min(sidebarContextMenu.x, window.innerWidth - 228)),
-              top: Math.max(8, Math.min(sidebarContextMenu.y, window.innerHeight - (sidebarContextMenu.isLocal ? 108 : 176)))
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            <button
-              onClick={() => {
-                closeSidebarContextMenu();
-                void openTerminal(sidebarContextMenu.server);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              {sidebarContextMenu.isLocal ? <TermIcon size={14} /> : <Server size={14} />}
-              <span>{t('open', settings.lang)}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                closeSidebarContextMenu();
-                void openTerminal(sidebarContextMenu.server, { forceNewTab: true });
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Plus size={14} />
-              <span>{t('openInNewTab', settings.lang)}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                closeSidebarContextMenu();
-                void openTerminal(sidebarContextMenu.server, { openInSplit: true });
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Folder size={14} />
-              <span>{t('openInSplit', settings.lang)}</span>
-            </button>
-
-            {!sidebarContextMenu.isLocal && (
-              <>
-                <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
-
-                <button
-                  onClick={() => editSidebarServer(sidebarContextMenu.server)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <SquarePen size={14} />
-                  <span>{t('edit', settings.lang)}</span>
-                </button>
-
-                <button
-                  onClick={() => duplicateSidebarServer(sidebarContextMenu.server)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>{t('duplicate', settings.lang)}</span>
-                </button>
-
-                <button
-                  onClick={() => deleteSidebarServer(sidebarContextMenu.server)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
-                >
-                  <X size={14} />
-                  <span>{t('delete', settings.lang)}</span>
-                </button>
-              </>
-            )}
           </div>
         </div>
       )}
