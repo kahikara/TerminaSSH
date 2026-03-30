@@ -29,6 +29,14 @@ type AppMetaInfo = {
   app_version?: string
 }
 
+type VaultStatus = {
+  is_initialized?: boolean
+  is_protected?: boolean
+  is_unlocked?: boolean
+  unlock_mode?: string
+  has_legacy_master_key?: boolean
+}
+
 type ConnectionItem = {
   id?: number | string
   name?: string
@@ -270,10 +278,65 @@ export default function App() {
   const sidebarSearchFocusTimerRef = useRef<number | null>(null);
   const tabDragStartXRef = useRef<number | null>(null);
 
+  const startupVaultPromptHandledRef = useRef(false);
+  const startupVaultPromptOpenRef = useRef(false);
+
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
     lang: settings.lang,
     showToast
   });
+
+  const openStartupVaultUnlockDialog = useCallback(() => {
+    if (startupVaultPromptOpenRef.current) return;
+
+    startupVaultPromptOpenRef.current = true;
+
+    showDialog({
+      type: 'prompt',
+      title: settings.lang === 'de' ? 'Vault entsperren' : 'Unlock vault',
+      description: settings.lang === 'de'
+        ? 'Dein Vault ist auf automatisches Entsperren beim Start gesetzt. Bitte gib dein Master Passwort ein.'
+        : 'Your vault is configured to unlock automatically at startup. Please enter your master password.',
+      placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
+      isPassword: true,
+      confirmLabel: settings.lang === 'de' ? 'Entsperren' : 'Unlock',
+      cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
+      validate: (value: string) => {
+        if (!String(value || '').trim()) {
+          return settings.lang === 'de'
+            ? 'Master Passwort ist erforderlich'
+            : 'Master password is required';
+        }
+        return '';
+      },
+      onConfirm: async (value: string) => {
+        try {
+          await invoke('unlock_vault', { masterPassword: value });
+          showToast(
+            settings.lang === 'de'
+              ? 'Vault beim Start entsperrt'
+              : 'Vault unlocked at startup'
+          );
+        } catch (e) {
+          showToast(
+            settings.lang === 'de'
+              ? `Vault konnte nicht entsperrt werden: ${String(e)}`
+              : `Could not unlock vault: ${String(e)}`,
+            true
+          );
+
+          window.setTimeout(() => {
+            openStartupVaultUnlockDialog();
+          }, 0);
+        } finally {
+          startupVaultPromptOpenRef.current = false;
+        }
+      },
+      onCancel: () => {
+        startupVaultPromptOpenRef.current = false;
+      }
+    });
+  }, [settings.lang, showDialog, showToast]);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -321,6 +384,42 @@ export default function App() {
         setAppVersion("")
       })
   }, [])
+
+  useEffect(() => {
+    if (startupVaultPromptHandledRef.current) return;
+    startupVaultPromptHandledRef.current = true;
+
+    let cancelled = false;
+
+    const startupVaultCheck = async () => {
+      try {
+        const status = await invoke('get_vault_status') as VaultStatus;
+        if (cancelled) return;
+
+        const isProtected = Boolean(status?.is_protected);
+        const isUnlocked = Boolean(status?.is_unlocked);
+        const unlockMode = String(status?.unlock_mode || '').toLowerCase();
+
+        if (isProtected && !isUnlocked && unlockMode === 'startup') {
+          openStartupVaultUnlockDialog();
+        }
+      } catch (e) {
+        if (cancelled) return;
+        showToast(
+          settings.lang === 'de'
+            ? `Vault Status konnte nicht geladen werden: ${String(e)}`
+            : `Could not load vault status: ${String(e)}`,
+          true
+        );
+      }
+    };
+
+    void startupVaultCheck();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openStartupVaultUnlockDialog, settings.lang, showToast])
 
   useEffect(() => {
     if (!useCustomLinuxTitlebar) return
