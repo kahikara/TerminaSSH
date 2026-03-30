@@ -252,19 +252,59 @@ export default function SettingsSecuritySection({
       return
     }
 
-    if (!isUnlocked) {
-      setUnlockMode(savedUnlockMode)
-      showToast(
-        lang === "de"
-          ? "Zum Ändern des Startverhaltens muss der Vault zuerst entsperrt werden"
-          : "Unlock the vault first to change the startup behavior",
-        true
-      )
+    if (nextMode === savedUnlockMode) {
+      setUnlockMode(nextMode)
       return
     }
 
-    if (nextMode === savedUnlockMode) {
-      setUnlockMode(nextMode)
+    if (!isUnlocked) {
+      setUnlockMode(savedUnlockMode)
+
+      showDialog({
+        type: "prompt",
+        title: lang === "de" ? "Vault entsperren" : "Unlock vault",
+        description:
+          lang === "de"
+            ? "Gib dein Master Passwort ein, um das Startverhalten zu ändern."
+            : "Enter your master password to change the startup behavior.",
+        placeholder: ui.securityMasterPasswordPlaceholder,
+        isPassword: true,
+        confirmLabel: ui.securityUnlockAction,
+        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+        validate: (value: string) => {
+          if (!value.trim()) {
+            return lang === "de"
+              ? "Master Passwort ist erforderlich"
+              : "Master password is required"
+          }
+          return ""
+        },
+        onConfirm: async (value: string) => {
+          setBusy(true)
+          try {
+            await invoke("unlock_vault", { masterPassword: value })
+            await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
+            await refreshStatus()
+            showToast(
+              lang === "de"
+                ? "Vault entsperrt und Unlock Mode gespeichert"
+                : "Vault unlocked and unlock mode saved"
+            )
+          } catch (e) {
+            setUnlockMode(savedUnlockMode)
+            showToast(
+              lang === "de"
+                ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
+                : `Could not save unlock mode: ${String(e)}`,
+              true
+            )
+            throw e
+          } finally {
+            setBusy(false)
+          }
+        }
+      })
+
       return
     }
 
@@ -754,7 +794,7 @@ export default function SettingsSecuritySection({
                 value={unlockMode}
                 onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
                 style={{ ...uniformSelectStyle, marginTop: 8 }}
-                disabled={busy || (isProtected && !isUnlocked)}
+                disabled={busy}
               >
                 <option value="demand">{ui.securityModeDemand}</option>
                 <option value="startup">{ui.securityModeStartup}</option>
@@ -850,7 +890,7 @@ export default function SettingsSecuritySection({
                     type="button"
                     onClick={unlockVault}
                     style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
-                    disabled={busy || (isProtected && !isUnlocked)}
+                    disabled={busy}
                   >
                     {ui.securityUnlockAction}
                   </button>
@@ -873,11 +913,11 @@ export default function SettingsSecuritySection({
                   {lang === "de" ? "Startverhalten" : "Startup behavior"}
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {!isUnlocked
-                    ? (lang === "de"
-                        ? "Zum Ändern zuerst entsperren."
-                        : "Unlock first to change this.")
-                    : (unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc)}
+                  {isUnlocked
+                    ? (unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc)
+                    : (lang === "de"
+                        ? "Beim Ändern wirst du nach dem Master Passwort gefragt."
+                        : "You will be asked for the master password when changing this.")}
                 </div>
               </div>
 
