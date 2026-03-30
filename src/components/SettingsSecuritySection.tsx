@@ -681,24 +681,16 @@ export default function SettingsSecuritySection({
 
   return (
     <>
-      <div style={cardStyle}>
-        <div
-          style={{
-            ...rowStyle,
-            alignItems: "flex-start",
-            justifyContent: "space-between"
-          }}
-        >
-          <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-            <div className="text-[14px] font-semibold text-[var(--text-main)]">
-              {ui.securityTitle}
-            </div>
-            <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-              {ui.securityDesc}
-            </div>
+      {!isProtected && (
+        <div style={cardStyle}>
+          <div className="text-[13px] font-semibold text-[var(--text-main)]">
+            {lang === "de" ? "Schutz aktivieren" : "Enable protection"}
           </div>
-
-        </div>
+          <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
+            {lang === "de"
+              ? "Lege dein Master Passwort fest und entscheide, wann der Vault entsperrt werden soll."
+              : "Set your master password and choose when the vault should be unlocked."}
+          </div>
 
         {vaultStatus?.has_legacy_master_key ? (
           <div
@@ -718,18 +710,6 @@ export default function SettingsSecuritySection({
             </div>
           </div>
         ) : null}
-      </div>
-
-      {!isProtected && (
-        <div style={cardStyle}>
-          <div className="text-[13px] font-semibold text-[var(--text-main)]">
-            {lang === "de" ? "Schutz aktivieren" : "Enable protection"}
-          </div>
-          <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-            {lang === "de"
-              ? "Lege dein Master Passwort fest und entscheide, wann der Vault entsperrt werden soll."
-              : "Set your master password and choose when the vault should be unlocked."}
-          </div>
 
           <div
             style={{
@@ -805,6 +785,25 @@ export default function SettingsSecuritySection({
               <span style={statusToneStyle}>{statusLabel}</span>
             </div>
           </div>
+
+        {vaultStatus?.has_legacy_master_key ? (
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 12,
+              border: "1px solid color-mix(in srgb, var(--danger) 22%, var(--border-subtle))",
+              background: "color-mix(in srgb, var(--danger) 8%, var(--bg-app))",
+              padding: 12
+            }}
+          >
+            <div className="text-[12px] font-semibold text-[var(--text-main)]">
+              {ui.securityLegacyTitle}
+            </div>
+            <div className="text-[12px] leading-[1.5] text-[var(--text-muted)] mt-1">
+              {ui.securityLegacyDesc}
+            </div>
+          </div>
+        ) : null}
 
           <div
             style={{
