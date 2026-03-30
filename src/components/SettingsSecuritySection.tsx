@@ -344,6 +344,93 @@ export default function SettingsSecuritySection({
     }
   }
 
+  const changeMasterPassword = () => {
+    if (!isUnlocked) {
+      showToast(
+        lang === "de"
+          ? "Zum Ändern des Master Passworts muss der Vault entsperrt sein"
+          : "Unlock the vault first to change the master password",
+        true
+      )
+      return
+    }
+
+    showDialog({
+      type: "prompt",
+      title: lang === "de" ? "Aktuelles Master Passwort" : "Current master password",
+      description:
+        lang === "de"
+          ? "Gib zuerst dein aktuelles Master Passwort ein."
+          : "Enter your current master password first.",
+      placeholder: ui.securityMasterPasswordPlaceholder,
+      isPassword: true,
+      confirmLabel: lang === "de" ? "Weiter" : "Continue",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      validate: (value: string) => {
+        if (!value.trim()) {
+          return lang === "de"
+            ? "Aktuelles Master Passwort ist erforderlich"
+            : "Current master password is required"
+        }
+        return ""
+      },
+      onConfirm: async (currentValue: string) => {
+        const currentMasterPassword = String(currentValue || "")
+
+        showDialog({
+          type: "prompt",
+          title: lang === "de" ? "Neues Master Passwort" : "New master password",
+          description:
+            lang === "de"
+              ? "Setze jetzt dein neues Master Passwort."
+              : "Set your new master password now.",
+          placeholder: ui.securityMasterPasswordPlaceholder,
+          confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
+          isPassword: true,
+          requireConfirm: true,
+          confirmLabel: lang === "de" ? "Ändern" : "Change",
+          cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+          validate: (value: string, confirmValue: string) => {
+            if (!value.trim()) return ui.securityMasterPasswordEmpty
+            if (value.length < 6) return ui.securityMasterPasswordTooShort
+            if (value !== confirmValue) return ui.securityMasterPasswordMismatch
+            if (value === currentMasterPassword) {
+              return lang === "de"
+                ? "Das neue Master Passwort muss sich unterscheiden"
+                : "The new master password must be different"
+            }
+            return ""
+          },
+          onConfirm: async (newValue: string) => {
+            setBusy(true)
+            try {
+              await invoke("change_vault_master_password", {
+                currentMasterPassword,
+                newMasterPassword: newValue
+              })
+              await refreshStatus(false)
+              showToast(
+                lang === "de"
+                  ? "Master Passwort geändert"
+                  : "Master password changed"
+              )
+            } catch (e) {
+              showToast(
+                lang === "de"
+                  ? `Master Passwort konnte nicht geändert werden: ${String(e)}`
+                  : `Could not change master password: ${String(e)}`,
+                true
+              )
+              throw e
+            } finally {
+              setBusy(false)
+            }
+          }
+        })
+      }
+    })
+  }
+
   const disableProtection = () => {
     if (!isUnlocked) {
       showToast(
@@ -756,6 +843,15 @@ export default function SettingsSecuritySection({
                     disabled={busy}
                   >
                     {ui.securityLockAction}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={changeMasterPassword}
+                    style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    disabled={busy}
+                  >
+                    {lang === "de" ? "Master Passwort ändern" : "Change master password"}
                   </button>
 
                   <button
