@@ -2013,6 +2013,86 @@ fn reset_vault_master_password_with_recovery_key(
 }
 
 #[tauri::command]
+fn change_vault_master_password(
+    current_master_password: String,
+    new_master_password: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<VaultStatus, String> {
+    if current_master_password.trim().is_empty() {
+        return Err("Current master password is empty".to_string());
+    }
+
+    if new_master_password.trim().is_empty() {
+        return Err("New master password is empty".to_string());
+    }
+
+    if new_master_password.chars().count() < 6 {
+        return Err("New master password must be at least 6 characters".to_string());
+    }
+
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let row: (i32, String, Vec<u8>, Vec<u8>, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, unlock_mode, salt, encrypted_dek, kek_validation
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    if row.0 == 0 {
+        return Err("Vault protection is not enabled".to_string());
+    }
+
+    let current_master_key = derive_vault_key_from_secret(&current_master_password, &row.2)?;
+    let dek = vault_decrypt_combined(&current_master_key, &row.3)?;
+    let validation = vault_decrypt_combined(&dek, &row.4)?;
+
+    if validation.as_slice() != VAULT_VALIDATION_TEXT {
+        return Err("Current master password is invalid".to_string());
+    }
+
+    let new_master_key = derive_vault_key_from_secret(&new_master_password, &row.2)?;
+    let encrypted_dek = vault_encrypt_combined(&new_master_key, &dek)?;
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&row.1);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET encrypted_dek = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&encrypted_dek, &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let conn_db = open_db()?;
+    let _ = finalize_legacy_master_key_cleanup_with_dek(&conn_db, &vault_conn, &dek)?;
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.is_unlocked = true;
+    runtime.unlock_mode = normalized_unlock_mode;
+    runtime.session_dek = Some(dek);
+
+    load_vault_status(&vault_conn, &runtime)
+}
+
+#[tauri::command]
 fn unlock_vault(
     master_password: String,
     vault_state: State<'_, VaultState>,
@@ -5418,6 +5498,7 @@ pub fn run() {
             regenerate_vault_recovery_key,
             update_vault_unlock_mode,
             reset_vault_master_password_with_recovery_key,
+            change_vault_master_password,
             unlock_vault,
             lock_vault,
             update_connection,
