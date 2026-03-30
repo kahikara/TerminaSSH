@@ -1551,7 +1551,7 @@ export default function App() {
                     className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
                     title={t('quickConnect', settings.lang)}
                   >
-                    <Zap size={16} />
+                    <Zap size={15} strokeWidth={1.8} />
                   </button>
                 )}
               </div>
