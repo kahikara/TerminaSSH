@@ -185,6 +185,53 @@ export default function SettingsSecuritySection({
     return () => window.removeEventListener("keydown", onKeyDown, true)
   }, [recoveryDialog.isOpen])
 
+  const ensureVaultUnlocked = (
+    description: string,
+    onUnlocked: () => void | Promise<void>
+  ) => {
+    if (isUnlocked) {
+      void onUnlocked()
+      return
+    }
+
+    showDialog({
+      type: "prompt",
+      title: lang === "de" ? "Vault entsperren" : "Unlock vault",
+      description,
+      placeholder: ui.securityMasterPasswordPlaceholder,
+      isPassword: true,
+      confirmLabel: ui.securityUnlockAction,
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      validate: (value: string) => {
+        if (!value.trim()) {
+          return lang === "de"
+            ? "Master Passwort ist erforderlich"
+            : "Master password is required"
+        }
+        return ""
+      },
+      onConfirm: async (value: string) => {
+        setBusy(true)
+        try {
+          await invoke("unlock_vault", { masterPassword: value })
+          await refreshStatus()
+        } catch (e) {
+          showToast(
+            lang === "de"
+              ? `Vault konnte nicht entsperrt werden: ${String(e)}`
+              : `Could not unlock vault: ${String(e)}`,
+            true
+          )
+          throw e
+        } finally {
+          setBusy(false)
+        }
+
+        await onUnlocked()
+      }
+    })
+  }
+
   const showRecoveryKeyDialog = (key: string, migrated = 0) => {
     setRecoveryDialog({
       isOpen: true,
@@ -257,78 +304,42 @@ export default function SettingsSecuritySection({
       return
     }
 
+    const persistUnlockMode = async () => {
+      setUnlockMode(nextMode)
+      setBusy(true)
+      try {
+        await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
+        await refreshStatus()
+        showToast(
+          lang === "de"
+            ? "Unlock Mode gespeichert"
+            : "Unlock mode saved"
+        )
+      } catch (e) {
+        setUnlockMode(savedUnlockMode)
+        showToast(
+          lang === "de"
+            ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
+            : `Could not save unlock mode: ${String(e)}`,
+          true
+        )
+      } finally {
+        setBusy(false)
+      }
+    }
+
     if (!isUnlocked) {
       setUnlockMode(savedUnlockMode)
-
-      showDialog({
-        type: "prompt",
-        title: lang === "de" ? "Vault entsperren" : "Unlock vault",
-        description:
-          lang === "de"
-            ? "Gib dein Master Passwort ein, um das Startverhalten zu ändern."
-            : "Enter your master password to change the startup behavior.",
-        placeholder: ui.securityMasterPasswordPlaceholder,
-        isPassword: true,
-        confirmLabel: ui.securityUnlockAction,
-        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-        validate: (value: string) => {
-          if (!value.trim()) {
-            return lang === "de"
-              ? "Master Passwort ist erforderlich"
-              : "Master password is required"
-          }
-          return ""
-        },
-        onConfirm: async (value: string) => {
-          setBusy(true)
-          try {
-            await invoke("unlock_vault", { masterPassword: value })
-            await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
-            await refreshStatus()
-            showToast(
-              lang === "de"
-                ? "Vault entsperrt und Unlock Mode gespeichert"
-                : "Vault unlocked and unlock mode saved"
-            )
-          } catch (e) {
-            setUnlockMode(savedUnlockMode)
-            showToast(
-              lang === "de"
-                ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
-                : `Could not save unlock mode: ${String(e)}`,
-              true
-            )
-            throw e
-          } finally {
-            setBusy(false)
-          }
-        }
-      })
-
+      ensureVaultUnlocked(
+        lang === "de"
+          ? "Gib dein Master Passwort ein, um das Startverhalten zu ändern."
+          : "Enter your master password to change the startup behavior.",
+        persistUnlockMode
+      )
       return
     }
 
-    setUnlockMode(nextMode)
-    setBusy(true)
-    try {
-      await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
-      await refreshStatus()
-      showToast(
-        lang === "de"
-          ? "Unlock Mode gespeichert"
-          : "Unlock mode saved"
-      )
-    } catch (e) {
-      setUnlockMode(savedUnlockMode)
-      showToast(
-        lang === "de"
-          ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
-          : `Could not save unlock mode: ${String(e)}`,
-        true
-      )
-    } finally {
-      setBusy(false)
-    }
+    await persistUnlockMode()
   }
 
   const enableProtection = () => {
@@ -429,180 +440,177 @@ export default function SettingsSecuritySection({
   }
 
   const changeMasterPassword = () => {
-    if (!isUnlocked) {
-      showToast(
-        lang === "de"
-          ? "Zum Ändern des Master Passworts muss der Vault entsperrt sein"
-          : "Unlock the vault first to change the master password",
-        true
-      )
-      return
+    const openChangePasswordDialog = () => {
+      showDialog({
+        type: "prompt",
+        title: lang === "de" ? "Aktuelles Master Passwort" : "Current master password",
+        description:
+          lang === "de"
+            ? "Gib zuerst dein aktuelles Master Passwort ein."
+            : "Enter your current master password first.",
+        placeholder: ui.securityMasterPasswordPlaceholder,
+        isPassword: true,
+        confirmLabel: lang === "de" ? "Weiter" : "Continue",
+        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+        validate: (value: string) => {
+          if (!value.trim()) {
+            return lang === "de"
+              ? "Aktuelles Master Passwort ist erforderlich"
+              : "Current master password is required"
+          }
+          return ""
+        },
+        onConfirm: async (currentValue: string) => {
+          const currentMasterPassword = String(currentValue || "")
+
+          showDialog({
+            type: "prompt",
+            title: lang === "de" ? "Neues Master Passwort" : "New master password",
+            description:
+              lang === "de"
+                ? "Setze jetzt dein neues Master Passwort."
+                : "Set your new master password now.",
+            placeholder: ui.securityMasterPasswordPlaceholder,
+            confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
+            isPassword: true,
+            requireConfirm: true,
+            confirmLabel: lang === "de" ? "Ändern" : "Change",
+            cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+            validate: (value: string, confirmValue: string) => {
+              if (!value.trim()) return ui.securityMasterPasswordEmpty
+              if (value.length < 6) return ui.securityMasterPasswordTooShort
+              if (value !== confirmValue) return ui.securityMasterPasswordMismatch
+              if (value === currentMasterPassword) {
+                return lang === "de"
+                  ? "Das neue Master Passwort muss sich unterscheiden"
+                  : "The new master password must be different"
+              }
+              return ""
+            },
+            onConfirm: async (newValue: string) => {
+              setBusy(true)
+              try {
+                await invoke("change_vault_master_password", {
+                  currentMasterPassword,
+                  newMasterPassword: newValue
+                })
+                await refreshStatus()
+                showToast(
+                  lang === "de"
+                    ? "Master Passwort geändert"
+                    : "Master password changed"
+                )
+              } catch (e) {
+                showToast(
+                  lang === "de"
+                    ? `Master Passwort konnte nicht geändert werden: ${String(e)}`
+                    : `Could not change master password: ${String(e)}`,
+                  true
+                )
+                throw e
+              } finally {
+                setBusy(false)
+              }
+            }
+          })
+        }
+      })
     }
 
-    showDialog({
-      type: "prompt",
-      title: lang === "de" ? "Aktuelles Master Passwort" : "Current master password",
-      description:
-        lang === "de"
-          ? "Gib zuerst dein aktuelles Master Passwort ein."
-          : "Enter your current master password first.",
-      placeholder: ui.securityMasterPasswordPlaceholder,
-      isPassword: true,
-      confirmLabel: lang === "de" ? "Weiter" : "Continue",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      validate: (value: string) => {
-        if (!value.trim()) {
-          return lang === "de"
-            ? "Aktuelles Master Passwort ist erforderlich"
-            : "Current master password is required"
-        }
-        return ""
-      },
-      onConfirm: async (currentValue: string) => {
-        const currentMasterPassword = String(currentValue || "")
-
-        showDialog({
-          type: "prompt",
-          title: lang === "de" ? "Neues Master Passwort" : "New master password",
-          description:
-            lang === "de"
-              ? "Setze jetzt dein neues Master Passwort."
-              : "Set your new master password now.",
-          placeholder: ui.securityMasterPasswordPlaceholder,
-          confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
-          isPassword: true,
-          requireConfirm: true,
-          confirmLabel: lang === "de" ? "Ändern" : "Change",
-          cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-          validate: (value: string, confirmValue: string) => {
-            if (!value.trim()) return ui.securityMasterPasswordEmpty
-            if (value.length < 6) return ui.securityMasterPasswordTooShort
-            if (value !== confirmValue) return ui.securityMasterPasswordMismatch
-            if (value === currentMasterPassword) {
-              return lang === "de"
-                ? "Das neue Master Passwort muss sich unterscheiden"
-                : "The new master password must be different"
-            }
-            return ""
-          },
-          onConfirm: async (newValue: string) => {
-            setBusy(true)
-            try {
-              await invoke("change_vault_master_password", {
-                currentMasterPassword,
-                newMasterPassword: newValue
-              })
-              await refreshStatus()
-              showToast(
-                lang === "de"
-                  ? "Master Passwort geändert"
-                  : "Master password changed"
-              )
-            } catch (e) {
-              showToast(
-                lang === "de"
-                  ? `Master Passwort konnte nicht geändert werden: ${String(e)}`
-                  : `Could not change master password: ${String(e)}`,
-                true
-              )
-              throw e
-            } finally {
-              setBusy(false)
-            }
-          }
-        })
-      }
-    })
+    ensureVaultUnlocked(
+      lang === "de"
+        ? "Gib dein Master Passwort ein, um das Master Passwort zu ändern."
+        : "Enter your master password to change the master password.",
+      openChangePasswordDialog
+    )
   }
 
   const disableProtection = () => {
-    if (!isUnlocked) {
-      showToast(
-        lang === "de"
-          ? "Zum Deaktivieren muss der Vault zuerst entsperrt werden"
-          : "Unlock the vault first to disable protection",
-        true
-      )
-      return
+    const openDisableProtectionDialog = () => {
+      showDialog({
+        type: "confirm",
+        tone: "danger",
+        title: lang === "de" ? "Schutz deaktivieren" : "Disable protection",
+        description:
+          lang === "de"
+            ? "Der Master Passwort Schutz wird entfernt. Secrets bleiben weiter in vault.db, aber die App funktioniert danach wieder ohne Unlock."
+            : "Master password protection will be removed. Secrets stay in vault.db, but the app will work again without unlocking.",
+        confirmLabel: lang === "de" ? "Deaktivieren" : "Disable",
+        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+        onConfirm: async () => {
+          setBusy(true)
+          try {
+            await invoke("disable_vault_protection")
+            await refreshStatus()
+            showToast(
+              lang === "de"
+                ? "Vault Schutz deaktiviert"
+                : "Vault protection disabled"
+            )
+          } catch (e) {
+            showToast(
+              lang === "de"
+                ? `Vault Schutz konnte nicht deaktiviert werden: ${String(e)}`
+                : `Could not disable vault protection: ${String(e)}`,
+              true
+            )
+          } finally {
+            setBusy(false)
+          }
+        }
+      })
     }
 
-    showDialog({
-      type: "confirm",
-      tone: "danger",
-      title: lang === "de" ? "Schutz deaktivieren" : "Disable protection",
-      description:
-        lang === "de"
-          ? "Der Master Passwort Schutz wird entfernt. Secrets bleiben weiter in vault.db, aber die App funktioniert danach wieder ohne Unlock."
-          : "Master password protection will be removed. Secrets stay in vault.db, but the app will work again without unlocking.",
-      confirmLabel: lang === "de" ? "Deaktivieren" : "Disable",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      onConfirm: async () => {
-        setBusy(true)
-        try {
-          await invoke("disable_vault_protection")
-          await refreshStatus()
-          showToast(
-            lang === "de"
-              ? "Vault Schutz deaktiviert"
-              : "Vault protection disabled"
-          )
-        } catch (e) {
-          showToast(
-            lang === "de"
-              ? `Vault Schutz konnte nicht deaktiviert werden: ${String(e)}`
-              : `Could not disable vault protection: ${String(e)}`,
-            true
-          )
-        } finally {
-          setBusy(false)
-        }
-      }
-    })
+    ensureVaultUnlocked(
+      lang === "de"
+        ? "Gib dein Master Passwort ein, um den Schutz zu deaktivieren."
+        : "Enter your master password to disable protection.",
+      openDisableProtectionDialog
+    )
   }
 
   const regenerateRecoveryKey = () => {
-    if (!isUnlocked) {
-      showToast(
-        lang === "de"
-          ? "Zum Erzeugen eines neuen Recovery Keys muss der Vault entsperrt sein"
-          : "Unlock the vault first to generate a new recovery key",
-        true
-      )
-      return
+    const openRegenerateRecoveryDialog = () => {
+      showDialog({
+        type: "confirm",
+        title: lang === "de" ? "Neuen Recovery Key erzeugen" : "Generate new recovery key",
+        description:
+          lang === "de"
+            ? "Der bisherige Recovery Key wird ersetzt. Speichere den neuen Key danach unbedingt."
+            : "The current recovery key will be replaced. Make sure you save the new key afterwards.",
+        confirmLabel: lang === "de" ? "Erzeugen" : "Generate",
+        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+        onConfirm: async () => {
+          setBusy(true)
+          try {
+            const result = await invoke("regenerate_vault_recovery_key") as EnableVaultProtectionResult
+            await refreshStatus()
+            showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
+            showToast(
+              lang === "de"
+                ? "Neuer Recovery Key erzeugt"
+                : "New recovery key generated"
+            )
+          } catch (e) {
+            showToast(
+              lang === "de"
+                ? `Recovery Key konnte nicht erzeugt werden: ${String(e)}`
+                : `Could not generate recovery key: ${String(e)}`,
+              true
+            )
+          } finally {
+            setBusy(false)
+          }
+        }
+      })
     }
 
-    showDialog({
-      type: "confirm",
-      title: lang === "de" ? "Neuen Recovery Key erzeugen" : "Generate new recovery key",
-      description:
-        lang === "de"
-          ? "Der bisherige Recovery Key wird ersetzt. Speichere den neuen Key danach unbedingt."
-          : "The current recovery key will be replaced. Make sure you save the new key afterwards.",
-      confirmLabel: lang === "de" ? "Erzeugen" : "Generate",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      onConfirm: async () => {
-        setBusy(true)
-        try {
-          const result = await invoke("regenerate_vault_recovery_key") as EnableVaultProtectionResult
-          await refreshStatus()
-          showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
-          showToast(
-            lang === "de"
-              ? "Neuer Recovery Key erzeugt"
-              : "New recovery key generated"
-          )
-        } catch (e) {
-          showToast(
-            lang === "de"
-              ? `Recovery Key konnte nicht erzeugt werden: ${String(e)}`
-              : `Could not generate recovery key: ${String(e)}`,
-            true
-          )
-        } finally {
-          setBusy(false)
-        }
-      }
-    })
+    ensureVaultUnlocked(
+      lang === "de"
+        ? "Gib dein Master Passwort ein, um einen neuen Recovery Key zu erzeugen."
+        : "Enter your master password to generate a new recovery key.",
+      openRegenerateRecoveryDialog
+    )
   }
 
   const beginRecoveryResetWithKey = (normalizedRecoveryKey: string) => {
