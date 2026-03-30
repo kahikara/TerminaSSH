@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { save } from "@tauri-apps/plugin-dialog"
-import { writeTextFile } from "@tauri-apps/plugin-fs"
+import { open, save } from "@tauri-apps/plugin-dialog"
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import type { CSSProperties } from "react"
 import { Download, Copy, X } from "lucide-react"
 
@@ -49,6 +49,8 @@ const badgeBaseStyle: CSSProperties = {
   fontWeight: 700
 }
 
+const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
+
 export default function SettingsSecuritySection({
   lang,
   ui,
@@ -62,6 +64,7 @@ export default function SettingsSecuritySection({
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [unlockMode, setUnlockMode] = useState<"demand" | "startup">("demand")
+  const [savedUnlockMode, setSavedUnlockMode] = useState<"demand" | "startup">("demand")
   const [recoveryDialog, setRecoveryDialog] = useState<{
     isOpen: boolean
     key: string
@@ -101,12 +104,32 @@ export default function SettingsSecuritySection({
     }
   }, [isProtected, isUnlocked])
 
+  const normalizeRecoveryKey = (value: string) =>
+    String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .replace(/[^A-Z2-9-]/g, "")
+
+  const extractRecoveryKeyFromText = (content: string) => {
+    const directMatch = content.match(/Recovery Key:\s*([A-Z2-9-]+)/i)
+    if (directMatch?.[1]) {
+      return normalizeRecoveryKey(directMatch[1])
+    }
+
+    return normalizeRecoveryKey(content)
+  }
+
   const refreshStatus = async (showSuccess = false) => {
     try {
       const status = await invoke("get_vault_status") as VaultStatus
       setVaultStatus(status || {})
-      const nextMode = String(status?.unlock_mode || "demand").toLowerCase() === "startup" ? "startup" : "demand"
+      const nextMode =
+        String(status?.unlock_mode || "demand").toLowerCase() === "startup"
+          ? "startup"
+          : "demand"
       setUnlockMode(nextMode)
+      setSavedUnlockMode(nextMode)
 
       if (showSuccess) {
         showToast(
@@ -142,6 +165,14 @@ export default function SettingsSecuritySection({
     return () => window.removeEventListener("keydown", onKeyDown, true)
   }, [recoveryDialog.isOpen])
 
+  const showRecoveryKeyDialog = (key: string, migrated = 0) => {
+    setRecoveryDialog({
+      isOpen: true,
+      key,
+      migrated
+    })
+  }
+
   const copyRecoveryKey = async () => {
     try {
       try {
@@ -176,9 +207,7 @@ export default function SettingsSecuritySection({
         defaultPath: fileName
       })
 
-      if (!path) {
-        return
-      }
+      if (!path) return
 
       await writeTextFile(String(path), content)
 
@@ -195,106 +224,33 @@ export default function SettingsSecuritySection({
     }
   }
 
-  const startRecoveryReset = () => {
-    showDialog({
-      type: "prompt",
-      title: lang === "de" ? "Recovery Key eingeben" : "Enter recovery key",
-      description:
+  const saveUnlockMode = async () => {
+    setBusy(true)
+    try {
+      await invoke("update_vault_unlock_mode", { unlockMode })
+      await refreshStatus(false)
+      showToast(
         lang === "de"
-          ? "Gib deinen Recovery Key ein, um ein neues Master Passwort zu setzen."
-          : "Enter your recovery key to set a new master password.",
-      placeholder: lang === "de" ? "Recovery Key" : "Recovery key",
-      confirmLabel: lang === "de" ? "Weiter" : "Continue",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      validate: (value: string) => {
-        if (!value.trim()) {
-          return lang === "de"
-            ? "Recovery Key ist erforderlich"
-            : "Recovery key is required"
-        }
-        return ""
-      },
-      onConfirm: async (recoveryKey: string) => {
-        const normalizedRecoveryKey = String(recoveryKey || "").trim()
-        if (!normalizedRecoveryKey) return
-
-        showDialog({
-          type: "prompt",
-          title: lang === "de" ? "Neues Master Passwort" : "New master password",
-          description:
-            lang === "de"
-              ? "Setze jetzt ein neues Master Passwort. Dabei wird auch ein neuer Recovery Key erstellt."
-              : "Set a new master password now. A new recovery key will be created as well.",
-          placeholder: ui.securityMasterPasswordPlaceholder,
-          confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
-          isPassword: true,
-          requireConfirm: true,
-          confirmLabel: lang === "de" ? "Zurücksetzen" : "Reset",
-          cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-          validate: (value: string, confirmValue: string) => {
-            if (!value.trim()) {
-              return ui.securityMasterPasswordEmpty
-            }
-            if (value.length < 6) {
-              return ui.securityMasterPasswordTooShort
-            }
-            if (value !== confirmValue) {
-              return ui.securityMasterPasswordMismatch
-            }
-            return ""
-          },
-          onConfirm: async (value: string) => {
-            setBusy(true)
-            try {
-              const result = await invoke("reset_vault_master_password_with_recovery_key", {
-                recoveryKey: normalizedRecoveryKey,
-                newMasterPassword: value
-              }) as EnableVaultProtectionResult
-
-              await refreshStatus()
-
-              setRecoveryDialog({
-                isOpen: true,
-                key: String(result?.recovery_key || ""),
-                migrated: 0
-              })
-
-              showToast(
-                lang === "de"
-                  ? "Master Passwort mit Recovery Key zurückgesetzt"
-                  : "Master password reset with recovery key"
-              )
-            } catch (e) {
-              showToast(
-                lang === "de"
-                  ? `Recovery Reset fehlgeschlagen: ${String(e)}`
-                  : `Recovery reset failed: ${String(e)}`,
-                true
-              )
-            } finally {
-              setBusy(false)
-            }
-          }
-        })
-      }
-    })
+          ? "Unlock Mode gespeichert"
+          : "Unlock mode saved"
+      )
+    } catch (e) {
+      showToast(
+        lang === "de"
+          ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
+          : `Could not save unlock mode: ${String(e)}`,
+        true
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
-
-  const normalizeRecoveryKey = (value: string) =>
-    String(value || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "")
-      .replace(/[^A-Z2-9-]/g, "")
-
-    const enableProtection = () => {
+  const enableProtection = () => {
     showDialog({
       type: "prompt",
       title: ui.securityEnableTitle,
-      description:
-        `${ui.securityEnableDesc}\n\n${ui.securityRecoveryHint}`,
+      description: `${ui.securityEnableDesc}\n\n${ui.securityRecoveryHint}`,
       placeholder: ui.securityMasterPasswordPlaceholder,
       confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
       isPassword: true,
@@ -302,15 +258,9 @@ export default function SettingsSecuritySection({
       confirmLabel: ui.securityEnableAction,
       cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
       validate: (value: string, confirmValue: string) => {
-        if (!value.trim()) {
-          return ui.securityMasterPasswordEmpty
-        }
-        if (value.length < 6) {
-          return ui.securityMasterPasswordTooShort
-        }
-        if (value !== confirmValue) {
-          return ui.securityMasterPasswordMismatch
-        }
+        if (!value.trim()) return ui.securityMasterPasswordEmpty
+        if (value.length < 6) return ui.securityMasterPasswordTooShort
+        if (value !== confirmValue) return ui.securityMasterPasswordMismatch
         return ""
       },
       onConfirm: async (value: string) => {
@@ -321,13 +271,12 @@ export default function SettingsSecuritySection({
             unlockMode
           }) as EnableVaultProtectionResult
 
-          await refreshStatus()
+          await refreshStatus(false)
 
-          setRecoveryDialog({
-            isOpen: true,
-            key: String(result?.recovery_key || ""),
-            migrated: Number(result?.migrated_secret_entries || 0)
-          })
+          showRecoveryKeyDialog(
+            String(result?.recovery_key || ""),
+            Number(result?.migrated_secret_entries || 0)
+          )
 
           showToast(ui.securityEnabledToast)
         } catch (e) {
@@ -358,10 +307,8 @@ export default function SettingsSecuritySection({
 
         setBusy(true)
         try {
-          await invoke("unlock_vault", {
-            masterPassword: value
-          })
-          await refreshStatus()
+          await invoke("unlock_vault", { masterPassword: value })
+          await refreshStatus(false)
           showToast(ui.securityUnlockedToast)
         } catch (e) {
           showToast(
@@ -370,6 +317,7 @@ export default function SettingsSecuritySection({
               : `Could not unlock vault: ${String(e)}`,
             true
           )
+          throw e
         } finally {
           setBusy(false)
         }
@@ -381,7 +329,7 @@ export default function SettingsSecuritySection({
     setBusy(true)
     try {
       await invoke("lock_vault")
-      await refreshStatus()
+      await refreshStatus(false)
       showToast(ui.securityLockedToast)
     } catch (e) {
       showToast(
@@ -392,6 +340,229 @@ export default function SettingsSecuritySection({
       )
     } finally {
       setBusy(false)
+    }
+  }
+
+  const disableProtection = () => {
+    if (!isUnlocked) {
+      showToast(
+        lang === "de"
+          ? "Zum Deaktivieren muss der Vault zuerst entsperrt werden"
+          : "Unlock the vault first to disable protection",
+        true
+      )
+      return
+    }
+
+    showDialog({
+      type: "confirm",
+      tone: "danger",
+      title: lang === "de" ? "Schutz deaktivieren" : "Disable protection",
+      description:
+        lang === "de"
+          ? "Der Master Passwort Schutz wird entfernt. Secrets bleiben weiter in vault.db, aber die App funktioniert danach wieder ohne Unlock."
+          : "Master password protection will be removed. Secrets stay in vault.db, but the app will work again without unlocking.",
+      confirmLabel: lang === "de" ? "Deaktivieren" : "Disable",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      onConfirm: async () => {
+        setBusy(true)
+        try {
+          await invoke("disable_vault_protection")
+          await refreshStatus(false)
+          showToast(
+            lang === "de"
+              ? "Vault Schutz deaktiviert"
+              : "Vault protection disabled"
+          )
+        } catch (e) {
+          showToast(
+            lang === "de"
+              ? `Vault Schutz konnte nicht deaktiviert werden: ${String(e)}`
+              : `Could not disable vault protection: ${String(e)}`,
+            true
+          )
+        } finally {
+          setBusy(false)
+        }
+      }
+    })
+  }
+
+  const regenerateRecoveryKey = () => {
+    if (!isUnlocked) {
+      showToast(
+        lang === "de"
+          ? "Zum Erzeugen eines neuen Recovery Keys muss der Vault entsperrt sein"
+          : "Unlock the vault first to generate a new recovery key",
+        true
+      )
+      return
+    }
+
+    showDialog({
+      type: "confirm",
+      title: lang === "de" ? "Neuen Recovery Key erzeugen" : "Generate new recovery key",
+      description:
+        lang === "de"
+          ? "Der bisherige Recovery Key wird ersetzt. Speichere den neuen Key danach unbedingt."
+          : "The current recovery key will be replaced. Make sure you save the new key afterwards.",
+      confirmLabel: lang === "de" ? "Erzeugen" : "Generate",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      onConfirm: async () => {
+        setBusy(true)
+        try {
+          const result = await invoke("regenerate_vault_recovery_key") as EnableVaultProtectionResult
+          await refreshStatus(false)
+          showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
+          showToast(
+            lang === "de"
+              ? "Neuer Recovery Key erzeugt"
+              : "New recovery key generated"
+          )
+        } catch (e) {
+          showToast(
+            lang === "de"
+              ? `Recovery Key konnte nicht erzeugt werden: ${String(e)}`
+              : `Could not generate recovery key: ${String(e)}`,
+            true
+          )
+        } finally {
+          setBusy(false)
+        }
+      }
+    })
+  }
+
+  const beginRecoveryResetWithKey = (normalizedRecoveryKey: string) => {
+    showDialog({
+      type: "prompt",
+      title: lang === "de" ? "Neues Master Passwort" : "New master password",
+      description:
+        lang === "de"
+          ? "Setze jetzt ein neues Master Passwort. Dabei wird auch ein neuer Recovery Key erstellt."
+          : "Set a new master password now. A new recovery key will be created as well.",
+      placeholder: ui.securityMasterPasswordPlaceholder,
+      confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
+      isPassword: true,
+      requireConfirm: true,
+      confirmLabel: lang === "de" ? "Zurücksetzen" : "Reset",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      validate: (value: string, confirmValue: string) => {
+        if (!value.trim()) return ui.securityMasterPasswordEmpty
+        if (value.length < 6) return ui.securityMasterPasswordTooShort
+        if (value !== confirmValue) return ui.securityMasterPasswordMismatch
+        return ""
+      },
+      onConfirm: async (value: string) => {
+        setBusy(true)
+        try {
+          const result = await invoke("reset_vault_master_password_with_recovery_key", {
+            recoveryKey: normalizedRecoveryKey,
+            newMasterPassword: value
+          }) as EnableVaultProtectionResult
+
+          await refreshStatus(false)
+
+          showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
+
+          showToast(
+            lang === "de"
+              ? "Master Passwort mit Recovery Key zurückgesetzt"
+              : "Master password reset with recovery key"
+          )
+        } catch (e) {
+          showToast(
+            lang === "de"
+              ? `Recovery Reset fehlgeschlagen: ${String(e)}`
+              : `Recovery reset failed: ${String(e)}`,
+            true
+          )
+          throw e
+        } finally {
+          setBusy(false)
+        }
+      }
+    })
+  }
+
+  const startRecoveryReset = () => {
+    showDialog({
+      type: "prompt",
+      title: lang === "de" ? "Recovery Key eingeben" : "Enter recovery key",
+      description:
+        lang === "de"
+          ? "Gib deinen Recovery Key im Format ABCD-EFGH-IJKL-MNOP-QRST ein, um ein neues Master Passwort zu setzen."
+          : "Enter your recovery key in the format ABCD-EFGH-IJKL-MNOP-QRST to set a new master password.",
+      placeholder: "ABCD-EFGH-IJKL-MNOP-QRST",
+      confirmLabel: lang === "de" ? "Weiter" : "Continue",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      validate: (value: string) => {
+        const normalized = normalizeRecoveryKey(value)
+        if (!normalized) {
+          return lang === "de"
+            ? "Recovery Key ist erforderlich"
+            : "Recovery key is required"
+        }
+        if (!RECOVERY_KEY_PATTERN.test(normalized)) {
+          return lang === "de"
+            ? "Ungültiges Recovery Key Format"
+            : "Invalid recovery key format"
+        }
+        return ""
+      },
+      onConfirm: async (recoveryKey: string) => {
+        const normalized = normalizeRecoveryKey(recoveryKey)
+        if (!RECOVERY_KEY_PATTERN.test(normalized)) {
+          showToast(
+            lang === "de"
+              ? "Ungültiges Recovery Key Format"
+              : "Invalid recovery key format",
+            true
+          )
+          throw new Error("Invalid recovery key format")
+        }
+
+        beginRecoveryResetWithKey(normalized)
+      }
+    })
+  }
+
+  const importRecoveryKeyFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          { name: "Text", extensions: ["txt"] },
+          { name: "All", extensions: ["*"] }
+        ]
+      })
+
+      if (!selected) return
+
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (!path) return
+
+      const content = await readTextFile(String(path))
+      const normalized = extractRecoveryKeyFromText(content)
+
+      if (!RECOVERY_KEY_PATTERN.test(normalized)) {
+        showToast(
+          lang === "de"
+            ? "In der Datei wurde kein gültiger Recovery Key gefunden"
+            : "No valid recovery key was found in the file",
+          true
+        )
+        return
+      }
+
+      beginRecoveryResetWithKey(normalized)
+    } catch (e) {
+      showToast(
+        lang === "de"
+          ? `Recovery Datei konnte nicht importiert werden: ${String(e)}`
+          : `Could not import recovery file: ${String(e)}`,
+        true
+      )
     }
   }
 
@@ -438,7 +609,13 @@ export default function SettingsSecuritySection({
             </div>
           </div>
 
-          <span style={{ ...badgeBaseStyle, background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))", color: "var(--text-main)" }}>
+          <span
+            style={{
+              ...badgeBaseStyle,
+              background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+              color: "var(--text-main)"
+            }}
+          >
             {modeLabel}
           </span>
         </div>
@@ -478,7 +655,7 @@ export default function SettingsSecuritySection({
             </label>
             <select
               value={unlockMode}
-              onChange={(e) => setUnlockMode((e.target.value === "startup" ? "startup" : "demand"))}
+              onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
               style={uniformSelectStyle}
               disabled={busy}
             >
@@ -490,7 +667,7 @@ export default function SettingsSecuritySection({
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={() => void refreshStatus(true)}
@@ -499,6 +676,7 @@ export default function SettingsSecuritySection({
             >
               {ui.refreshLabel}
             </button>
+
             <button
               type="button"
               onClick={enableProtection}
@@ -520,6 +698,24 @@ export default function SettingsSecuritySection({
             {isUnlocked ? ui.securityActionsUnlockedDesc : ui.securityActionsLockedDesc}
           </div>
 
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+            <label className="text-[12px] font-semibold text-[var(--text-main)]">
+              {ui.securityModeLabel}
+            </label>
+            <select
+              value={unlockMode}
+              onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
+              style={uniformSelectStyle}
+              disabled={busy}
+            >
+              <option value="demand">{ui.securityModeDemand}</option>
+              <option value="startup">{ui.securityModeStartup}</option>
+            </select>
+            <div className="text-[12px] text-[var(--text-muted)]">
+              {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+            </div>
+          </div>
+
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -532,12 +728,41 @@ export default function SettingsSecuritySection({
 
             <button
               type="button"
+              onClick={() => void saveUnlockMode()}
+              style={{ ...actionBtnStyle, opacity: busy || unlockMode === savedUnlockMode ? 0.7 : 1 }}
+              disabled={busy || unlockMode === savedUnlockMode}
+            >
+              {lang === "de" ? "Mode speichern" : "Save mode"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void importRecoveryKeyFile()}
+              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+              disabled={busy}
+            >
+              {lang === "de" ? "Recovery Datei" : "Recovery file"}
+            </button>
+
+            <button
+              type="button"
               onClick={startRecoveryReset}
               style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
             >
-              {lang === "de" ? "Recovery Key" : "Recovery key"}
+              {lang === "de" ? "Recovery Reset" : "Recovery reset"}
             </button>
+
+            {isUnlocked && (
+              <button
+                type="button"
+                onClick={regenerateRecoveryKey}
+                style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                disabled={busy}
+              >
+                {lang === "de" ? "Neuer Recovery Key" : "New recovery key"}
+              </button>
+            )}
 
             {!isUnlocked ? (
               <button
@@ -549,14 +774,25 @@ export default function SettingsSecuritySection({
                 {ui.securityUnlockAction}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => void lockVault()}
-                style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                disabled={busy}
-              >
-                {ui.securityLockAction}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void lockVault()}
+                  style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                  disabled={busy}
+                >
+                  {ui.securityLockAction}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={disableProtection}
+                  style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                  disabled={busy}
+                >
+                  {lang === "de" ? "Schutz deaktivieren" : "Disable protection"}
+                </button>
+              </>
             )}
           </div>
         </div>

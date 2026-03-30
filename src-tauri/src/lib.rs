@@ -921,6 +921,26 @@ fn clear_legacy_connection_secrets(conn_db: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn finalize_legacy_master_key_cleanup_with_dek(
+    conn_db: &Connection,
+    vault_conn: &Connection,
+    dek: &[u8],
+) -> Result<usize, String> {
+    let mut migrated = 0usize;
+
+    if count_legacy_secret_entries(conn_db)? > 0 {
+        migrated = migrate_legacy_secrets_into_vault(conn_db, vault_conn, dek)?;
+        clear_legacy_connection_secrets(conn_db)?;
+    }
+
+    let key_path = PathBuf::from(get_key_path());
+    if key_path.exists() {
+        wipe_and_remove_file(&key_path)?;
+    }
+
+    Ok(migrated)
+}
+
 fn ensure_unprotected_vault_dek(vault_conn: &Connection) -> Result<Vec<u8>, String> {
     let local_dek: Option<Vec<u8>> = vault_conn
         .query_row(
@@ -1125,6 +1145,13 @@ fn migrate_legacy_master_key_to_vault() -> Result<(), String> {
 
     init_vault_db()?;
     let conn_db = open_db()?;
+    let legacy_secret_entries = count_legacy_secret_entries(&conn_db)?;
+
+    if legacy_secret_entries == 0 {
+        wipe_and_remove_file(&key_path)?;
+        return Ok(());
+    }
+
     let vault_conn = open_vault_db()?;
 
     if is_vault_protected(&vault_conn)? {
@@ -1132,20 +1159,9 @@ fn migrate_legacy_master_key_to_vault() -> Result<(), String> {
     }
 
     let dek = ensure_unprotected_vault_dek(&vault_conn)?;
-    let migrated = migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
-
-    if migrated > 0 {
-        conn_db
-            .execute(
-                "UPDATE connections
-                 SET password = '', passphrase = ''
-                 WHERE TRIM(COALESCE(password, '')) != '' OR TRIM(COALESCE(passphrase, '')) != ''",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-        let _ = conn_db.execute_batch("VACUUM;");
-    }
-
+    migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+    clear_legacy_connection_secrets(&conn_db)?;
+    let _ = conn_db.execute_batch("VACUUM;");
     wipe_and_remove_file(&key_path)?;
     Ok(())
 }
@@ -1767,6 +1783,122 @@ fn enable_vault_protection(
 }
 
 #[tauri::command]
+fn update_vault_unlock_mode(
+    unlock_mode: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<VaultStatus, String> {
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&unlock_mode);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET unlock_mode = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&normalized_unlock_mode, &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.unlock_mode = normalized_unlock_mode;
+
+    load_vault_status(&vault_conn, &runtime)
+}
+
+#[tauri::command]
+fn regenerate_vault_recovery_key(
+    vault_state: State<'_, VaultState>,
+) -> Result<EnableVaultProtectionResult, String> {
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+
+    let row: (i32, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, salt
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if row.0 == 0 {
+        return Err("Vault protection is not enabled".to_string());
+    }
+
+    if row.1.len() < VAULT_SALT_LEN {
+        return Err("Vault salt is invalid".to_string());
+    }
+
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let new_recovery_key = generate_recovery_key();
+    let recovery_wrap_key = derive_vault_key_from_secret(&new_recovery_key, &row.1)?;
+    let recovery_encrypted_dek = vault_encrypt_combined(&recovery_wrap_key, &dek)?;
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET recovery_encrypted_dek = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&recovery_encrypted_dek, &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(EnableVaultProtectionResult {
+        recovery_key: new_recovery_key,
+        migrated_secret_entries: 0,
+    })
+}
+
+#[tauri::command]
+fn disable_vault_protection(vault_state: State<'_, VaultState>) -> Result<VaultStatus, String> {
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let conn_db = open_db()?;
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+
+    let _ = finalize_legacy_master_key_cleanup_with_dek(&conn_db, &vault_conn, &dek)?;
+
+    let now = current_export_timestamp();
+    let unlock_mode = DEFAULT_VAULT_UNLOCK_MODE.to_string();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET is_protected = 0,
+                 unlock_mode = ?1,
+                 salt = X'',
+                 encrypted_dek = X'',
+                 local_dek = ?2,
+                 recovery_encrypted_dek = X'',
+                 kek_validation = X'',
+                 updated_at = ?3
+             WHERE id = 1",
+            (&unlock_mode, &dek, &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.is_unlocked = true;
+    runtime.unlock_mode = unlock_mode;
+    runtime.session_dek = Some(dek);
+
+    load_vault_status(&vault_conn, &runtime)
+}
+
+#[tauri::command]
 fn reset_vault_master_password_with_recovery_key(
     recovery_key: String,
     new_master_password: String,
@@ -1817,8 +1949,8 @@ fn reset_vault_master_password_with_recovery_key(
     let recovery_wrap_key = derive_vault_key_from_secret(&normalized_recovery_key, &row.2)?;
     let dek = vault_decrypt_combined(&recovery_wrap_key, &row.3)
         .map_err(|_| "Recovery key is invalid".to_string())?;
-    let validation = vault_decrypt_combined(&dek, &row.4)
-        .map_err(|_| "Recovery key is invalid".to_string())?;
+    let validation =
+        vault_decrypt_combined(&dek, &row.4).map_err(|_| "Recovery key is invalid".to_string())?;
 
     if validation.as_slice() != VAULT_VALIDATION_TEXT {
         return Err("Recovery key is invalid".to_string());
@@ -5274,6 +5406,9 @@ pub fn run() {
             get_connections,
             get_vault_status,
             enable_vault_protection,
+            disable_vault_protection,
+            regenerate_vault_recovery_key,
+            update_vault_unlock_mode,
             reset_vault_master_password_with_recovery_key,
             unlock_vault,
             lock_vault,
@@ -5343,7 +5478,7 @@ pub fn run() {
             stop_tunnel,
             get_active_tunnels,
             check_host_key,
-            trust_host_key
+            trust_host_key,
         ])
         .setup(|app| {
             if let Err(e) = ensure_vault_runtime_ready(&app.state::<VaultState>()) {
