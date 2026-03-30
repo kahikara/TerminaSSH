@@ -187,6 +187,91 @@ export default function SettingsSecuritySection({
     }
   }
 
+  const startRecoveryReset = () => {
+    showDialog({
+      type: "prompt",
+      title: lang === "de" ? "Recovery Key eingeben" : "Enter recovery key",
+      description:
+        lang === "de"
+          ? "Gib deinen Recovery Key ein, um ein neues Master Passwort zu setzen."
+          : "Enter your recovery key to set a new master password.",
+      placeholder: lang === "de" ? "Recovery Key" : "Recovery key",
+      confirmLabel: lang === "de" ? "Weiter" : "Continue",
+      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+      validate: (value: string) => {
+        if (!value.trim()) {
+          return lang === "de"
+            ? "Recovery Key ist erforderlich"
+            : "Recovery key is required"
+        }
+        return ""
+      },
+      onConfirm: async (recoveryKey: string) => {
+        const normalizedRecoveryKey = String(recoveryKey || "").trim()
+        if (!normalizedRecoveryKey) return
+
+        showDialog({
+          type: "prompt",
+          title: lang === "de" ? "Neues Master Passwort" : "New master password",
+          description:
+            lang === "de"
+              ? "Setze jetzt ein neues Master Passwort. Dabei wird auch ein neuer Recovery Key erstellt."
+              : "Set a new master password now. A new recovery key will be created as well.",
+          placeholder: ui.securityMasterPasswordPlaceholder,
+          confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
+          isPassword: true,
+          requireConfirm: true,
+          confirmLabel: lang === "de" ? "Zurücksetzen" : "Reset",
+          cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+          validate: (value: string, confirmValue: string) => {
+            if (!value.trim()) {
+              return ui.securityMasterPasswordEmpty
+            }
+            if (value.length < 6) {
+              return ui.securityMasterPasswordTooShort
+            }
+            if (value !== confirmValue) {
+              return ui.securityMasterPasswordMismatch
+            }
+            return ""
+          },
+          onConfirm: async (value: string) => {
+            setBusy(true)
+            try {
+              const result = await invoke("reset_vault_master_password_with_recovery_key", {
+                recoveryKey: normalizedRecoveryKey,
+                newMasterPassword: value
+              }) as EnableVaultProtectionResult
+
+              await refreshStatus()
+
+              setRecoveryDialog({
+                isOpen: true,
+                key: String(result?.recovery_key || ""),
+                migrated: 0
+              })
+
+              showToast(
+                lang === "de"
+                  ? "Master Passwort mit Recovery Key zurückgesetzt"
+                  : "Master password reset with recovery key"
+              )
+            } catch (e) {
+              showToast(
+                lang === "de"
+                  ? `Recovery Reset fehlgeschlagen: ${String(e)}`
+                  : `Recovery reset failed: ${String(e)}`,
+                true
+              )
+            } finally {
+              setBusy(false)
+            }
+          }
+        })
+      }
+    })
+  }
+
   const enableProtection = () => {
     showDialog({
       type: "prompt",
@@ -426,6 +511,15 @@ export default function SettingsSecuritySection({
               disabled={busy}
             >
               {ui.refreshLabel}
+            </button>
+
+            <button
+              type="button"
+              onClick={startRecoveryReset}
+              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+              disabled={busy}
+            >
+              {lang === "de" ? "Recovery Key" : "Recovery key"}
             </button>
 
             {!isUnlocked ? (
