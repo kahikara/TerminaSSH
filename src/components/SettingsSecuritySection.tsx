@@ -101,12 +101,20 @@ export default function SettingsSecuritySection({
     }
   }, [isProtected, isUnlocked])
 
-  const refreshStatus = async () => {
+  const refreshStatus = async (showSuccess = false) => {
     try {
       const status = await invoke("get_vault_status") as VaultStatus
       setVaultStatus(status || {})
       const nextMode = String(status?.unlock_mode || "demand").toLowerCase() === "startup" ? "startup" : "demand"
       setUnlockMode(nextMode)
+
+      if (showSuccess) {
+        showToast(
+          lang === "de"
+            ? "Vault Status aktualisiert"
+            : "Vault status refreshed"
+        )
+      }
     } catch (e) {
       showToast(
         lang === "de"
@@ -118,7 +126,7 @@ export default function SettingsSecuritySection({
   }
 
   useEffect(() => {
-    void refreshStatus()
+    void refreshStatus(false)
   }, [])
 
   useEffect(() => {
@@ -272,7 +280,16 @@ export default function SettingsSecuritySection({
     })
   }
 
-  const enableProtection = () => {
+  const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
+
+  const normalizeRecoveryKey = (value: string) =>
+    String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "")
+      .replace(/[^A-Z2-9-]/g, "")
+
+    const enableProtection = () => {
     showDialog({
       type: "prompt",
       title: ui.securityEnableTitle,
@@ -476,7 +493,7 @@ export default function SettingsSecuritySection({
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
             <button
               type="button"
-              onClick={() => void refreshStatus()}
+              onClick={() => void refreshStatus(true)}
               style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
             >
@@ -506,7 +523,7 @@ export default function SettingsSecuritySection({
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => void refreshStatus()}
+              onClick={() => void refreshStatus(true)}
               style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
             >
