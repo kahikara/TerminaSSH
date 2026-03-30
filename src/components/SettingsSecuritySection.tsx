@@ -241,10 +241,20 @@ export default function SettingsSecuritySection({
     }
   }
 
-  const saveUnlockMode = async () => {
+  const applyUnlockModeChange = async (nextMode: "demand" | "startup") => {
+    setUnlockMode(nextMode)
+
+    if (!isProtected) {
+      return
+    }
+
+    if (nextMode === savedUnlockMode) {
+      return
+    }
+
     setBusy(true)
     try {
-      await invoke("update_vault_unlock_mode", { unlockMode })
+      await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
       await refreshStatus(false)
       showToast(
         lang === "de"
@@ -252,6 +262,7 @@ export default function SettingsSecuritySection({
           : "Unlock mode saved"
       )
     } catch (e) {
+      setUnlockMode(savedUnlockMode)
       showToast(
         lang === "de"
           ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
@@ -676,7 +687,6 @@ export default function SettingsSecuritySection({
       : ui.securityStatusLocked
 
   const modeLabel = unlockMode === "startup" ? ui.securityModeStartup : ui.securityModeDemand
-  const hasUnsavedMode = unlockMode !== savedUnlockMode
 
   return (
     <>
@@ -779,7 +789,7 @@ export default function SettingsSecuritySection({
             </label>
             <select
               value={unlockMode}
-              onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
+              onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
               style={uniformSelectStyle}
               disabled={busy}
             >
@@ -867,7 +877,7 @@ export default function SettingsSecuritySection({
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <select
                     value={unlockMode}
-                    onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
+                    onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
                     style={uniformSelectStyle}
                     disabled={busy}
                   >
@@ -877,17 +887,6 @@ export default function SettingsSecuritySection({
                   <div className="text-[12px] text-[var(--text-muted)]">
                     {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
                   </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => void saveUnlockMode()}
-                    style={{ ...actionBtnStyle, opacity: busy || !hasUnsavedMode ? 0.7 : 1 }}
-                    disabled={busy || !hasUnsavedMode}
-                  >
-                    {lang === "de" ? "Mode speichern" : "Save mode"}
-                  </button>
                 </div>
               </div>
 
