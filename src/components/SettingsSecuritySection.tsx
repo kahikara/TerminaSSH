@@ -698,19 +698,6 @@ export default function SettingsSecuritySection({
             </div>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              justifyContent: "flex-end",
-              flexWrap: "wrap",
-              flex: "0 0 auto"
-            }}
-          >
-            <span style={statusToneStyle}>{statusLabel}</span>
-            <span style={modeToneStyle}>{modeLabel}</span>
-          </div>
         </div>
 
         {vaultStatus?.has_legacy_master_key ? (
@@ -786,13 +773,37 @@ export default function SettingsSecuritySection({
 
       {isProtected && (
         <div style={cardStyle}>
-          <div className="text-[13px] font-semibold text-[var(--text-main)]">
-            {lang === "de" ? "Sicherheit" : "Security"}
-          </div>
-          <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-            {lang === "de"
-              ? "Die wichtigsten Dinge direkt sichtbar. Seltene Aktionen sind unten versteckt."
-              : "The important things stay visible. Rare actions are hidden below."}
+          <div
+            style={{
+              ...rowStyle,
+              alignItems: "flex-start",
+              justifyContent: "space-between"
+            }}
+          >
+            <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+              <div className="text-[13px] font-semibold text-[var(--text-main)]">
+                {lang === "de" ? "Sicherheit" : "Security"}
+              </div>
+              <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
+                {lang === "de"
+                  ? "Die wichtigsten Dinge direkt sichtbar. Seltene Aktionen sind unten versteckt."
+                  : "The important things stay visible. Rare actions are hidden below."}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+                flex: "0 0 auto"
+              }}
+            >
+              <span style={modeToneStyle}>{modeLabel}</span>
+              <span style={statusToneStyle}>{statusLabel}</span>
+            </div>
           </div>
 
           <div
