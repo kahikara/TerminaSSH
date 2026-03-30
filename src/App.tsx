@@ -325,8 +325,6 @@ export default function App() {
               : 'Vault unlocked at startup'
           )
         } catch (e) {
-          startupVaultPromptOpenRef.current = false
-
           showToast(
             settings.lang === 'de'
               ? `Vault konnte nicht entsperrt werden: ${String(e)}`
@@ -334,11 +332,7 @@ export default function App() {
             true
           )
 
-          window.setTimeout(() => {
-            openStartupVaultUnlockDialog()
-          }, 0)
-
-          return
+          throw e
         }
       },
       onCancel: () => {
@@ -411,11 +405,7 @@ export default function App() {
                   true
                 )
 
-                window.setTimeout(() => {
-                  openUnlockPrompt()
-                }, 0)
-
-                return
+                throw e
               }
             },
             onCancel: () => resolve(false)

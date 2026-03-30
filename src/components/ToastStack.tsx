@@ -6,7 +6,7 @@ type Props = {
 
 export default function ToastStack({ toasts }: Props) {
   return (
-    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2.5 pointer-events-none">
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[340] flex flex-col gap-2.5 pointer-events-none">
       {toasts.map((toast) => (
         <div
           key={toast.id}
