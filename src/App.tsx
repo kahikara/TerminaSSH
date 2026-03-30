@@ -448,7 +448,6 @@ export default function App() {
 
   const sidebarVisibleGroups = isSidebarSearching ? filteredGroups : groups;
   const sidebarVisibleRootServers = isSidebarSearching ? filteredRootServers : rootServers;
-  const sidebarSearchLocalVisible = !isSidebarSearching || matchesSidebarSearch(LOCAL_TERMINAL_CONNECTION);
 
   const effectiveFolderCollapsed = (group: string) => {
     if (!isSidebarSearching) return Boolean(collapsedFolders[group]);
@@ -1495,6 +1494,15 @@ export default function App() {
               <div className="flex gap-1">
                 {!isSidebarCollapsed && (
                   <button
+                    onClick={() => void openTerminal(LOCAL_TERMINAL_CONNECTION, { forceNewTab: true })}
+                    className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+                    title={t('localTerminal', settings.lang)}
+                  >
+                    <TermIcon size={16} />
+                  </button>
+                )}
+                {!isSidebarCollapsed && (
+                  <button
                     onClick={toggleSidebarSearch}
                     className={`text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)] ${showSidebarSearch ? 'text-[var(--accent)] bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))]' : ''}`}
                     title={settings.lang === 'de' ? 'Suche' : 'Search'}
@@ -1576,37 +1584,7 @@ export default function App() {
               </div>
             ) : (
               <div className="flex flex-col gap-0.5 rounded-xl">
-                {sidebarSearchLocalVisible && (
-                  <div
-                    className={`group/item flex items-center justify-between w-full rounded-xl border text-sm transition-all px-2 py-0 ${
-                      isLocalActive
-                        ? 'bg-[color-mix(in_srgb,var(--bg-hover)_72%,transparent)] border-[color-mix(in_srgb,var(--accent)_26%,var(--border-subtle))]'
-                        : 'border-transparent hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)]'
-                    }`}
-                  >
-                    <button
-                      onContextMenu={(e) => openSidebarContextMenu(e, LOCAL_TERMINAL_CONNECTION, true)}
-                      onClick={() => void openTerminal(LOCAL_TERMINAL_CONNECTION)}
-                      onDoubleClick={() => void openTerminal(LOCAL_TERMINAL_CONNECTION, { forceNewTab: true })}
-                      className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
-                        isLocalActive ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center justify-center w-6 h-6 rounded-md border mr-2 shrink-0 ${
-                          isLocalActive
-                            ? 'bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-app))] border-[color-mix(in_srgb,var(--accent)_34%,var(--border-subtle))]'
-                            : 'bg-[color-mix(in_srgb,var(--bg-app)_78%,var(--bg-sidebar))] border-[var(--border-subtle)]'
-                        }`}
-                      >
-                        <TermIcon size={12} className={isLocalActive ? "text-[var(--accent)]" : "text-[var(--text-category)]"} />
-                      </div>
-                      <span className="truncate font-medium min-w-0">{t('localTerminal', settings.lang)}</span>
-                    </button>
-                  </div>
-                )}
-
-                {sidebarVisibleRootServers.length === 0 && Object.keys(sidebarVisibleGroups).length === 0 && !sidebarSearchLocalVisible && (
+                {sidebarVisibleRootServers.length === 0 && Object.keys(sidebarVisibleGroups).length === 0 && (
                   <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-4 py-5 text-center">
                     <div className="text-sm font-semibold text-[var(--text-main)]">
                       {t('noConnectionsYet', settings.lang)}
