@@ -33,8 +33,7 @@ export default function SettingsModal({
   settings,
   setSettings,
   showToast,
-  showDialog,
-  globalDialogOpen = false
+  showDialog
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsSectionId>("general")
   const [keys, setKeys] = useState<StoredSshKey[]>([])
@@ -59,8 +58,7 @@ export default function SettingsModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200 ${globalDialogOpen ? "bg-transparent backdrop-blur-0" : "bg-black/60 backdrop-blur-sm"}`}
-      style={{ pointerEvents: globalDialogOpen ? "none" : "auto" }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
