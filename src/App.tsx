@@ -1680,7 +1680,7 @@ export default function App() {
                     <div key={group}>
                       <button
                         onClick={() => setCollapsedFolders({...collapsedFolders, [group]: !isCollapsed})}
-                        className="flex items-center justify-between px-2.5 py-0.5 w-full rounded-xl border border-transparent transition-all group/folder mt-1 hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
+                        className="inline-flex max-w-full items-center justify-between px-2.5 py-0.5 rounded-xl border border-transparent transition-all group/folder mt-1 hover:bg-[var(--bg-hover)] hover:border-[var(--border-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
                       >
                         <div className="flex items-center gap-1.5 min-w-0 text-[var(--text-muted)]">
                           {isCollapsed ? <ChevronRight size={12} className="text-[var(--accent)] shrink-0" /> : <ChevronDown size={12} className="text-[var(--accent)] shrink-0" />}
