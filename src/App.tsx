@@ -76,6 +76,12 @@ type SidebarContextMenuState = {
   isLocal: boolean
 }
 
+type TabContextMenuState = {
+  x: number
+  y: number
+  tabId: string
+}
+
 type DashboardConnection = {
   id?: string | number
   name: string
@@ -215,6 +221,7 @@ export default function App() {
   const [serverToEdit, setServerToEdit] = useState<ConnectionItem | null>(null);
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [sidebarContextMenu, setSidebarContextMenu] = useState<SidebarContextMenuState | null>(null);
+  const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState | null>(null);
   const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [appVersion, setAppVersion] = useState("");
@@ -497,6 +504,11 @@ export default function App() {
   const draggedTabGhost = useMemo<AppTab | null>(
     () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
+  );
+
+  const tabContextMenuTab = useMemo<AppTab | null>(
+    () => tabContextMenu ? openTabs.find((tab) => tab.tabId === tabContextMenu.tabId) || null : null,
+    [openTabs, tabContextMenu]
   );
 
   const recentConnectionsForDashboard = useMemo<DashboardConnection[]>(() => {
@@ -873,6 +885,21 @@ export default function App() {
     setSidebarContextMenu(null);
   }, []);
 
+  const closeTabContextMenu = useCallback(() => {
+    setTabContextMenu(null);
+  }, []);
+
+  const openTabContextMenu = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveTabId(tabId);
+    setTabContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      tabId
+    });
+  }, []);
+
   const buildSplitTabFromServers = (
     leftServer: ConnectionItem,
     rightServer: ConnectionItem,
@@ -1116,6 +1143,70 @@ export default function App() {
       return newTabs;
     });
   }, []);
+
+  const duplicateTabSession = (tab: AppTab, paneIndex?: number) => {
+    closeTabContextMenu();
+
+    const targetServer =
+      typeof paneIndex === 'number' && tab.splitMode
+        ? tab.paneServers?.[paneIndex] || null
+        : tab;
+
+    if (!targetServer) return;
+    void openTerminal(targetServer, { forceNewTab: true });
+  };
+
+  const openTabInSplit = (tab: AppTab) => {
+    closeTabContextMenu();
+    if (tab.splitMode) return;
+
+    setOpenTabs(prev =>
+      prev.map(curr =>
+        curr.tabId !== tab.tabId
+          ? curr
+          : buildSplitTabFromServers(curr, curr, curr.tabId, [curr.sessionId], true)
+      )
+    );
+    setActiveTabId(tab.tabId);
+  };
+
+  const removeSplitFromTab = (tab: AppTab) => {
+    closeTabContextMenu();
+    if (!tab.splitMode) return;
+
+    const keepIndex = tab.focusedPaneIndex === 1 ? 1 : 0;
+    const removeIndex = keepIndex === 1 ? 0 : 1;
+    const removeSessionId = tab.paneSessionIds?.[removeIndex];
+
+    if (removeSessionId) {
+      destroyTerminal(String(removeSessionId));
+    }
+
+    setOpenTabs(prev =>
+      prev.map(curr => {
+        if (curr.tabId !== tab.tabId) return curr;
+
+        const keepServer = curr.paneServers?.[keepIndex] || curr;
+        const keepSessionId = curr.paneSessionIds?.[keepIndex] || curr.sessionId || curr.tabId;
+
+        return {
+          ...keepServer,
+          tabId: curr.tabId,
+          sessionId: keepSessionId,
+          splitMode: false,
+          paneServers: undefined,
+          paneSessionIds: undefined,
+          focusedPaneIndex: undefined
+        };
+      })
+    );
+    setActiveTabId(tab.tabId);
+  };
+
+  const closeTabFromContextMenu = (tab: AppTab) => {
+    closeTabContextMenu();
+    closeTab(tab.tabId);
+  };
 
   const updateTabFromPaneState = useCallback((
     tabId: string,
@@ -1697,6 +1788,7 @@ export default function App() {
                     onMouseDown={e => handleTabPointerStart(e, tab.tabId)}
                     onMouseEnter={() => handleTabPointerEnter(tab.tabId)}
                     onClick={() => setActiveTabId(tab.tabId)}
+                    onContextMenu={(e) => openTabContextMenu(e, tab.tabId)}
                     className={`relative flex items-center justify-between gap-2 px-3.5 cursor-pointer text-[13px] transition-all min-w-[136px] max-w-[196px] h-[32px] rounded-t-xl border border-b-0 ${
                       activeTabId === tab.tabId
                         ? 'bg-[var(--bg-app)] text-[var(--text-main)] border-[var(--border-subtle)] border-t-[color-mix(in_srgb,var(--accent)_72%,white)] border-t-2 z-10 shadow-sm'
@@ -1759,6 +1851,153 @@ export default function App() {
            ))}
         </div>
       </div>
+
+      {sidebarContextMenu && (
+        <div className="fixed inset-0 z-[260]" onMouseDown={closeSidebarContextMenu}>
+          <div
+            className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
+            style={{
+              left: Math.max(8, Math.min(sidebarContextMenu.x, window.innerWidth - 228)),
+              top: Math.max(8, Math.min(sidebarContextMenu.y, window.innerHeight - (sidebarContextMenu.isLocal ? 108 : 176)))
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              {sidebarContextMenu.isLocal ? <TermIcon size={14} /> : <Server size={14} />}
+              <span>{t('open', settings.lang)}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server, { forceNewTab: true });
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Plus size={14} />
+              <span>{t('openInNewTab', settings.lang)}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                closeSidebarContextMenu();
+                void openTerminal(sidebarContextMenu.server, { openInSplit: true });
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+            >
+              <Folder size={14} />
+              <span>{t('openInSplit', settings.lang)}</span>
+            </button>
+
+            {!sidebarContextMenu.isLocal && (
+              <>
+                <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
+
+                <button
+                  onClick={() => editSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <SquarePen size={14} />
+                  <span>{t('edit', settings.lang)}</span>
+                </button>
+
+                <button
+                  onClick={() => duplicateSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>{t('duplicate', settings.lang)}</span>
+                </button>
+
+                <button
+                  onClick={() => deleteSidebarServer(sidebarContextMenu.server)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
+                >
+                  <X size={14} />
+                  <span>{t('delete', settings.lang)}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tabContextMenu && tabContextMenuTab && (
+        <div className="fixed inset-0 z-[260]" onMouseDown={closeTabContextMenu} onContextMenu={(e) => e.preventDefault()}>
+          <div
+            className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
+            style={{
+              left: Math.max(8, Math.min(tabContextMenu.x, window.innerWidth - 228)),
+              top: Math.max(8, Math.min(tabContextMenu.y, window.innerHeight - (tabContextMenuTab.splitMode ? 212 : 176)))
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {!tabContextMenuTab.splitMode ? (
+              <>
+                <button
+                  onClick={() => duplicateTabSession(tabContextMenuTab)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>{settings.lang === 'de' ? 'Session duplizieren' : 'Duplicate session'}</span>
+                </button>
+
+                <button
+                  onClick={() => openTabInSplit(tabContextMenuTab)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Folder size={14} />
+                  <span>{settings.lang === 'de' ? 'Im Split öffnen' : 'Open in split'}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => duplicateTabSession(tabContextMenuTab, 0)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>{settings.lang === 'de' ? 'Linke Session duplizieren' : 'Duplicate left session'}</span>
+                </button>
+
+                <button
+                  onClick={() => duplicateTabSession(tabContextMenuTab, 1)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <Plus size={14} />
+                  <span>{settings.lang === 'de' ? 'Rechte Session duplizieren' : 'Duplicate right session'}</span>
+                </button>
+
+                <button
+                  onClick={() => removeSplitFromTab(tabContextMenuTab)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <ChevronsLeft size={14} />
+                  <span>{settings.lang === 'de' ? 'Split aufheben' : 'Remove split'}</span>
+                </button>
+              </>
+            )}
+
+            <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
+
+            <button
+              onClick={() => closeTabFromContextMenu(tabContextMenuTab)}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
+            >
+              <X size={14} />
+              <span>{settings.lang === 'de' ? 'Tab schließen' : 'Close tab'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {sidebarContextMenu && (
         <div className="fixed inset-0 z-[260]" onMouseDown={closeSidebarContextMenu}>
