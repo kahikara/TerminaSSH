@@ -56,6 +56,18 @@ const compactPanelStyle: CSSProperties = {
   padding: 14
 }
 
+const compactRowStyle: CSSProperties = {
+  borderRadius: 12,
+  border: "1px solid var(--border-subtle)",
+  background: "color-mix(in srgb, var(--bg-app) 86%, var(--bg-sidebar))",
+  padding: 14,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap"
+}
+
 const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
 
 export default function SettingsSecuritySection({
@@ -805,25 +817,20 @@ export default function SettingsSecuritySection({
           </div>
         ) : null}
 
-          <div
-            style={{
-              marginTop: 14,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 10
-            }}
-          >
-            <div style={compactPanelStyle}>
-              <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                {lang === "de" ? "Vault" : "Vault"}
-              </div>
-              <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                {lang === "de"
-                  ? "Entsperren zum Arbeiten oder wieder sperren."
-                  : "Unlock for work or lock it again."}
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={compactRowStyle}>
+              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+                <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                  {lang === "de" ? "Vault" : "Vault"}
+                </div>
+                <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                  {lang === "de"
+                    ? "Entsperren zum Arbeiten oder wieder sperren."
+                    : "Unlock for work or lock it again."}
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
                 {!isUnlocked ? (
                   <button
                     type="button"
@@ -846,42 +853,42 @@ export default function SettingsSecuritySection({
               </div>
             </div>
 
-            <div style={compactPanelStyle}>
-              <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                {lang === "de" ? "Startverhalten" : "Startup behavior"}
-              </div>
-              <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                {lang === "de"
-                  ? "Wird sofort beim Umschalten gespeichert."
-                  : "Saved immediately when changed."}
+            <div style={compactRowStyle}>
+              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+                <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                  {lang === "de" ? "Startverhalten" : "Startup behavior"}
+                </div>
+                <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                  {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+                </div>
               </div>
 
-              <select
-                value={unlockMode}
-                onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
-                style={{ ...uniformSelectStyle, marginTop: 12 }}
-                disabled={busy}
-              >
-                <option value="demand">{ui.securityModeDemand}</option>
-                <option value="startup">{ui.securityModeStartup}</option>
-              </select>
-
-              <div className="text-[12px] text-[var(--text-muted)] mt-2">
-                {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+              <div style={{ width: "220px", maxWidth: "100%", flex: "0 1 220px" }}>
+                <select
+                  value={unlockMode}
+                  onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
+                  style={uniformSelectStyle}
+                  disabled={busy}
+                >
+                  <option value="demand">{ui.securityModeDemand}</option>
+                  <option value="startup">{ui.securityModeStartup}</option>
+                </select>
               </div>
             </div>
 
-            <div style={compactPanelStyle}>
-              <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                {lang === "de" ? "Master Passwort" : "Master password"}
-              </div>
-              <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                {lang === "de"
-                  ? "Normaler Weg, wenn du dein Passwort kennst."
-                  : "Normal path when you know your password."}
+            <div style={compactRowStyle}>
+              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+                <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                  {lang === "de" ? "Master Passwort" : "Master password"}
+                </div>
+                <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                  {lang === "de"
+                    ? "Normaler Weg, wenn du dein Passwort kennst."
+                    : "Normal path when you know your password."}
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
                 <button
                   type="button"
                   onClick={changeMasterPassword}
@@ -893,17 +900,19 @@ export default function SettingsSecuritySection({
               </div>
             </div>
 
-            <div style={compactPanelStyle}>
-              <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                {lang === "de" ? "Recovery Key" : "Recovery key"}
-              </div>
-              <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                {lang === "de"
-                  ? "Wenn der Key fehlt, erzeugst du hier einfach einen neuen."
-                  : "If the key is missing, just generate a new one here."}
+            <div style={compactRowStyle}>
+              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+                <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                  {lang === "de" ? "Recovery Key" : "Recovery key"}
+                </div>
+                <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                  {lang === "de"
+                    ? "Wenn der Key fehlt, erzeugst du hier einfach einen neuen."
+                    : "If the key is missing, just generate a new one here."}
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
                 <button
                   type="button"
                   onClick={regenerateRecoveryKey}
