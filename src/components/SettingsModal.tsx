@@ -66,12 +66,7 @@ export default function SettingsModal({
       }}
     >
       <div
-        style={{
-          ...modalShell,
-          opacity: globalDialogOpen ? 0.72 : 1,
-          transform: globalDialogOpen ? "scale(0.985)" : "scale(1)",
-          transition: "opacity 140ms ease, transform 140ms ease"
-        }}
+        style={modalShell}
       >
         <SettingsModalHeader
           title={ui.settingsTitle}
