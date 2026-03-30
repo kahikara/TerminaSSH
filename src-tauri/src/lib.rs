@@ -24,6 +24,7 @@ use aes_gcm::{
     aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
+use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -270,6 +271,12 @@ pub struct VaultStatus {
     has_legacy_master_key: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct EnableVaultProtectionResult {
+    recovery_key: String,
+    migrated_secret_entries: usize,
+}
+
 fn take_finished_tunnel_entries(
     state: &State<'_, SshState>,
 ) -> Result<Vec<TunnelRuntimeEntry>, String> {
@@ -394,6 +401,10 @@ const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 const VAULT_DB_FILE_NAME: &str = "vault.db";
 const VAULT_SCHEMA_VERSION: i64 = 1;
 const DEFAULT_VAULT_UNLOCK_MODE: &str = "demand";
+const VAULT_SALT_LEN: usize = 16;
+const VAULT_KEY_LEN: usize = 32;
+const VAULT_NONCE_LEN: usize = 12;
+const VAULT_VALIDATION_TEXT: &[u8] = b"terminassh-vault-ok";
 
 fn home_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
@@ -629,10 +640,182 @@ fn load_vault_status(conn: &Connection, runtime: &VaultRuntimeState) -> Result<V
     Ok(VaultStatus {
         is_initialized: true,
         is_protected: is_protected != 0,
-        is_unlocked: runtime.is_unlocked,
+        is_unlocked: runtime.is_unlocked
+            && runtime
+                .session_dek
+                .as_ref()
+                .map(|value| !value.is_empty())
+                .unwrap_or(false),
         unlock_mode: effective_unlock_mode,
         has_legacy_master_key: Path::new(&get_key_path()).exists(),
     })
+}
+
+fn normalize_vault_unlock_mode(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "startup" => "startup".to_string(),
+        "demand" => "demand".to_string(),
+        _ => DEFAULT_VAULT_UNLOCK_MODE.to_string(),
+    }
+}
+
+fn create_argon2() -> Result<Argon2<'static>, String> {
+    let params = Params::new(19_456, 3, 1, Some(VAULT_KEY_LEN))
+        .map_err(|e| format!("Argon2 params failed: {}", e))?;
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+}
+
+fn derive_vault_key_from_secret(secret: &str, salt: &[u8]) -> Result<[u8; VAULT_KEY_LEN], String> {
+    if secret.trim().is_empty() {
+        return Err("Secret is empty".to_string());
+    }
+    if salt.len() < VAULT_SALT_LEN {
+        return Err("Vault salt is invalid".to_string());
+    }
+
+    let argon2 = create_argon2()?;
+    let mut out = [0u8; VAULT_KEY_LEN];
+    argon2
+        .hash_password_into(secret.as_bytes(), salt, &mut out)
+        .map_err(|e| format!("Argon2 derive failed: {}", e))?;
+    Ok(out)
+}
+
+fn vault_encrypt_combined(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    if key.len() != VAULT_KEY_LEN {
+        return Err("Vault key length is invalid".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
+    let mut nonce_bytes = [0u8; VAULT_NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext)
+        .map_err(|e| e.to_string())?;
+
+    let mut combined = nonce_bytes.to_vec();
+    combined.extend_from_slice(&ciphertext);
+    Ok(combined)
+}
+
+fn vault_decrypt_combined(key: &[u8], combined: &[u8]) -> Result<Vec<u8>, String> {
+    if key.len() != VAULT_KEY_LEN {
+        return Err("Vault key length is invalid".to_string());
+    }
+    if combined.len() < VAULT_NONCE_LEN {
+        return Err("Vault payload is too short".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
+    let nonce = Nonce::from_slice(&combined[..VAULT_NONCE_LEN]);
+    cipher
+        .decrypt(nonce, &combined[VAULT_NONCE_LEN..])
+        .map_err(|_| "Vault decrypt failed".to_string())
+}
+
+fn vault_encrypt_secret_value(dek: &[u8], plaintext: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
+    if dek.len() != VAULT_KEY_LEN {
+        return Err("Vault DEK length is invalid".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(dek).map_err(|e| e.to_string())?;
+    let mut nonce_bytes = [0u8; VAULT_NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    Ok((ciphertext, nonce_bytes.to_vec()))
+}
+
+fn generate_recovery_key() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut bytes = [0u8; 20];
+    OsRng.fill_bytes(&mut bytes);
+
+    let mut parts: Vec<String> = Vec::new();
+    for chunk in bytes.chunks(4) {
+        let part: String = chunk
+            .iter()
+            .map(|byte| ALPHABET[(*byte as usize) % ALPHABET.len()] as char)
+            .collect();
+        parts.push(part);
+    }
+    parts.join("-")
+}
+
+fn upsert_vault_secret(
+    vault_conn: &Connection,
+    connection_id: i32,
+    secret_type: &str,
+    secret_value: &str,
+    dek: &[u8],
+) -> Result<(), String> {
+    if secret_value.is_empty() {
+        return Ok(());
+    }
+
+    let (encrypted_data, nonce) = vault_encrypt_secret_value(dek, secret_value)?;
+    vault_conn
+        .execute(
+            "INSERT INTO secrets (connection_id, secret_type, encrypted_data, nonce)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(connection_id, secret_type)
+             DO UPDATE SET encrypted_data = excluded.encrypted_data, nonce = excluded.nonce",
+            (&connection_id, &secret_type, &encrypted_data, &nonce),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn migrate_legacy_secrets_into_vault(
+    conn_db: &Connection,
+    vault_conn: &Connection,
+    dek: &[u8],
+) -> Result<usize, String> {
+    let mut stmt = conn_db
+        .prepare("SELECT id, password, passphrase FROM connections ORDER BY id ASC")
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut migrated = 0usize;
+
+    for item in iter {
+        let (connection_id, legacy_password, legacy_passphrase) =
+            item.map_err(|e| e.to_string())?;
+
+        if !legacy_password.trim().is_empty() {
+            let plain = decrypt_pw(&legacy_password)?;
+            if !plain.is_empty() {
+                upsert_vault_secret(vault_conn, connection_id, "password", &plain, dek)?;
+                migrated += 1;
+            }
+        }
+
+        if !legacy_passphrase.trim().is_empty() {
+            let plain = decrypt_pw(&legacy_passphrase)?;
+            if !plain.is_empty() {
+                upsert_vault_secret(vault_conn, connection_id, "passphrase", &plain, dek)?;
+                migrated += 1;
+            }
+        }
+    }
+
+    Ok(migrated)
 }
 
 fn get_key_path() -> String {
@@ -1218,6 +1401,100 @@ fn get_vault_status(vault_state: State<'_, VaultState>) -> Result<VaultStatus, S
         .lock()
         .map_err(|_| "Vault state lock failed".to_string())?;
     load_vault_status(&conn, &runtime)
+}
+
+#[tauri::command]
+fn enable_vault_protection(
+    master_password: String,
+    unlock_mode: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<EnableVaultProtectionResult, String> {
+    if master_password.trim().is_empty() {
+        return Err("Master password is empty".to_string());
+    }
+
+    init_vault_db()?;
+    let conn_db = open_db()?;
+    let vault_conn = open_vault_db()?;
+
+    let existing: (i32, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, encrypted_dek FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if existing.0 != 0 && !existing.1.is_empty() {
+        return Err("Vault protection is already enabled".to_string());
+    }
+
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&unlock_mode);
+
+    let mut salt = [0u8; VAULT_SALT_LEN];
+    OsRng.fill_bytes(&mut salt);
+
+    let mut dek = [0u8; VAULT_KEY_LEN];
+    OsRng.fill_bytes(&mut dek);
+
+    let recovery_key = generate_recovery_key();
+    let master_key = derive_vault_key_from_secret(&master_password, &salt)?;
+    let recovery_wrap_key = derive_vault_key_from_secret(&recovery_key, &salt)?;
+
+    let encrypted_dek = vault_encrypt_combined(&master_key, &dek)?;
+    let recovery_encrypted_dek = vault_encrypt_combined(&recovery_wrap_key, &dek)?;
+    let kek_validation = vault_encrypt_combined(&dek, VAULT_VALIDATION_TEXT)?;
+
+    let migrated_secret_entries = migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+
+    let now = current_export_timestamp();
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET schema_version = ?1,
+                 is_protected = 1,
+                 unlock_mode = ?2,
+                 salt = ?3,
+                 encrypted_dek = ?4,
+                 recovery_encrypted_dek = ?5,
+                 kek_validation = ?6,
+                 updated_at = ?7
+             WHERE id = 1",
+            (
+                &VAULT_SCHEMA_VERSION,
+                &normalized_unlock_mode,
+                &salt.to_vec(),
+                &encrypted_dek,
+                &recovery_encrypted_dek,
+                &kek_validation,
+                &now,
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.is_unlocked = true;
+    runtime.unlock_mode = normalized_unlock_mode;
+    runtime.session_dek = Some(dek.to_vec());
+
+    Ok(EnableVaultProtectionResult {
+        recovery_key,
+        migrated_secret_entries,
+    })
+}
+
+#[tauri::command]
+fn lock_vault(vault_state: State<'_, VaultState>) -> Result<(), String> {
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.is_unlocked = false;
+    runtime.session_dek = None;
+    Ok(())
 }
 
 #[tauri::command]
@@ -4410,6 +4687,8 @@ pub fn run() {
             save_connection,
             get_connections,
             get_vault_status,
+            enable_vault_protection,
+            lock_vault,
             update_connection,
             test_connection,
             set_connection_password,
