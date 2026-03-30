@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import type { CSSProperties } from "react"
-import { Download, Copy, X } from "lucide-react"
+import { Download, Copy, X, ChevronDown, ChevronRight } from "lucide-react"
 
 type VaultStatus = {
   is_initialized?: boolean
@@ -65,6 +65,7 @@ export default function SettingsSecuritySection({
   const [busy, setBusy] = useState(false)
   const [unlockMode, setUnlockMode] = useState<"demand" | "startup">("demand")
   const [savedUnlockMode, setSavedUnlockMode] = useState<"demand" | "startup">("demand")
+  const [showRecoveryTools, setShowRecoveryTools] = useState(false)
   const [recoveryDialog, setRecoveryDialog] = useState<{
     isOpen: boolean
     key: string
@@ -462,7 +463,6 @@ export default function SettingsSecuritySection({
           }) as EnableVaultProtectionResult
 
           await refreshStatus(false)
-
           showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
 
           showToast(
@@ -569,19 +569,33 @@ export default function SettingsSecuritySection({
   const statusLabel = !isProtected
     ? ui.securityStatusOff
     : isUnlocked
-    ? ui.securityStatusUnlocked
-    : ui.securityStatusLocked
+      ? ui.securityStatusUnlocked
+      : ui.securityStatusLocked
 
   const modeLabel = unlockMode === "startup" ? ui.securityModeStartup : ui.securityModeDemand
+  const hasUnsavedMode = unlockMode !== savedUnlockMode
 
   return (
     <>
       <div style={cardStyle}>
-        <div className="text-[14px] font-semibold text-[var(--text-main)]">
-          {ui.securityTitle}
-        </div>
-        <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-          {ui.securityDesc}
+        <div style={{ ...rowStyle, alignItems: "flex-start" }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="text-[14px] font-semibold text-[var(--text-main)]">
+              {ui.securityTitle}
+            </div>
+            <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
+              {ui.securityDesc}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void refreshStatus(true)}
+            style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+            disabled={busy}
+          >
+            {ui.refreshLabel}
+          </button>
         </div>
 
         <div style={{ ...rowStyle, marginTop: 14 }}>
@@ -670,15 +684,6 @@ export default function SettingsSecuritySection({
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => void refreshStatus(true)}
-              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-              disabled={busy}
-            >
-              {ui.refreshLabel}
-            </button>
-
-            <button
-              type="button"
               onClick={enableProtection}
               style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
@@ -690,112 +695,148 @@ export default function SettingsSecuritySection({
       )}
 
       {isProtected && (
-        <div style={cardStyle}>
-          <div className="text-[13px] font-semibold text-[var(--text-main)]">
-            {ui.securityActionsTitle}
-          </div>
-          <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-            {isUnlocked ? ui.securityActionsUnlockedDesc : ui.securityActionsLockedDesc}
-          </div>
+        <>
+          <div style={cardStyle}>
+            <div className="text-[13px] font-semibold text-[var(--text-main)]">
+              {lang === "de" ? "Schutz" : "Protection"}
+            </div>
+            <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
+              {isUnlocked
+                ? (lang === "de"
+                    ? "Hier änderst du den normalen Schutz und den Startmodus."
+                    : "Adjust the normal protection flow and startup mode here.")
+                : (lang === "de"
+                    ? "Der Vault ist gesperrt. Für Änderungen am Schutz musst du ihn zuerst entsperren."
+                    : "The vault is locked. Unlock it first to change protection settings.")}
+            </div>
 
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-            <label className="text-[12px] font-semibold text-[var(--text-main)]">
-              {ui.securityModeLabel}
-            </label>
-            <select
-              value={unlockMode}
-              onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
-              style={uniformSelectStyle}
-              disabled={busy}
-            >
-              <option value="demand">{ui.securityModeDemand}</option>
-              <option value="startup">{ui.securityModeStartup}</option>
-            </select>
-            <div className="text-[12px] text-[var(--text-muted)]">
-              {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+              <label className="text-[12px] font-semibold text-[var(--text-main)]">
+                {ui.securityModeLabel}
+              </label>
+              <select
+                value={unlockMode}
+                onChange={(e) => setUnlockMode(e.target.value === "startup" ? "startup" : "demand")}
+                style={uniformSelectStyle}
+                disabled={busy}
+              >
+                <option value="demand">{ui.securityModeDemand}</option>
+                <option value="startup">{ui.securityModeStartup}</option>
+              </select>
+              <div className="text-[12px] text-[var(--text-muted)]">
+                {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => void saveUnlockMode()}
+                style={{ ...actionBtnStyle, opacity: busy || !hasUnsavedMode ? 0.7 : 1 }}
+                disabled={busy || !hasUnsavedMode}
+              >
+                {lang === "de" ? "Mode speichern" : "Save mode"}
+              </button>
+
+              {!isUnlocked ? (
+                <button
+                  type="button"
+                  onClick={unlockVault}
+                  style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
+                  disabled={busy}
+                >
+                  {ui.securityUnlockAction}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void lockVault()}
+                    style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    disabled={busy}
+                  >
+                    {ui.securityLockAction}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={disableProtection}
+                    style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    disabled={busy}
+                  >
+                    {lang === "de" ? "Schutz deaktivieren" : "Disable protection"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <div style={cardStyle}>
             <button
               type="button"
-              onClick={() => void refreshStatus(true)}
-              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-              disabled={busy}
+              onClick={() => setShowRecoveryTools((value) => !value)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                cursor: "pointer"
+              }}
             >
-              {ui.refreshLabel}
+              <div style={{ minWidth: 0, textAlign: "left" }}>
+                <div className="text-[13px] font-semibold text-[var(--text-main)]">
+                  {lang === "de" ? "Recovery" : "Recovery"}
+                </div>
+                <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
+                  {lang === "de"
+                    ? "Nur für Notfälle, wenn das Master Passwort verloren wurde oder du einen neuen Recovery Key brauchst."
+                    : "Only for emergency cases, such as a lost master password or a new recovery key."}
+                </div>
+              </div>
+
+              <span className="text-[var(--text-muted)]">
+                {showRecoveryTools ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => void saveUnlockMode()}
-              style={{ ...actionBtnStyle, opacity: busy || unlockMode === savedUnlockMode ? 0.7 : 1 }}
-              disabled={busy || unlockMode === savedUnlockMode}
-            >
-              {lang === "de" ? "Mode speichern" : "Save mode"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void importRecoveryKeyFile()}
-              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-              disabled={busy}
-            >
-              {lang === "de" ? "Recovery Datei" : "Recovery file"}
-            </button>
-
-            <button
-              type="button"
-              onClick={startRecoveryReset}
-              style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-              disabled={busy}
-            >
-              {lang === "de" ? "Recovery Reset" : "Recovery reset"}
-            </button>
-
-            {isUnlocked && (
-              <button
-                type="button"
-                onClick={regenerateRecoveryKey}
-                style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                disabled={busy}
-              >
-                {lang === "de" ? "Neuer Recovery Key" : "New recovery key"}
-              </button>
-            )}
-
-            {!isUnlocked ? (
-              <button
-                type="button"
-                onClick={unlockVault}
-                style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
-                disabled={busy}
-              >
-                {ui.securityUnlockAction}
-              </button>
-            ) : (
-              <>
+            {showRecoveryTools && (
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  onClick={() => void lockVault()}
+                  onClick={() => void importRecoveryKeyFile()}
                   style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
                   disabled={busy}
                 >
-                  {ui.securityLockAction}
+                  {lang === "de" ? "Recovery Datei" : "Recovery file"}
                 </button>
 
                 <button
                   type="button"
-                  onClick={disableProtection}
+                  onClick={startRecoveryReset}
                   style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
                   disabled={busy}
                 >
-                  {lang === "de" ? "Schutz deaktivieren" : "Disable protection"}
+                  {lang === "de" ? "Recovery Reset" : "Recovery reset"}
                 </button>
-              </>
+
+                {isUnlocked && (
+                  <button
+                    type="button"
+                    onClick={regenerateRecoveryKey}
+                    style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    disabled={busy}
+                  >
+                    {lang === "de" ? "Neuer Recovery Key" : "New recovery key"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        </div>
+        </>
       )}
 
       {recoveryDialog.isOpen && (
