@@ -278,8 +278,9 @@ export default function App() {
   const sidebarSearchFocusTimerRef = useRef<number | null>(null);
   const tabDragStartXRef = useRef<number | null>(null);
 
-  const startupVaultPromptHandledRef = useRef(false);
   const startupVaultPromptOpenRef = useRef(false);
+  const startupVaultPromptDismissedRef = useRef(false);
+  const startupVaultUnlockedRef = useRef(false);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
     lang: settings.lang,
@@ -287,9 +288,11 @@ export default function App() {
   });
 
   const openStartupVaultUnlockDialog = useCallback(() => {
-    if (startupVaultPromptOpenRef.current) return;
+    if (startupVaultPromptOpenRef.current) return
+    if (startupVaultPromptDismissedRef.current) return
+    if (startupVaultUnlockedRef.current) return
 
-    startupVaultPromptOpenRef.current = true;
+    startupVaultPromptOpenRef.current = true
 
     showDialog({
       type: 'prompt',
@@ -305,38 +308,45 @@ export default function App() {
         if (!String(value || '').trim()) {
           return settings.lang === 'de'
             ? 'Master Passwort ist erforderlich'
-            : 'Master password is required';
+            : 'Master password is required'
         }
-        return '';
+        return ''
       },
       onConfirm: async (value: string) => {
         try {
-          await invoke('unlock_vault', { masterPassword: value });
+          await invoke('unlock_vault', { masterPassword: value })
+          startupVaultUnlockedRef.current = true
+          startupVaultPromptDismissedRef.current = false
+          startupVaultPromptOpenRef.current = false
+
           showToast(
             settings.lang === 'de'
               ? 'Vault beim Start entsperrt'
               : 'Vault unlocked at startup'
-          );
+          )
         } catch (e) {
+          startupVaultPromptOpenRef.current = false
+
           showToast(
             settings.lang === 'de'
               ? `Vault konnte nicht entsperrt werden: ${String(e)}`
               : `Could not unlock vault: ${String(e)}`,
             true
-          );
+          )
 
           window.setTimeout(() => {
-            openStartupVaultUnlockDialog();
-          }, 0);
-        } finally {
-          startupVaultPromptOpenRef.current = false;
+            openStartupVaultUnlockDialog()
+          }, 0)
+
+          return
         }
       },
       onCancel: () => {
-        startupVaultPromptOpenRef.current = false;
+        startupVaultPromptOpenRef.current = false
+        startupVaultPromptDismissedRef.current = true
       }
-    });
-  }, [settings.lang, showDialog, showToast]);
+    })
+  }, [settings.lang, showDialog, showToast])
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -386,39 +396,61 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (startupVaultPromptHandledRef.current) return;
-    startupVaultPromptHandledRef.current = true;
+    let cancelled = false
+    let startupTimer: number | undefined
 
-    let cancelled = false;
+    const checkStartupVault = async () => {
+      if (cancelled) return
+      if (startupVaultPromptOpenRef.current) return
+      if (startupVaultPromptDismissedRef.current) return
+      if (startupVaultUnlockedRef.current) return
 
-    const startupVaultCheck = async () => {
       try {
-        const status = await invoke('get_vault_status') as VaultStatus;
-        if (cancelled) return;
+        const status = await invoke('get_vault_status') as VaultStatus
+        if (cancelled) return
 
-        const isProtected = Boolean(status?.is_protected);
-        const isUnlocked = Boolean(status?.is_unlocked);
-        const unlockMode = String(status?.unlock_mode || '').toLowerCase();
+        const isProtected = Boolean(status?.is_protected)
+        const isUnlocked = Boolean(status?.is_unlocked)
+        const unlockMode = String(status?.unlock_mode || '').toLowerCase()
+
+        if (isUnlocked) {
+          startupVaultUnlockedRef.current = true
+          return
+        }
 
         if (isProtected && !isUnlocked && unlockMode === 'startup') {
-          openStartupVaultUnlockDialog();
+          openStartupVaultUnlockDialog()
         }
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled) return
         showToast(
           settings.lang === 'de'
             ? `Vault Status konnte nicht geladen werden: ${String(e)}`
             : `Could not load vault status: ${String(e)}`,
           true
-        );
+        )
       }
-    };
+    }
 
-    void startupVaultCheck();
+    startupTimer = window.setTimeout(() => {
+      void checkStartupVault()
+    }, 300)
+
+    const recheckStartupVault = () => {
+      void checkStartupVault()
+    }
+
+    window.addEventListener('focus', recheckStartupVault)
+    document.addEventListener('visibilitychange', recheckStartupVault)
 
     return () => {
-      cancelled = true;
-    };
+      cancelled = true
+      if (startupTimer !== undefined) {
+        window.clearTimeout(startupTimer)
+      }
+      window.removeEventListener('focus', recheckStartupVault)
+      document.removeEventListener('visibilitychange', recheckStartupVault)
+    }
   }, [openStartupVaultUnlockDialog, settings.lang, showToast])
 
   useEffect(() => {
