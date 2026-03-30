@@ -582,8 +582,7 @@ fn init_vault_db() -> Result<(), String> {
             secret_type TEXT NOT NULL,
             encrypted_data BLOB NOT NULL DEFAULT X'',
             nonce BLOB NOT NULL DEFAULT X'',
-            PRIMARY KEY (connection_id, secret_type),
-            FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE
+            PRIMARY KEY (connection_id, secret_type)
         );"
     )
     .map_err(|e| e.to_string())?;
@@ -592,6 +591,23 @@ fn init_vault_db() -> Result<(), String> {
         .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
         .optional()
         .map_err(|e| e.to_string())?;
+
+    conn.execute_batch(
+        "PRAGMA foreign_keys = OFF;
+         CREATE TABLE IF NOT EXISTS secrets_new (
+             connection_id INTEGER NOT NULL,
+             secret_type TEXT NOT NULL,
+             encrypted_data BLOB NOT NULL DEFAULT X'',
+             nonce BLOB NOT NULL DEFAULT X'',
+             PRIMARY KEY (connection_id, secret_type)
+         );
+         INSERT OR REPLACE INTO secrets_new (connection_id, secret_type, encrypted_data, nonce)
+         SELECT connection_id, secret_type, encrypted_data, nonce FROM secrets;
+         DROP TABLE secrets;
+         ALTER TABLE secrets_new RENAME TO secrets;
+         PRAGMA foreign_keys = ON;"
+    )
+    .map_err(|e| e.to_string())?;
 
     if meta_exists.is_none() {
         let now = current_export_timestamp();
