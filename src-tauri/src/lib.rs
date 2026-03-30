@@ -642,6 +642,14 @@ fn init_vault_db() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
 
+    let is_protected: i32 = conn
+        .query_row("SELECT is_protected FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+
+    if is_protected == 0 {
+        let _ = ensure_unprotected_vault_dek(&conn)?;
+    }
+
     Ok(())
 }
 
@@ -857,6 +865,40 @@ fn is_vault_protected(vault_conn: &Connection) -> Result<bool, String> {
     Ok(value.unwrap_or(0) != 0)
 }
 
+fn ensure_unprotected_vault_dek(vault_conn: &Connection) -> Result<Vec<u8>, String> {
+    let row: (i32, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, encrypted_dek FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if row.0 != 0 {
+        return Err("Vault protection is enabled".to_string());
+    }
+
+    if row.1.len() == VAULT_KEY_LEN {
+        return Ok(row.1);
+    }
+
+    let mut dek = [0u8; VAULT_KEY_LEN];
+    OsRng.fill_bytes(&mut dek);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET encrypted_dek = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&dek.to_vec(), &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(dek.to_vec())
+}
+
 fn get_runtime_vault_dek(vault_state: &State<'_, VaultState>) -> Result<Option<Vec<u8>>, String> {
     let runtime = vault_state
         .runtime
@@ -865,17 +907,17 @@ fn get_runtime_vault_dek(vault_state: &State<'_, VaultState>) -> Result<Option<V
     Ok(runtime.session_dek.clone())
 }
 
-fn require_runtime_vault_dek(
+fn get_active_vault_dek(
     vault_conn: &Connection,
     vault_state: &State<'_, VaultState>,
-) -> Result<Option<Vec<u8>>, String> {
+) -> Result<Vec<u8>, String> {
     if !is_vault_protected(vault_conn)? {
-        return Ok(None);
+        return ensure_unprotected_vault_dek(vault_conn);
     }
 
     let dek = get_runtime_vault_dek(vault_state)?;
     match dek {
-        Some(value) if !value.is_empty() => Ok(Some(value)),
+        Some(value) if !value.is_empty() => Ok(value),
         _ => Err("Vault is locked".to_string()),
     }
 }
@@ -908,6 +950,19 @@ fn read_vault_secret_plaintext(
     String::from_utf8(plain).map_err(|_| "Vault secret is not valid UTF 8".to_string())
 }
 
+fn delete_vault_secrets_for_connection(
+    vault_conn: &Connection,
+    connection_id: i32,
+) -> Result<(), String> {
+    vault_conn
+        .execute(
+            "DELETE FROM secrets WHERE connection_id = ?1",
+            [&connection_id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn delete_vault_secret(
     vault_conn: &Connection,
     connection_id: i32,
@@ -919,6 +974,49 @@ fn delete_vault_secret(
             (&connection_id, &secret_type),
         )
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn wipe_and_remove_file(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let wipe_len = fs::metadata(path).map(|m| m.len()).unwrap_or(64).max(64) as usize;
+    let _ = fs::write(path, vec![0u8; wipe_len]);
+    fs::remove_file(path).map_err(|e| e.to_string())
+}
+
+fn migrate_legacy_master_key_to_vault() -> Result<(), String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Ok(());
+    }
+
+    init_vault_db()?;
+    let conn_db = open_db()?;
+    let vault_conn = open_vault_db()?;
+
+    if is_vault_protected(&vault_conn)? {
+        return Ok(());
+    }
+
+    let dek = ensure_unprotected_vault_dek(&vault_conn)?;
+    let migrated = migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+
+    if migrated > 0 {
+        conn_db
+            .execute(
+                "UPDATE connections
+                 SET password = '', passphrase = ''
+                 WHERE TRIM(COALESCE(password, '')) != '' OR TRIM(COALESCE(passphrase, '')) != ''",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+        let _ = conn_db.execute_batch("VACUUM;");
+    }
+
+    wipe_and_remove_file(&key_path)?;
     Ok(())
 }
 
@@ -1538,8 +1636,13 @@ fn enable_vault_protection(
     let mut salt = [0u8; VAULT_SALT_LEN];
     OsRng.fill_bytes(&mut salt);
 
-    let mut dek = [0u8; VAULT_KEY_LEN];
-    OsRng.fill_bytes(&mut dek);
+    let dek = if existing.1.len() == VAULT_KEY_LEN {
+        existing.1
+    } else {
+        let mut value = [0u8; VAULT_KEY_LEN];
+        OsRng.fill_bytes(&mut value);
+        value.to_vec()
+    };
 
     let recovery_key = generate_recovery_key();
     let master_key = derive_vault_key_from_secret(&master_password, &salt)?;
@@ -1576,13 +1679,30 @@ fn enable_vault_protection(
         )
         .map_err(|e| e.to_string())?;
 
+    if migrated_secret_entries > 0 {
+        conn_db
+            .execute(
+                "UPDATE connections
+                 SET password = '', passphrase = ''
+                 WHERE TRIM(COALESCE(password, '')) != '' OR TRIM(COALESCE(passphrase, '')) != ''",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+        let _ = conn_db.execute_batch("VACUUM;");
+    }
+
+    let legacy_key_path = PathBuf::from(get_key_path());
+    if legacy_key_path.exists() {
+        let _ = wipe_and_remove_file(&legacy_key_path);
+    }
+
     let mut runtime = vault_state
         .runtime
         .lock()
         .map_err(|_| "Vault state lock failed".to_string())?;
     runtime.is_unlocked = true;
     runtime.unlock_mode = normalized_unlock_mode;
-    runtime.session_dek = Some(dek.to_vec());
+    runtime.session_dek = Some(dek.clone());
 
     Ok(EnableVaultProtectionResult {
         recovery_key,
@@ -1738,22 +1858,37 @@ fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn get_connections() -> Result<Vec<ConnectionItem>, String> {
+    init_vault_db()?;
     let conn = open_db()?;
+    let vault_conn = open_vault_db()?;
+
+    let mut secret_ids: Vec<i32> = Vec::new();
+    let mut secret_stmt = vault_conn
+        .prepare("SELECT DISTINCT connection_id FROM secrets WHERE secret_type = 'password'")
+        .map_err(|e| e.to_string())?;
+    let secret_iter = secret_stmt
+        .query_map([], |row| row.get::<_, i32>(0))
+        .map_err(|e| e.to_string())?;
+    for item in secret_iter {
+        secret_ids.push(item.map_err(|e| e.to_string())?);
+    }
+
     let mut stmt = conn
         .prepare("SELECT id, name, host, port, username, private_key, group_name, password FROM connections ORDER BY CASE WHEN TRIM(group_name) = '' THEN 0 ELSE 1 END, group_name COLLATE NOCASE ASC, name COLLATE NOCASE ASC, host COLLATE NOCASE ASC")
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map([], |row| {
+            let id: i32 = row.get(0)?;
             let encrypted_password: String = row.get(7)?;
             Ok(ConnectionItem {
-                id: row.get(0)?,
+                id,
                 name: row.get(1)?,
                 host: row.get(2)?,
                 port: row.get(3)?,
                 username: row.get(4)?,
                 private_key: row.get(5)?,
                 group_name: row.get(6)?,
-                has_password: !encrypted_password.trim().is_empty(),
+                has_password: secret_ids.contains(&id) || !encrypted_password.trim().is_empty(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -2019,51 +2154,31 @@ fn save_connection(
     ensure_connection_identity_unique(&conn, &connection, None)?;
 
     let vault_conn = open_vault_db()?;
-    let maybe_dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
 
-    if let Some(dek) = maybe_dek {
-        conn.execute(
-            "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name)
-             VALUES (?1, ?2, ?3, ?4, '', ?5, '', ?6)",
-            (
-                &connection.name,
-                &connection.host,
-                &connection.port,
-                &connection.username,
-                &connection.private_key,
-                &connection.group_name,
-            ),
-        )
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name)
+         VALUES (?1, ?2, ?3, ?4, '', ?5, '', ?6)",
+        (
+            &connection.name,
+            &connection.host,
+            &connection.port,
+            &connection.username,
+            &connection.private_key,
+            &connection.group_name,
+        ),
+    )
+    .map_err(|e| e.to_string())?;
 
-        let connection_id = conn.last_insert_rowid() as i32;
+    let connection_id = conn.last_insert_rowid() as i32;
 
-        if let Err(err) = (|| -> Result<(), String> {
-            upsert_vault_secret(&vault_conn, connection_id, "password", &connection.password, &dek)?;
-            upsert_vault_secret(&vault_conn, connection_id, "passphrase", &connection.passphrase, &dek)?;
-            Ok(())
-        })() {
-            let _ = conn.execute("DELETE FROM connections WHERE id = ?1", [&connection_id]);
-            return Err(err);
-        }
-    } else {
-        let enc_pw = encrypt_pw(&connection.password)?;
-        let enc_passphrase = encrypt_pw(&connection.passphrase)?;
-        conn.execute(
-            "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            (
-                &connection.name,
-                &connection.host,
-                &connection.port,
-                &connection.username,
-                &enc_pw,
-                &connection.private_key,
-                &enc_passphrase,
-                &connection.group_name,
-            ),
-        )
-        .map_err(|e| e.to_string())?;
+    if let Err(err) = (|| -> Result<(), String> {
+        upsert_vault_secret(&vault_conn, connection_id, "password", &connection.password, &dek)?;
+        upsert_vault_secret(&vault_conn, connection_id, "passphrase", &connection.passphrase, &dek)?;
+        Ok(())
+    })() {
+        let _ = conn.execute("DELETE FROM connections WHERE id = ?1", [&connection_id]);
+        return Err(err);
     }
 
     let _ = app.emit("connection-saved", ());
@@ -2089,89 +2204,38 @@ fn update_connection(
     ensure_connection_identity_unique(&conn, &connection, Some(id))?;
 
     let vault_conn = open_vault_db()?;
-    let maybe_dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
 
-    if let Some(dek) = maybe_dek {
-        let updated = conn.execute(
-            "UPDATE connections
-             SET name = ?1, host = ?2, port = ?3, username = ?4, password = '', private_key = ?5, passphrase = '', group_name = ?6
-             WHERE id = ?7",
-            (
-                &connection.name,
-                &connection.host,
-                &connection.port,
-                &connection.username,
-                &connection.private_key,
-                &connection.group_name,
-                &id,
-            ),
-        )
-        .map_err(|e| e.to_string())?;
+    let updated = conn.execute(
+        "UPDATE connections
+         SET name = ?1, host = ?2, port = ?3, username = ?4, password = '', private_key = ?5, passphrase = '', group_name = ?6
+         WHERE id = ?7",
+        (
+            &connection.name,
+            &connection.host,
+            &connection.port,
+            &connection.username,
+            &connection.private_key,
+            &connection.group_name,
+            &id,
+        ),
+    )
+    .map_err(|e| e.to_string())?;
 
-        if updated == 0 {
-            return Err("Connection not found".to_string());
-        }
+    if updated == 0 {
+        return Err("Connection not found".to_string());
+    }
 
-        if clear_password {
-            delete_vault_secret(&vault_conn, id, "password")?;
-        } else if !connection.password.is_empty() {
-            upsert_vault_secret(&vault_conn, id, "password", &connection.password, &dek)?;
-        }
+    if clear_password {
+        delete_vault_secret(&vault_conn, id, "password")?;
+    } else if !connection.password.is_empty() {
+        upsert_vault_secret(&vault_conn, id, "password", &connection.password, &dek)?;
+    }
 
-        if clear_passphrase {
-            delete_vault_secret(&vault_conn, id, "passphrase")?;
-        } else if !connection.passphrase.is_empty() {
-            upsert_vault_secret(&vault_conn, id, "passphrase", &connection.passphrase, &dek)?;
-        }
-    } else {
-        let existing_secrets: (String, String) = conn
-            .query_row(
-                "SELECT password, passphrase FROM connections WHERE id = ?1",
-                [&id],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .map_err(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => "Connection not found".to_string(),
-                _ => e.to_string(),
-            })?;
-
-        let pw_to_save = if clear_password {
-            String::new()
-        } else if connection.password.is_empty() {
-            existing_secrets.0
-        } else {
-            encrypt_pw(&connection.password)?
-        };
-
-        let passphrase_to_save = if clear_passphrase {
-            String::new()
-        } else if connection.passphrase.is_empty() {
-            existing_secrets.1
-        } else {
-            encrypt_pw(&connection.passphrase)?
-        };
-
-        let updated = conn.execute(
-            "UPDATE connections
-             SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8
-             WHERE id = ?9",
-            (
-                &connection.name,
-                &connection.host,
-                &connection.port,
-                &connection.username,
-                &pw_to_save,
-                &connection.private_key,
-                &passphrase_to_save,
-                &connection.group_name,
-                &id,
-            ),
-        )
-        .map_err(|e| e.to_string())?;
-
-        if updated == 0 {
-            return Err("Connection not found".to_string());
-        }
+    if clear_passphrase {
+        delete_vault_secret(&vault_conn, id, "passphrase")?;
+    } else if !connection.passphrase.is_empty() {
+        upsert_vault_secret(&vault_conn, id, "passphrase", &connection.passphrase, &dek)?;
     }
 
     let _ = old_name;
@@ -2191,27 +2255,18 @@ fn set_connection_password(
     ensure_connection_exists(&conn, id)?;
 
     let vault_conn = open_vault_db()?;
-    let maybe_dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
 
-    if let Some(dek) = maybe_dek {
-        conn.execute(
-            "UPDATE connections SET password = '' WHERE id = ?1",
-            [&id],
-        )
-        .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE connections SET password = '' WHERE id = ?1",
+        [&id],
+    )
+    .map_err(|e| e.to_string())?;
 
-        if password.is_empty() {
-            delete_vault_secret(&vault_conn, id, "password")?;
-        } else {
-            upsert_vault_secret(&vault_conn, id, "password", &password, &dek)?;
-        }
+    if password.is_empty() {
+        delete_vault_secret(&vault_conn, id, "password")?;
     } else {
-        let enc_pw = encrypt_pw(&password)?;
-        conn.execute(
-            "UPDATE connections SET password = ?1 WHERE id = ?2",
-            (&enc_pw, &id),
-        )
-        .map_err(|e| e.to_string())?;
+        upsert_vault_secret(&vault_conn, id, "password", &password, &dek)?;
     }
 
     let _ = app.emit("connection-saved", ());
@@ -2259,6 +2314,10 @@ fn delete_connection(
 
     conn.execute("DELETE FROM ssh_tunnels WHERE server_id = ?1", [&id])
         .map_err(|e| e.to_string())?;
+
+    if let Ok(vault_conn) = open_vault_db() {
+        let _ = delete_vault_secrets_for_connection(&vault_conn, id);
+    }
 
     let deleted = conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
@@ -2467,7 +2526,10 @@ fn export_backup_bundle(
 }
 
 #[tauri::command]
-fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, String> {
+fn import_backup_bundle(
+    bundle_json: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<ImportBackupResult, String> {
     let parsed: serde_json::Value =
         serde_json::from_str(&bundle_json).map_err(|e| format!("Invalid backup JSON: {}", e))?;
 
@@ -2554,6 +2616,10 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
     let keys_dir = get_keys_dir();
     let mut warnings: Vec<String> = Vec::new();
     let mut created_imported_key_paths: Vec<String> = Vec::new();
+
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
 
     if version < 3 {
         warnings.push(
@@ -2803,16 +2869,19 @@ fn import_backup_bundle(bundle_json: String) -> Result<ImportBackupResult, Strin
             continue;
         }
 
-        let enc_pw = encrypt_pw(&password)?;
-        let enc_passphrase = encrypt_pw(&passphrase)?;
-
         tx.execute(
-            "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            (&name, &host, &port, &username, &enc_pw, &private_key, &enc_passphrase, &group_name)
+            "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name) VALUES (?1, ?2, ?3, ?4, '', ?5, '', ?6)",
+            (&name, &host, &port, &username, &private_key, &group_name)
         )
         .map_err(|e| e.to_string())?;
 
         let new_id = tx.last_insert_rowid() as i32;
+        if !password.is_empty() {
+            upsert_vault_secret(&vault_conn, new_id, "password", &password, &dek)?;
+        }
+        if !passphrase.is_empty() {
+            upsert_vault_secret(&vault_conn, new_id, "passphrase", &passphrase, &dek)?;
+        }
         connection_id_map.insert(primary_map_key, new_id);
         connection_id_map.insert(legacy_map_key, new_id);
         connections_imported += 1;
@@ -3431,31 +3500,37 @@ fn load_connection_runtime_details(
     let (host, port, username, enc_pw, private_key, enc_passphrase) = row_data;
 
     let vault_conn = open_vault_db()?;
-    let maybe_dek = require_runtime_vault_dek(&vault_conn, vault_state)?;
+    let dek = get_active_vault_dek(&vault_conn, vault_state)?;
 
-    let (password, passphrase) = if let Some(dek) = maybe_dek {
-        let resolved_password = match password_override {
-            Some(value) if !value.is_empty() => value,
-            _ => read_vault_secret_plaintext(&vault_conn, id, "password", &dek)?,
-        };
-        let resolved_passphrase = read_vault_secret_plaintext(&vault_conn, id, "passphrase", &dek)?;
-        (resolved_password, resolved_passphrase)
-    } else {
-        let resolved_password = match password_override {
-            Some(value) if !value.is_empty() => value,
-            _ => decrypt_pw(&enc_pw)?,
-        };
-        let resolved_passphrase = decrypt_pw(&enc_passphrase)?;
-        (resolved_password, resolved_passphrase)
+    let mut resolved_password = match password_override {
+        Some(value) if !value.is_empty() => value,
+        _ => read_vault_secret_plaintext(&vault_conn, id, "password", &dek)?,
     };
+    let mut resolved_passphrase = read_vault_secret_plaintext(&vault_conn, id, "passphrase", &dek)?;
+
+    if resolved_password.is_empty() && !enc_pw.trim().is_empty() {
+        resolved_password = decrypt_pw(&enc_pw)?;
+        if !resolved_password.is_empty() {
+            let _ = upsert_vault_secret(&vault_conn, id, "password", &resolved_password, &dek);
+            let _ = conn_db.execute("UPDATE connections SET password = '' WHERE id = ?1", [&id]);
+        }
+    }
+
+    if resolved_passphrase.is_empty() && !enc_passphrase.trim().is_empty() {
+        resolved_passphrase = decrypt_pw(&enc_passphrase)?;
+        if !resolved_passphrase.is_empty() {
+            let _ = upsert_vault_secret(&vault_conn, id, "passphrase", &resolved_passphrase, &dek);
+            let _ = conn_db.execute("UPDATE connections SET passphrase = '' WHERE id = ?1", [&id]);
+        }
+    }
 
     Ok(ConnectionRuntimeDetails {
         host,
         port,
         username,
-        password,
+        password: resolved_password,
         private_key,
-        passphrase,
+        passphrase: resolved_passphrase,
     })
 }
 
@@ -4996,14 +5071,16 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     maybe_relaunch_appimage_with_wayland_preload();
 
-    harden_master_key_permissions();
-
     if let Err(e) = init_db() {
         eprintln!("Database init failed: {}", e);
     }
 
     if let Err(e) = init_vault_db() {
         eprintln!("Vault init failed: {}", e);
+    }
+
+    if let Err(e) = migrate_legacy_master_key_to_vault() {
+        eprintln!("Legacy master.key migration failed: {}", e);
     }
 
     tauri::Builder::default()

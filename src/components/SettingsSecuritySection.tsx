@@ -134,7 +134,11 @@ export default function SettingsSecuritySection({
 
   const copyRecoveryKey = async () => {
     try {
-      await invoke("copy_text_to_clipboard", { text: recoveryDialog.key })
+      try {
+        await invoke("copy_text_to_clipboard", { text: recoveryDialog.key })
+      } catch {
+        await navigator.clipboard.writeText(recoveryDialog.key)
+      }
       showToast(ui.securityRecoveryCopied)
     } catch (e) {
       showToast(
@@ -384,6 +388,7 @@ export default function SettingsSecuritySection({
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
             <button
+              type="button"
               onClick={() => void refreshStatus()}
               style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
@@ -391,6 +396,7 @@ export default function SettingsSecuritySection({
               {ui.refreshLabel}
             </button>
             <button
+              type="button"
               onClick={enableProtection}
               style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
@@ -412,6 +418,7 @@ export default function SettingsSecuritySection({
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
             <button
+              type="button"
               onClick={() => void refreshStatus()}
               style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
               disabled={busy}
@@ -421,6 +428,7 @@ export default function SettingsSecuritySection({
 
             {!isUnlocked ? (
               <button
+                type="button"
                 onClick={unlockVault}
                 style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
                 disabled={busy}
@@ -429,6 +437,7 @@ export default function SettingsSecuritySection({
               </button>
             ) : (
               <button
+                type="button"
                 onClick={() => void lockVault()}
                 style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
                 disabled={busy}
@@ -459,6 +468,7 @@ export default function SettingsSecuritySection({
               </div>
 
               <button
+                type="button"
                 onClick={() => setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })}
                 className="ui-icon-btn"
                 title={ui.closeLabel}
@@ -483,6 +493,7 @@ export default function SettingsSecuritySection({
 
             <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-end gap-2 flex-wrap">
               <button
+                type="button"
                 onClick={() => void copyRecoveryKey()}
                 className="ui-btn-ghost inline-flex items-center gap-2"
               >
@@ -491,14 +502,16 @@ export default function SettingsSecuritySection({
               </button>
 
               <button
+                type="button"
                 onClick={() => void downloadRecoveryKey()}
                 className="ui-btn-ghost inline-flex items-center gap-2"
               >
                 <Download size={14} />
-                <span>{lang === "de" ? "Download" : "Download"}</span>
+                <span>Download</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })}
                 className="ui-btn-primary"
               >
