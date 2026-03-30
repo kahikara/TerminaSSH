@@ -146,19 +146,21 @@ export default function SettingsSecuritySection({
           const recoveryKey = String(result?.recovery_key || "")
           const migrated = Number(result?.migrated_secret_entries || 0)
 
-          showDialog({
-            type: "alert",
-            title: ui.securityRecoveryTitle,
-            description:
-              `${ui.securityRecoveryDesc}\n\n${recoveryKey}\n\n${ui.securityMigratedPrefix}: ${migrated}`,
-            confirmLabel: ui.closeLabel,
-            secondaryLabel: ui.copyLabel,
-            onSecondary: async () => {
-              await invoke("copy_text_to_clipboard", { text: recoveryKey })
-              showToast(ui.securityRecoveryCopied)
-            },
-            onConfirm: async () => {}
-          })
+          window.setTimeout(() => {
+            showDialog({
+              type: "alert",
+              title: ui.securityRecoveryTitle,
+              description:
+                `${ui.securityRecoveryDesc}\n\n${recoveryKey}\n\n${ui.securityMigratedPrefix}: ${migrated}`,
+              confirmLabel: ui.closeLabel,
+              secondaryLabel: ui.copyLabel,
+              onSecondary: async () => {
+                await invoke("copy_text_to_clipboard", { text: recoveryKey })
+                showToast(ui.securityRecoveryCopied)
+              },
+              onConfirm: async () => {}
+            })
+          }, 0)
 
           showToast(ui.securityEnabledToast)
         } catch (e) {
