@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { save } from "@tauri-apps/plugin-dialog"
+import { writeTextFile } from "@tauri-apps/plugin-fs"
 import type { CSSProperties } from "react"
 import { Download, Copy, X } from "lucide-react"
 
@@ -162,24 +164,24 @@ export default function SettingsSecuritySection({
         "Store this file in a safe place."
       ].join("\n")
 
-      const blob = new Blob([content], { type: "text/plain;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = fileName
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      URL.revokeObjectURL(url)
+      const path = await save({
+        defaultPath: fileName
+      })
+
+      if (!path) {
+        return
+      }
+
+      await writeTextFile(String(path), content)
 
       showToast(
-        lang === "de" ? "Recovery Key heruntergeladen" : "Recovery key downloaded"
+        lang === "de" ? "Recovery Key gespeichert" : "Recovery key saved"
       )
     } catch (e) {
       showToast(
         lang === "de"
-          ? `Recovery Key konnte nicht heruntergeladen werden: ${String(e)}`
-          : `Could not download recovery key: ${String(e)}`,
+          ? `Recovery Key konnte nicht gespeichert werden: ${String(e)}`
+          : `Could not save recovery key: ${String(e)}`,
         true
       )
     }

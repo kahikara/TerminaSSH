@@ -2,7 +2,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use ssh2::{CheckResult, HashType, HostKeyType, KnownHostFileKind, KnownHostKeyFormat, Session};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -251,7 +251,6 @@ pub struct TunnelRuntimeEntry {
     handle: JoinHandle<()>,
 }
 
-
 pub struct VaultState {
     runtime: Mutex<VaultRuntimeState>,
 }
@@ -276,7 +275,6 @@ pub struct EnableVaultProtectionResult {
     recovery_key: String,
     migrated_secret_entries: usize,
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ConnectionRuntimeDetails {
@@ -537,7 +535,7 @@ fn open_db() -> Result<Connection, String> {
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
-         PRAGMA foreign_keys = ON;"
+         PRAGMA foreign_keys = ON;",
     )
     .map_err(|e| e.to_string())?;
     Ok(conn)
@@ -554,7 +552,7 @@ fn open_vault_db() -> Result<Connection, String> {
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
-         PRAGMA foreign_keys = ON;"
+         PRAGMA foreign_keys = ON;",
     )
     .map_err(|e| e.to_string())?;
     Ok(conn)
@@ -571,6 +569,7 @@ fn init_vault_db() -> Result<(), String> {
             unlock_mode TEXT NOT NULL DEFAULT 'demand',
             salt BLOB NOT NULL DEFAULT X'',
             encrypted_dek BLOB NOT NULL DEFAULT X'',
+            local_dek BLOB NOT NULL DEFAULT X'',
             recovery_encrypted_dek BLOB NOT NULL DEFAULT X'',
             kek_validation BLOB NOT NULL DEFAULT X'',
             created_at TEXT NOT NULL DEFAULT '',
@@ -583,12 +582,19 @@ fn init_vault_db() -> Result<(), String> {
             encrypted_data BLOB NOT NULL DEFAULT X'',
             nonce BLOB NOT NULL DEFAULT X'',
             PRIMARY KEY (connection_id, secret_type)
-        );"
+        );",
     )
     .map_err(|e| e.to_string())?;
 
+    ignore_duplicate_column_error(conn.execute(
+        "ALTER TABLE meta ADD COLUMN local_dek BLOB NOT NULL DEFAULT X''",
+        [],
+    ))?;
+
     let meta_exists: Option<i64> = conn
-        .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
+        .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| {
+            row.get(0)
+        })
         .optional()
         .map_err(|e| e.to_string())?;
 
@@ -605,7 +611,7 @@ fn init_vault_db() -> Result<(), String> {
          SELECT connection_id, secret_type, encrypted_data, nonce FROM secrets;
          DROP TABLE secrets;
          ALTER TABLE secrets_new RENAME TO secrets;
-         PRAGMA foreign_keys = ON;"
+         PRAGMA foreign_keys = ON;",
     )
     .map_err(|e| e.to_string())?;
 
@@ -643,7 +649,11 @@ fn init_vault_db() -> Result<(), String> {
     }
 
     let is_protected: i32 = conn
-        .query_row("SELECT is_protected FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
+        .query_row(
+            "SELECT is_protected FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
         .map_err(|e| e.to_string())?;
 
     if is_protected == 0 {
@@ -653,7 +663,10 @@ fn init_vault_db() -> Result<(), String> {
     Ok(())
 }
 
-fn load_vault_status(conn: &Connection, runtime: &VaultRuntimeState) -> Result<VaultStatus, String> {
+fn load_vault_status(
+    conn: &Connection,
+    runtime: &VaultRuntimeState,
+) -> Result<VaultStatus, String> {
     let row: Option<(i32, String)> = conn
         .query_row(
             "SELECT is_protected, unlock_mode FROM meta WHERE id = 1 LIMIT 1",
@@ -663,8 +676,7 @@ fn load_vault_status(conn: &Connection, runtime: &VaultRuntimeState) -> Result<V
         .optional()
         .map_err(|e| e.to_string())?;
 
-    let (is_protected, unlock_mode) =
-        row.unwrap_or((0, DEFAULT_VAULT_UNLOCK_MODE.to_string()));
+    let (is_protected, unlock_mode) = row.unwrap_or((0, DEFAULT_VAULT_UNLOCK_MODE.to_string()));
 
     let effective_unlock_mode = if unlock_mode.trim().is_empty() {
         runtime.unlock_mode.clone()
@@ -853,6 +865,173 @@ fn migrate_legacy_secrets_into_vault(
     Ok(migrated)
 }
 
+fn read_legacy_master_key() -> Result<[u8; 32], String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Err("Legacy master.key not found".to_string());
+    }
+
+    let key_base64 = fs::read_to_string(&key_path).map_err(|e| e.to_string())?;
+    let key_bytes = STANDARD
+        .decode(key_base64.trim())
+        .map_err(|_| "Legacy master.key is invalid".to_string())?;
+
+    if key_bytes.len() != 32 {
+        return Err("Legacy master.key length is invalid".to_string());
+    }
+
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&key_bytes);
+    Ok(key)
+}
+
+fn delete_legacy_master_key() -> Result<(), String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(&key_path).map_err(|e| e.to_string())
+}
+
+fn count_legacy_secret_entries(conn_db: &Connection) -> Result<usize, String> {
+    let counts: (Option<i64>, Option<i64>) = conn_db
+        .query_row(
+            "SELECT
+                SUM(CASE WHEN TRIM(COALESCE(password, '')) <> '' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN TRIM(COALESCE(passphrase, '')) <> '' THEN 1 ELSE 0 END)
+             FROM connections",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok((counts.0.unwrap_or(0) + counts.1.unwrap_or(0)) as usize)
+}
+
+fn clear_legacy_connection_secrets(conn_db: &Connection) -> Result<(), String> {
+    conn_db
+        .execute(
+            "UPDATE connections
+             SET password = '', passphrase = ''
+             WHERE TRIM(COALESCE(password, '')) <> ''
+                OR TRIM(COALESCE(passphrase, '')) <> ''",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn ensure_unprotected_vault_dek(vault_conn: &Connection) -> Result<Vec<u8>, String> {
+    let local_dek: Option<Vec<u8>> = vault_conn
+        .query_row(
+            "SELECT local_dek FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(value) = local_dek {
+        if value.len() == VAULT_KEY_LEN {
+            return Ok(value);
+        }
+    }
+
+    let mut dek = [0u8; VAULT_KEY_LEN];
+    OsRng.fill_bytes(&mut dek);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET local_dek = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&dek.to_vec(), &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(dek.to_vec())
+}
+
+fn ensure_vault_runtime_ready(vault_state: &State<'_, VaultState>) -> Result<(), String> {
+    init_vault_db()?;
+    let conn_db = open_db()?;
+    let vault_conn = open_vault_db()?;
+
+    let row: (i32, String, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, unlock_mode, local_dek
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&row.1);
+
+    if row.0 == 0 {
+        let dek = if row.2.len() == VAULT_KEY_LEN {
+            row.2.clone()
+        } else {
+            ensure_unprotected_vault_dek(&vault_conn)?
+        };
+
+        let legacy_secret_entries = count_legacy_secret_entries(&conn_db)?;
+        if legacy_secret_entries > 0 {
+            migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+            clear_legacy_connection_secrets(&conn_db)?;
+        }
+
+        if Path::new(&get_key_path()).exists() {
+            delete_legacy_master_key()?;
+        }
+
+        let mut runtime = vault_state
+            .runtime
+            .lock()
+            .map_err(|_| "Vault state lock failed".to_string())?;
+        runtime.is_unlocked = true;
+        runtime.unlock_mode = normalized_unlock_mode;
+        runtime.session_dek = Some(dek);
+        return Ok(());
+    }
+
+    if !row.2.is_empty() {
+        let now = current_export_timestamp();
+        vault_conn
+            .execute(
+                "UPDATE meta
+                 SET local_dek = X'',
+                     updated_at = ?1
+                 WHERE id = 1",
+                (&now,),
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.unlock_mode = normalized_unlock_mode;
+
+    if !(runtime.is_unlocked
+        && runtime
+            .session_dek
+            .as_ref()
+            .map(|value| !value.is_empty())
+            .unwrap_or(false))
+    {
+        runtime.is_unlocked = false;
+        runtime.session_dek = None;
+    }
+
+    Ok(())
+}
+
 fn is_vault_protected(vault_conn: &Connection) -> Result<bool, String> {
     let value: Option<i32> = vault_conn
         .query_row(
@@ -865,40 +1044,6 @@ fn is_vault_protected(vault_conn: &Connection) -> Result<bool, String> {
     Ok(value.unwrap_or(0) != 0)
 }
 
-fn ensure_unprotected_vault_dek(vault_conn: &Connection) -> Result<Vec<u8>, String> {
-    let row: (i32, Vec<u8>) = vault_conn
-        .query_row(
-            "SELECT is_protected, encrypted_dek FROM meta WHERE id = 1 LIMIT 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .map_err(|e| e.to_string())?;
-
-    if row.0 != 0 {
-        return Err("Vault protection is enabled".to_string());
-    }
-
-    if row.1.len() == VAULT_KEY_LEN {
-        return Ok(row.1);
-    }
-
-    let mut dek = [0u8; VAULT_KEY_LEN];
-    OsRng.fill_bytes(&mut dek);
-    let now = current_export_timestamp();
-
-    vault_conn
-        .execute(
-            "UPDATE meta
-             SET encrypted_dek = ?1,
-                 updated_at = ?2
-             WHERE id = 1",
-            (&dek.to_vec(), &now),
-        )
-        .map_err(|e| e.to_string())?;
-
-    Ok(dek.to_vec())
-}
-
 fn get_runtime_vault_dek(vault_state: &State<'_, VaultState>) -> Result<Option<Vec<u8>>, String> {
     let runtime = vault_state
         .runtime
@@ -907,13 +1052,11 @@ fn get_runtime_vault_dek(vault_state: &State<'_, VaultState>) -> Result<Option<V
     Ok(runtime.session_dek.clone())
 }
 
-fn get_active_vault_dek(
-    vault_conn: &Connection,
+fn require_runtime_vault_dek(
+    _vault_conn: &Connection,
     vault_state: &State<'_, VaultState>,
 ) -> Result<Vec<u8>, String> {
-    if !is_vault_protected(vault_conn)? {
-        return ensure_unprotected_vault_dek(vault_conn);
-    }
+    ensure_vault_runtime_ready(vault_state)?;
 
     let dek = get_runtime_vault_dek(vault_state)?;
     match dek {
@@ -948,19 +1091,6 @@ fn read_vault_secret_plaintext(
     combined.extend_from_slice(&encrypted_data);
     let plain = vault_decrypt_combined(dek, &combined)?;
     String::from_utf8(plain).map_err(|_| "Vault secret is not valid UTF 8".to_string())
-}
-
-fn delete_vault_secrets_for_connection(
-    vault_conn: &Connection,
-    connection_id: i32,
-) -> Result<(), String> {
-    vault_conn
-        .execute(
-            "DELETE FROM secrets WHERE connection_id = ?1",
-            [&connection_id],
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 fn delete_vault_secret(
@@ -1022,12 +1152,6 @@ fn migrate_legacy_master_key_to_vault() -> Result<(), String> {
 
 fn get_key_path() -> String {
     format!("{}/master.key", get_app_dir())
-}
-
-#[cfg(unix)]
-fn set_private_file_permissions(path: &Path) -> Result<(), String> {
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())
 }
 
 #[cfg(not(unix))]
@@ -1193,7 +1317,6 @@ fn ensure_known_host_match_for_session(
     }
 }
 
-
 fn probe_host_key(
     host: &str,
     port: u16,
@@ -1215,31 +1338,6 @@ fn probe_host_key(
     let fingerprint = host_key_sha256_fingerprint(&sess);
 
     Ok((sess, key_bytes, key_type, fingerprint))
-}
-
-fn get_or_create_key() -> [u8; 32] {
-    let key_path = PathBuf::from(get_key_path());
-
-    if let Ok(key_base64) = fs::read_to_string(&key_path) {
-        let _ = set_private_file_permissions(&key_path);
-
-        if let Ok(key_bytes) = STANDARD.decode(key_base64.trim()) {
-            if key_bytes.len() == 32 {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&key_bytes);
-                return key;
-            }
-        }
-    }
-
-    let mut key = [0u8; 32];
-    OsRng.fill_bytes(&mut key);
-
-    if fs::write(&key_path, STANDARD.encode(key)).is_ok() {
-        let _ = set_private_file_permissions(&key_path);
-    }
-
-    key
 }
 
 fn read_file_base64_if_exists(path: &str) -> String {
@@ -1415,7 +1513,7 @@ fn decrypt_pw(encoded: &str) -> Result<String, String> {
     if combined.len() < 12 {
         return Err("Verschlüsselter Text ist zu kurz".to_string());
     }
-    let key = get_or_create_key();
+    let key = read_legacy_master_key()?;
     let cipher = Aes256Gcm::new(&key.into());
     let nonce = Nonce::from_slice(&combined[..12]);
     let plaintext = cipher
@@ -1460,8 +1558,8 @@ fn ensure_ssh_tunnels_foreign_key(conn: &Connection) -> Result<(), String> {
             && from_col == "server_id"
             && to_col == "id"
             && on_delete.eq_ignore_ascii_case("CASCADE")
- {
-            return Ok(())
+        {
+            return Ok(());
         }
     }
 
@@ -1569,7 +1667,7 @@ fn init_db() -> Result<(), String> {
 
 #[tauri::command]
 fn get_vault_status(vault_state: State<'_, VaultState>) -> Result<VaultStatus, String> {
-    init_vault_db()?;
+    ensure_vault_runtime_ready(&vault_state)?;
     let conn = open_vault_db()?;
     let runtime = vault_state
         .runtime
@@ -1590,32 +1688,31 @@ fn enable_vault_protection(
 
     init_vault_db()?;
     let conn_db = open_db()?;
+    let migrated_secret_entries = count_legacy_secret_entries(&conn_db)?;
+    ensure_vault_runtime_ready(&vault_state)?;
     let vault_conn = open_vault_db()?;
 
     let existing: (i32, Vec<u8>) = vault_conn
         .query_row(
-            "SELECT is_protected, encrypted_dek FROM meta WHERE id = 1 LIMIT 1",
+            "SELECT is_protected, local_dek FROM meta WHERE id = 1 LIMIT 1",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .map_err(|e| e.to_string())?;
 
-    if existing.0 != 0 && !existing.1.is_empty() {
+    if existing.0 != 0 {
         return Err("Vault protection is already enabled".to_string());
     }
 
     let normalized_unlock_mode = normalize_vault_unlock_mode(&unlock_mode);
+    let dek = if existing.1.len() == VAULT_KEY_LEN {
+        existing.1.clone()
+    } else {
+        require_runtime_vault_dek(&vault_conn, &vault_state)?
+    };
 
     let mut salt = [0u8; VAULT_SALT_LEN];
     OsRng.fill_bytes(&mut salt);
-
-    let dek = if existing.1.len() == VAULT_KEY_LEN {
-        existing.1
-    } else {
-        let mut value = [0u8; VAULT_KEY_LEN];
-        OsRng.fill_bytes(&mut value);
-        value.to_vec()
-    };
 
     let recovery_key = generate_recovery_key();
     let master_key = derive_vault_key_from_secret(&master_password, &salt)?;
@@ -1624,8 +1721,6 @@ fn enable_vault_protection(
     let encrypted_dek = vault_encrypt_combined(&master_key, &dek)?;
     let recovery_encrypted_dek = vault_encrypt_combined(&recovery_wrap_key, &dek)?;
     let kek_validation = vault_encrypt_combined(&dek, VAULT_VALIDATION_TEXT)?;
-
-    let migrated_secret_entries = migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
 
     let now = current_export_timestamp();
     vault_conn
@@ -1636,6 +1731,7 @@ fn enable_vault_protection(
                  unlock_mode = ?2,
                  salt = ?3,
                  encrypted_dek = ?4,
+                 local_dek = X'',
                  recovery_encrypted_dek = ?5,
                  kek_validation = ?6,
                  updated_at = ?7
@@ -1652,21 +1748,8 @@ fn enable_vault_protection(
         )
         .map_err(|e| e.to_string())?;
 
-    if migrated_secret_entries > 0 {
-        conn_db
-            .execute(
-                "UPDATE connections
-                 SET password = '', passphrase = ''
-                 WHERE TRIM(COALESCE(password, '')) != '' OR TRIM(COALESCE(passphrase, '')) != ''",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-        let _ = conn_db.execute_batch("VACUUM;");
-    }
-
-    let legacy_key_path = PathBuf::from(get_key_path());
-    if legacy_key_path.exists() {
-        let _ = wipe_and_remove_file(&legacy_key_path);
+    if Path::new(&get_key_path()).exists() {
+        delete_legacy_master_key()?;
     }
 
     let mut runtime = vault_state
@@ -1675,7 +1758,7 @@ fn enable_vault_protection(
         .map_err(|_| "Vault state lock failed".to_string())?;
     runtime.is_unlocked = true;
     runtime.unlock_mode = normalized_unlock_mode;
-    runtime.session_dek = Some(dek.clone());
+    runtime.session_dek = Some(dek);
 
     Ok(EnableVaultProtectionResult {
         recovery_key,
@@ -1802,11 +1885,12 @@ fn update_snippet(
     validate_snippet(&name, &command)?;
 
     let conn = open_db()?;
-    let updated = conn.execute(
-        "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
-        (&name, &command, &id),
-    )
-    .map_err(|e| e.to_string())?;
+    let updated = conn
+        .execute(
+            "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
+            (&name, &command, &id),
+        )
+        .map_err(|e| e.to_string())?;
 
     if updated == 0 {
         return Err("Snippet not found".to_string());
@@ -1818,7 +1902,8 @@ fn update_snippet(
 #[tauri::command]
 fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
     let conn = open_db()?;
-    let deleted = conn.execute("DELETE FROM snippets WHERE id = ?1", [&id])
+    let deleted = conn
+        .execute("DELETE FROM snippets WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
     if deleted == 0 {
@@ -1835,15 +1920,15 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     let conn = open_db()?;
     let vault_conn = open_vault_db()?;
 
-    let mut secret_ids: Vec<i32> = Vec::new();
-    let mut secret_stmt = vault_conn
+    let mut password_ids = HashSet::new();
+    let mut vault_stmt = vault_conn
         .prepare("SELECT DISTINCT connection_id FROM secrets WHERE secret_type = 'password'")
         .map_err(|e| e.to_string())?;
-    let secret_iter = secret_stmt
+    let vault_iter = vault_stmt
         .query_map([], |row| row.get::<_, i32>(0))
         .map_err(|e| e.to_string())?;
-    for item in secret_iter {
-        secret_ids.push(item.map_err(|e| e.to_string())?);
+    for item in vault_iter {
+        password_ids.insert(item.map_err(|e| e.to_string())?);
     }
 
     let mut stmt = conn
@@ -1852,7 +1937,7 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     let iter = stmt
         .query_map([], |row| {
             let id: i32 = row.get(0)?;
-            let encrypted_password: String = row.get(7)?;
+            let legacy_password: String = row.get(7)?;
             Ok(ConnectionItem {
                 id,
                 name: row.get(1)?,
@@ -1861,7 +1946,7 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
                 username: row.get(4)?,
                 private_key: row.get(5)?,
                 group_name: row.get(6)?,
-                has_password: secret_ids.contains(&id) || !encrypted_password.trim().is_empty(),
+                has_password: password_ids.contains(&id) || !legacy_password.trim().is_empty(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -1871,6 +1956,7 @@ fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     }
     Ok(res)
 }
+
 fn normalize_connection_fields(connection: &mut SshConnection) {
     connection.name = connection.name.trim().to_string();
     connection.host = connection.host.trim().to_string();
@@ -1960,7 +2046,10 @@ fn ensure_tunnel_route_is_unique(
     };
 
     if let Some(name) = existing {
-        Err(format!("A tunnel with the same route already exists: {}", name))
+        Err(format!(
+            "A tunnel with the same route already exists: {}",
+            name
+        ))
     } else {
         Ok(())
     }
@@ -1991,7 +2080,10 @@ fn ensure_tunnel_bind_target_is_unique(
     };
 
     if let Some(name) = existing {
-        Err(format!("Local bind address is already used by tunnel: {}", name))
+        Err(format!(
+            "Local bind address is already used by tunnel: {}",
+            name
+        ))
     } else {
         Ok(())
     }
@@ -2127,7 +2219,7 @@ fn save_connection(
     ensure_connection_identity_unique(&conn, &connection, None)?;
 
     let vault_conn = open_vault_db()?;
-    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
 
     conn.execute(
         "INSERT INTO connections (name, host, port, username, password, private_key, passphrase, group_name)
@@ -2146,11 +2238,25 @@ fn save_connection(
     let connection_id = conn.last_insert_rowid() as i32;
 
     if let Err(err) = (|| -> Result<(), String> {
-        upsert_vault_secret(&vault_conn, connection_id, "password", &connection.password, &dek)?;
-        upsert_vault_secret(&vault_conn, connection_id, "passphrase", &connection.passphrase, &dek)?;
+        upsert_vault_secret(
+            &vault_conn,
+            connection_id,
+            "password",
+            &connection.password,
+            &dek,
+        )?;
+        upsert_vault_secret(
+            &vault_conn,
+            connection_id,
+            "passphrase",
+            &connection.passphrase,
+            &dek,
+        )?;
         Ok(())
     })() {
         let _ = conn.execute("DELETE FROM connections WHERE id = ?1", [&connection_id]);
+        let _ = delete_vault_secret(&vault_conn, connection_id, "password");
+        let _ = delete_vault_secret(&vault_conn, connection_id, "passphrase");
         return Err(err);
     }
 
@@ -2177,7 +2283,7 @@ fn update_connection(
     ensure_connection_identity_unique(&conn, &connection, Some(id))?;
 
     let vault_conn = open_vault_db()?;
-    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
 
     let updated = conn.execute(
         "UPDATE connections
@@ -2228,13 +2334,10 @@ fn set_connection_password(
     ensure_connection_exists(&conn, id)?;
 
     let vault_conn = open_vault_db()?;
-    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
 
-    conn.execute(
-        "UPDATE connections SET password = '' WHERE id = ?1",
-        [&id],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("UPDATE connections SET password = '' WHERE id = ?1", [&id])
+        .map_err(|e| e.to_string())?;
 
     if password.is_empty() {
         delete_vault_secret(&vault_conn, id, "password")?;
@@ -2253,7 +2356,9 @@ fn delete_connection(
     app: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<String, String> {
+    init_vault_db()?;
     let conn = open_db()?;
+    let vault_conn = open_vault_db()?;
     ensure_connection_exists(&conn, id)?;
 
     let mut stmt = conn
@@ -2288,11 +2393,11 @@ fn delete_connection(
     conn.execute("DELETE FROM ssh_tunnels WHERE server_id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
-    if let Ok(vault_conn) = open_vault_db() {
-        let _ = delete_vault_secrets_for_connection(&vault_conn, id);
-    }
+    delete_vault_secret(&vault_conn, id, "password")?;
+    delete_vault_secret(&vault_conn, id, "passphrase")?;
 
-    let deleted = conn.execute("DELETE FROM connections WHERE id = ?1", [&id])
+    let deleted = conn
+        .execute("DELETE FROM connections WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
     if deleted == 0 {
@@ -2580,7 +2685,10 @@ fn import_backup_bundle(
 
     let mut imported_notes: Vec<BackupNote> = imported_notes_map
         .into_iter()
-        .map(|(storage_key, content)| BackupNote { storage_key, content })
+        .map(|(storage_key, content)| BackupNote {
+            storage_key,
+            content,
+        })
         .collect();
     imported_notes.sort_by(|a, b| a.storage_key.cmp(&b.storage_key));
 
@@ -2592,7 +2700,7 @@ fn import_backup_bundle(
 
     init_vault_db()?;
     let vault_conn = open_vault_db()?;
-    let dek = get_active_vault_dek(&vault_conn, &vault_state)?;
+    let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
 
     if version < 3 {
         warnings.push(
@@ -2757,6 +2865,7 @@ fn import_backup_bundle(
     }
 
     let mut connection_id_map: HashMap<String, i32> = HashMap::new();
+    let mut pending_secret_imports: Vec<(i32, String, String)> = Vec::new();
     let mut connections_imported = 0usize;
 
     for item in connections_value {
@@ -2849,11 +2958,8 @@ fn import_backup_bundle(
         .map_err(|e| e.to_string())?;
 
         let new_id = tx.last_insert_rowid() as i32;
-        if !password.is_empty() {
-            upsert_vault_secret(&vault_conn, new_id, "password", &password, &dek)?;
-        }
-        if !passphrase.is_empty() {
-            upsert_vault_secret(&vault_conn, new_id, "passphrase", &passphrase, &dek)?;
+        if !password.is_empty() || !passphrase.is_empty() {
+            pending_secret_imports.push((new_id, password.clone(), passphrase.clone()));
         }
         connection_id_map.insert(primary_map_key, new_id);
         connection_id_map.insert(legacy_map_key, new_id);
@@ -3056,6 +3162,11 @@ fn import_backup_bundle(
         e.to_string()
     })?;
 
+    for (connection_id, password, passphrase) in pending_secret_imports {
+        upsert_vault_secret(&vault_conn, connection_id, "password", &password, &dek)?;
+        upsert_vault_secret(&vault_conn, connection_id, "passphrase", &passphrase, &dek)?;
+    }
+
     Ok(ImportBackupResult {
         settings,
         connections_imported,
@@ -3215,7 +3326,8 @@ fn delete_ssh_key(id: i32) -> Result<(), String> {
             _ => e.to_string(),
         })?;
 
-    let deleted = conn.execute("DELETE FROM ssh_keys WHERE id = ?1", [&id])
+    let deleted = conn
+        .execute("DELETE FROM ssh_keys WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
 
     if deleted == 0 {
@@ -3306,7 +3418,11 @@ fn save_tunnel(mut tunnel: SshTunnel) -> Result<String, String> {
     Ok("Tunnel saved".to_string())
 }
 #[tauri::command]
-fn update_tunnel(id: i32, mut tunnel: SshTunnel, state: State<'_, SshState>) -> Result<String, String> {
+fn update_tunnel(
+    id: i32,
+    mut tunnel: SshTunnel,
+    state: State<'_, SshState>,
+) -> Result<String, String> {
     normalize_tunnel_fields(&mut tunnel);
 
     if tunnel.name.is_empty() {
@@ -3383,7 +3499,8 @@ fn delete_tunnel(id: i32, state: State<'_, SshState>) -> Result<String, String> 
     }
 
     let conn = open_db()?;
-    let deleted = conn.execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
+    let deleted = conn
+        .execute("DELETE FROM ssh_tunnels WHERE id = ?1", [&id])
         .map_err(|e| e.to_string())?;
     if deleted == 0 {
         return Err("Tunnel not found".to_string());
@@ -3448,67 +3565,47 @@ fn load_connection_runtime_details(
     vault_state: &State<'_, VaultState>,
 ) -> Result<ConnectionRuntimeDetails, String> {
     init_vault_db()?;
+    ensure_vault_runtime_ready(vault_state)?;
 
     let conn_db = open_db()?;
-    let row_data: (String, u16, String, String, String, String) = conn_db
+    let row_data: (String, u16, String, String) = conn_db
         .query_row(
-            "SELECT host, port, username, password, private_key, passphrase FROM connections WHERE id = ?1",
+            "SELECT host, port, username, private_key FROM connections WHERE id = ?1",
             [&id],
-            |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ))
-            },
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => "Connection not found".to_string(),
             _ => e.to_string(),
         })?;
 
-    let (host, port, username, enc_pw, private_key, enc_passphrase) = row_data;
+    let (host, port, username, private_key) = row_data;
 
     let vault_conn = open_vault_db()?;
-    let dek = get_active_vault_dek(&vault_conn, vault_state)?;
+    let dek = require_runtime_vault_dek(&vault_conn, vault_state)?;
 
-    let mut resolved_password = match password_override {
+    let password = match password_override {
         Some(value) if !value.is_empty() => value,
         _ => read_vault_secret_plaintext(&vault_conn, id, "password", &dek)?,
     };
-    let mut resolved_passphrase = read_vault_secret_plaintext(&vault_conn, id, "passphrase", &dek)?;
-
-    if resolved_password.is_empty() && !enc_pw.trim().is_empty() {
-        resolved_password = decrypt_pw(&enc_pw)?;
-        if !resolved_password.is_empty() {
-            let _ = upsert_vault_secret(&vault_conn, id, "password", &resolved_password, &dek);
-            let _ = conn_db.execute("UPDATE connections SET password = '' WHERE id = ?1", [&id]);
-        }
-    }
-
-    if resolved_passphrase.is_empty() && !enc_passphrase.trim().is_empty() {
-        resolved_passphrase = decrypt_pw(&enc_passphrase)?;
-        if !resolved_passphrase.is_empty() {
-            let _ = upsert_vault_secret(&vault_conn, id, "passphrase", &resolved_passphrase, &dek);
-            let _ = conn_db.execute("UPDATE connections SET passphrase = '' WHERE id = ?1", [&id]);
-        }
-    }
+    let passphrase = read_vault_secret_plaintext(&vault_conn, id, "passphrase", &dek)?;
 
     Ok(ConnectionRuntimeDetails {
         host,
         port,
         username,
-        password: resolved_password,
+        password,
         private_key,
-        passphrase: resolved_passphrase,
+        passphrase,
     })
 }
 
 fn connect_runtime_details(details: &ConnectionRuntimeDetails) -> Result<Session, String> {
-    let tcp = tcp_connect_with_timeout(&details.host, details.port, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS))?;
+    let tcp = tcp_connect_with_timeout(
+        &details.host,
+        details.port,
+        Duration::from_secs(SSH_CONNECT_TIMEOUT_SECS),
+    )?;
     let mut sess = Session::new().map_err(|e| e.to_string())?;
     sess.set_tcp_stream(tcp);
     sess.handshake()
@@ -3538,10 +3635,7 @@ fn connect_ssh_session_with_password_override(
     connect_runtime_details(&details)
 }
 
-fn connect_ssh_session(
-    id: i32,
-    vault_state: &State<'_, VaultState>,
-) -> Result<Session, String> {
+fn connect_ssh_session(id: i32, vault_state: &State<'_, VaultState>) -> Result<Session, String> {
     connect_ssh_session_with_password_override(id, None, vault_state)
 }
 
@@ -3590,19 +3684,20 @@ fn map_local_fs_error(err: &std::io::Error, action: &str, path: &Path) -> String
 fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
     let path = normalize_local_path(&path)?;
 
-    let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "List directory", &path))?;
+    let metadata =
+        fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "List directory", &path))?;
     if !metadata.is_dir() {
-        return Err(format!("List directory failed for {}: Not a directory", path.to_string_lossy()));
+        return Err(format!(
+            "List directory failed for {}: Not a directory",
+            path.to_string_lossy()
+        ));
     }
 
     let mut items = Vec::new();
     for entry in fs::read_dir(&path).map_err(|e| map_local_fs_error(&e, "List directory", &path))? {
         let entry = entry.map_err(|e| map_local_fs_error(&e, "List directory", &path))?;
         let entry_path = entry.path();
-        let name = entry
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let name = entry.file_name().to_string_lossy().to_string();
 
         if name == "." || name == ".." {
             continue;
@@ -3636,11 +3731,7 @@ fn local_list_dir(path: String) -> Result<Vec<FileItem>, String> {
                 .unwrap_or(0)
         };
 
-        items.push(FileItem {
-            name,
-            is_dir,
-            size,
-        });
+        items.push(FileItem { name, is_dir, size });
     }
 
     items.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
@@ -3685,7 +3776,10 @@ fn local_read_file(path: String) -> Result<SftpReadFilePayload, String> {
     let metadata = fs::metadata(&path).map_err(|e| map_local_fs_error(&e, "Read file", &path))?;
 
     if metadata.is_dir() {
-        return Err(format!("Read file failed for {}: Path is a directory", path.to_string_lossy()));
+        return Err(format!(
+            "Read file failed for {}: Path is a directory",
+            path.to_string_lossy()
+        ));
     }
 
     let bytes = fs::read(&path).map_err(|e| map_local_fs_error(&e, "Read file", &path))?;
@@ -3924,7 +4018,8 @@ fn start_tunnel(
 
     let conn = open_db()?;
     ensure_connection_exists(&conn, tunnel.server_id)?;
-    let tunnel_runtime_details = load_connection_runtime_details(tunnel.server_id, None, &vault_state)?;
+    let tunnel_runtime_details =
+        load_connection_runtime_details(tunnel.server_id, None, &vault_state)?;
 
     let bind_host = if tunnel.bind_host.trim().is_empty() {
         "127.0.0.1".to_string()
@@ -3994,13 +4089,7 @@ fn start_tunnel(
         .tunnel_runtime
         .lock()
         .map_err(|_| "Tunnel state lock failed".to_string())?;
-    map.insert(
-        id,
-        TunnelRuntimeEntry {
-            stop_flag,
-            handle,
-        },
-    );
+    map.insert(id, TunnelRuntimeEntry { stop_flag, handle });
 
     Ok(format!("Tunnel running on {}", bind_addr))
 }
@@ -4448,11 +4537,7 @@ fn sftp_list_dir(
 }
 
 #[tauri::command]
-fn sftp_mkdir(
-    id: i32,
-    path: String,
-    vault_state: State<'_, VaultState>,
-) -> Result<String, String> {
+fn sftp_mkdir(id: i32, path: String, vault_state: State<'_, VaultState>) -> Result<String, String> {
     let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id, &vault_state)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
@@ -5151,6 +5236,10 @@ pub fn run() {
             trust_host_key
         ])
         .setup(|app| {
+            if let Err(e) = ensure_vault_runtime_ready(&app.state::<VaultState>()) {
+                eprintln!("Vault runtime init failed: {}", e);
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "linux")]
                 {
