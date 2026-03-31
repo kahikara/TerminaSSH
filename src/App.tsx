@@ -135,11 +135,13 @@ export default function App() {
   }, [settings.closeToTray, settings.lang, showToast]);
 
   const [dialog, setDialog] = useState<GlobalDialogState>(createClosedDialogState());
-  const showDialog = (config: Partial<GlobalDialogState>) => setDialog({
-    ...createClosedDialogState(),
-    ...config,
-    isOpen: true
-  });
+  const showDialog = useCallback((config: Partial<GlobalDialogState>) => {
+    setDialog({
+      ...createClosedDialogState(),
+      ...config,
+      isOpen: true
+    })
+  }, [])
 
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
@@ -525,10 +527,16 @@ export default function App() {
           onOpenSidebarContextMenu={openSidebarContextMenu}
           onOpenConnectionSettings={openEditConnectionModal}
           onToggleFolder={(group) => {
-            setCollapsedFolders({ ...collapsedFolders, [group]: !effectiveFolderCollapsed(group) })
+            setCollapsedFolders((prev) => ({
+              ...prev,
+              [group]: !Boolean(prev[group])
+            }))
           }}
           onRemoveEmptyFolder={(group) => {
-            setSettings({ ...settings, customFolders: settings.customFolders.filter((f) => f !== group) })
+            setSettings((prev) => ({
+              ...prev,
+              customFolders: prev.customFolders.filter((f) => f !== group)
+            }))
           }}
           localTerminalConnection={LOCAL_TERMINAL_CONNECTION}
         />
