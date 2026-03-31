@@ -940,11 +940,6 @@ export default function SettingsSecuritySection({
       {recoveryDialog.isOpen && (
         <div
           className="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) {
-              setRecoveryDialog({ isOpen: false, key: "", migrated: 0 })
-            }
-          }}
         >
           <div
             className="w-full max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl overflow-hidden"

@@ -37,6 +37,20 @@ type VaultStatus = {
   has_legacy_master_key?: boolean
 }
 
+type RecoveryResetResult = {
+  recovery_key?: string
+  migrated_secret_entries?: number
+}
+
+const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
+
+const normalizeRecoveryKey = (value: string) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/[^A-Z2-9-]/g, '')
+
 type ConnectionItem = {
   id?: number | string
   name?: string
@@ -236,6 +250,7 @@ export default function App() {
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState === 'visible');
+  const [startupVaultGateState, setStartupVaultGateState] = useState<'checking' | 'locked' | 'open'>('checking');
 
   const {
     dirtyEditors,
@@ -278,8 +293,7 @@ export default function App() {
   const sidebarSearchFocusTimerRef = useRef<number | null>(null);
   const tabDragStartXRef = useRef<number | null>(null);
 
-  const startupVaultPromptOpenRef = useRef(false);
-  const startupVaultPromptDismissedRef = useRef(false);
+  const startupVaultPromptOpenRef = useRef(false);;
   const startupVaultUnlockedRef = useRef(false);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
@@ -289,10 +303,10 @@ export default function App() {
 
   const openStartupVaultUnlockDialog = useCallback(() => {
     if (startupVaultPromptOpenRef.current) return
-    if (startupVaultPromptDismissedRef.current) return
     if (startupVaultUnlockedRef.current) return
 
     startupVaultPromptOpenRef.current = true
+    setStartupVaultGateState('locked')
 
     showDialog({
       type: 'prompt',
@@ -303,7 +317,8 @@ export default function App() {
       placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
       isPassword: true,
       confirmLabel: settings.lang === 'de' ? 'Entsperren' : 'Unlock',
-      cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
+      cancelLabel: settings.lang === 'de' ? 'App schließen' : 'Close app',
+      secondaryLabel: settings.lang === 'de' ? 'Recovery Key' : 'Recovery key',
       validate: (value: string) => {
         if (!String(value || '').trim()) {
           return settings.lang === 'de'
@@ -316,13 +331,13 @@ export default function App() {
         try {
           await invoke('unlock_vault', { masterPassword: value })
           startupVaultUnlockedRef.current = true
-          startupVaultPromptDismissedRef.current = false
           startupVaultPromptOpenRef.current = false
+          setStartupVaultGateState('open')
 
           showToast(
             settings.lang === 'de'
-              ? 'Vault beim Start entsperrt'
-              : 'Vault unlocked at startup'
+              ? 'Vault entsperrt'
+              : 'Vault unlocked'
           )
         } catch (e) {
           showToast(
@@ -335,9 +350,149 @@ export default function App() {
           throw e
         }
       },
-      onCancel: () => {
+      onSecondary: async () => {
+        showDialog({
+          type: 'prompt',
+          title: settings.lang === 'de' ? 'Recovery Key eingeben' : 'Enter recovery key',
+          description: settings.lang === 'de'
+            ? 'Gib deinen Recovery Key ein, um ein neues Master Passwort zu setzen.'
+            : 'Enter your recovery key to set a new master password.',
+          placeholder: 'ABCD-EFGH-IJKL-MNOP-QRST',
+          confirmLabel: settings.lang === 'de' ? 'Weiter' : 'Continue',
+          cancelLabel: settings.lang === 'de' ? 'Zurück' : 'Back',
+          validate: (value: string) => {
+            const normalized = normalizeRecoveryKey(value)
+            if (!normalized) {
+              return settings.lang === 'de'
+                ? 'Recovery Key ist erforderlich'
+                : 'Recovery key is required'
+            }
+            if (!RECOVERY_KEY_PATTERN.test(normalized)) {
+              return settings.lang === 'de'
+                ? 'Ungültiges Recovery Key Format'
+                : 'Invalid recovery key format'
+            }
+            return ''
+          },
+          onConfirm: async (recoveryKey: string) => {
+            const normalizedRecoveryKey = normalizeRecoveryKey(recoveryKey)
+
+            window.setTimeout(() => {
+              showDialog({
+                type: 'prompt',
+                title: settings.lang === 'de' ? 'Neues Master Passwort' : 'New master password',
+                description: settings.lang === 'de'
+                  ? 'Setze jetzt ein neues Master Passwort.'
+                  : 'Set your new master password now.',
+                placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
+                confirmPlaceholder: settings.lang === 'de' ? 'Master Passwort bestätigen' : 'Confirm master password',
+                isPassword: true,
+                requireConfirm: true,
+                confirmLabel: settings.lang === 'de' ? 'Zurücksetzen' : 'Reset',
+                cancelLabel: settings.lang === 'de' ? 'Zurück' : 'Back',
+                validate: (value: string, confirmValue: string) => {
+                  if (!value.trim()) {
+                    return settings.lang === 'de'
+                      ? 'Master Passwort ist erforderlich'
+                      : 'Master password is required'
+                  }
+                  if (value.length < 6) {
+                    return settings.lang === 'de'
+                      ? 'Bitte mindestens 6 Zeichen verwenden.'
+                      : 'Please use at least 6 characters.'
+                  }
+                  if (value !== confirmValue) {
+                    return settings.lang === 'de'
+                      ? 'Die Passwörter stimmen nicht überein.'
+                      : 'The passwords do not match.'
+                  }
+                  return ''
+                },
+                onConfirm: async (newMasterPassword: string) => {
+                  try {
+                    const result = await invoke('reset_vault_master_password_with_recovery_key', {
+                      recoveryKey: normalizedRecoveryKey,
+                      newMasterPassword
+                    }) as RecoveryResetResult
+
+                    await invoke('unlock_vault', { masterPassword: newMasterPassword })
+
+                    startupVaultUnlockedRef.current = true
+                    startupVaultPromptOpenRef.current = false
+                    setStartupVaultGateState('open')
+
+                    const newRecoveryKey = String(result?.recovery_key || '')
+
+                    window.setTimeout(() => {
+                      showDialog({
+                        type: 'alert',
+                        title: settings.lang === 'de' ? 'Neuer Recovery Key' : 'New recovery key',
+                        description: settings.lang === 'de'
+                          ? `Dein Master Passwort wurde zurückgesetzt.\n\nSpeichere diesen neuen Recovery Key jetzt sicher:\n\n${newRecoveryKey}`
+                          : `Your master password was reset.\n\nSave this new recovery key somewhere safe now:\n\n${newRecoveryKey}`,
+                        confirmLabel: settings.lang === 'de' ? 'Weiter' : 'Continue',
+                        secondaryLabel: settings.lang === 'de' ? 'Kopieren' : 'Copy',
+                        onConfirm: async () => {},
+                        onCancel: () => {},
+                        onSecondary: async () => {
+                          try {
+                            try {
+                              await invoke('copy_text_to_clipboard', { text: newRecoveryKey })
+                            } catch {
+                              await navigator.clipboard.writeText(newRecoveryKey)
+                            }
+                            showToast(
+                              settings.lang === 'de'
+                                ? 'Recovery Key kopiert'
+                                : 'Recovery key copied'
+                            )
+                          } catch (copyError) {
+                            showToast(
+                              settings.lang === 'de'
+                                ? `Recovery Key konnte nicht kopiert werden: ${String(copyError)}`
+                                : `Could not copy recovery key: ${String(copyError)}`,
+                              true
+                            )
+                          }
+                        }
+                      })
+                    }, 0)
+
+                    showToast(
+                      settings.lang === 'de'
+                        ? 'Master Passwort zurückgesetzt'
+                        : 'Master password reset'
+                    )
+                  } catch (e) {
+                    showToast(
+                      settings.lang === 'de'
+                        ? `Recovery Reset fehlgeschlagen: ${String(e)}`
+                        : `Recovery reset failed: ${String(e)}`,
+                      true
+                    )
+                    throw e
+                  }
+                },
+                onCancel: () => {
+                  startupVaultPromptOpenRef.current = false
+                  window.setTimeout(() => {
+                    openStartupVaultUnlockDialog()
+                  }, 0)
+                }
+              })
+            }, 0)
+          },
+          onCancel: () => {
+            startupVaultPromptOpenRef.current = false
+            window.setTimeout(() => {
+              openStartupVaultUnlockDialog()
+            }, 0)
+          }
+        })
+      },
+      onCancel: async () => {
         startupVaultPromptOpenRef.current = false
-        startupVaultPromptDismissedRef.current = true
+        await invoke('window_close_main').catch(() => {})
       }
     })
   }, [settings.lang, showDialog, showToast])
@@ -474,13 +629,13 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    let startupTimer: number | undefined
 
     const checkStartupVault = async () => {
       if (cancelled) return
-      if (startupVaultPromptOpenRef.current) return
-      if (startupVaultPromptDismissedRef.current) return
-      if (startupVaultUnlockedRef.current) return
+      if (startupVaultUnlockedRef.current) {
+        setStartupVaultGateState('open')
+        return
+      }
 
       try {
         const status = await invoke('get_vault_status') as VaultStatus
@@ -488,16 +643,20 @@ export default function App() {
 
         const isProtected = Boolean(status?.is_protected)
         const isUnlocked = Boolean(status?.is_unlocked)
-        if (isUnlocked) {
-          startupVaultUnlockedRef.current = true
+
+        if (!isProtected || isUnlocked) {
+          if (isUnlocked) {
+            startupVaultUnlockedRef.current = true
+          }
+          setStartupVaultGateState('open')
           return
         }
 
-        if (isProtected && !isUnlocked) {
-          openStartupVaultUnlockDialog()
-        }
+        setStartupVaultGateState('locked')
+        openStartupVaultUnlockDialog()
       } catch (e) {
         if (cancelled) return
+        setStartupVaultGateState('open')
         showToast(
           settings.lang === 'de'
             ? `Vault Status konnte nicht geladen werden: ${String(e)}`
@@ -507,11 +666,10 @@ export default function App() {
       }
     }
 
-    startupTimer = window.setTimeout(() => {
-      void checkStartupVault()
-    }, 300)
+    void checkStartupVault()
 
     const recheckStartupVault = () => {
+      if (startupVaultUnlockedRef.current) return
       void checkStartupVault()
     }
 
@@ -520,9 +678,6 @@ export default function App() {
 
     return () => {
       cancelled = true
-      if (startupTimer !== undefined) {
-        window.clearTimeout(startupTimer)
-      }
       window.removeEventListener('focus', recheckStartupVault)
       document.removeEventListener('visibilitychange', recheckStartupVault)
     }
@@ -1625,6 +1780,10 @@ export default function App() {
       }}
     >
       <GlobalDialog dialog={dialog} onClose={() => setDialog((prev) => ({ ...prev, isOpen: false }))} />
+
+      {startupVaultGateState !== 'open' && (
+        <div className="absolute inset-0 z-[290] bg-[color-mix(in_srgb,var(--bg-app)_96%,black)]" />
+      )}
 
       {useCustomLinuxTitlebar && (
         <>
