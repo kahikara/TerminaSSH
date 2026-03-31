@@ -2015,6 +2015,56 @@ fn disable_vault_protection(vault_state: State<'_, VaultState>) -> Result<VaultS
 }
 
 #[tauri::command]
+fn validate_vault_recovery_key(
+    recovery_key: String,
+) -> Result<(), String> {
+    let normalized_recovery_key = recovery_key.trim().to_ascii_uppercase();
+    if normalized_recovery_key.is_empty() {
+        return Err("Recovery key is empty".to_string());
+    }
+
+    init_vault_db()?;
+    let vault_conn = open_vault_db()?;
+    let row: (i32, Vec<u8>, Vec<u8>, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, salt, recovery_encrypted_dek, kek_validation
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                ))
+            },
+        )
+        .map_err(|e| e.to_string())?;
+
+    if row.0 == 0 {
+        return Err("Vault protection is not enabled".to_string());
+    }
+
+    if row.2.is_empty() {
+        return Err("Recovery data is missing".to_string());
+    }
+
+    let recovery_wrap_key = derive_vault_key_from_secret(&normalized_recovery_key, &row.1)?;
+    let dek = vault_decrypt_combined(&recovery_wrap_key, &row.2)
+        .map_err(|_| "Recovery key is invalid".to_string())?;
+    let validation =
+        vault_decrypt_combined(&dek, &row.3).map_err(|_| "Recovery key is invalid".to_string())?;
+
+    if validation.as_slice() != VAULT_VALIDATION_TEXT {
+        return Err("Recovery key is invalid".to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn reset_vault_master_password_with_recovery_key(
     recovery_key: String,
     new_master_password: String,
@@ -5614,6 +5664,7 @@ pub fn run() {
             disable_vault_protection,
             regenerate_vault_recovery_key,
             update_vault_unlock_mode,
+            validate_vault_recovery_key,
             reset_vault_master_password_with_recovery_key,
             change_vault_master_password,
             unlock_vault,

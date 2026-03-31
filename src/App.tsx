@@ -394,6 +394,23 @@ export default function App() {
     }, 0)
   }
 
+  async function verifyStartupRecoveryKeyAndRunReset(normalizedRecoveryKey: string) {
+    try {
+      await invoke('validate_vault_recovery_key', { recoveryKey: normalizedRecoveryKey })
+
+      window.setTimeout(() => {
+        runStartupRecoveryReset(normalizedRecoveryKey)
+      }, 0)
+    } catch (e) {
+      showToast(
+        settings.lang === 'de'
+          ? `Recovery Key ungültig: ${String(e)}`
+          : `Recovery key is invalid: ${String(e)}`,
+        true
+      )
+    }
+  }
+
   function runStartupRecoveryReset(normalizedRecoveryKey: string) {
     showDialog({
       type: 'prompt',
@@ -578,9 +595,7 @@ export default function App() {
           },
           onConfirm: async (recoveryKey: string) => {
             const normalizedRecoveryKey = normalizeRecoveryKey(recoveryKey)
-            window.setTimeout(() => {
-              runStartupRecoveryReset(normalizedRecoveryKey)
-            }, 0)
+            await verifyStartupRecoveryKeyAndRunReset(normalizedRecoveryKey)
           },
           onSecondary: async () => {
             await importStartupRecoveryKeyFile()
