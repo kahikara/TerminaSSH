@@ -13,6 +13,7 @@ vite.config.ts.timestamp-*
 
 src-tauri/target
 backups
+*.broken
 *.tar.gz
 *.bak
 *.bak.*
