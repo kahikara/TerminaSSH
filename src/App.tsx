@@ -7,6 +7,7 @@ import { useAppSettings } from './hooks/useAppSettings';
 import { useStartupVaultGate } from './hooks/useStartupVaultGate';
 import { useConnectionHelpers } from './hooks/useConnectionHelpers';
 import { useVaultConnectionUnlock } from './hooks/useVaultConnectionUnlock';
+import { useHostKeyTrust } from './hooks/useHostKeyTrust';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -115,16 +116,6 @@ type PaneStatePayload = {
   paneServers: ConnectionItem[]
   paneSessionIds: string[]
   focusedPaneId?: string | null
-}
-
-type HostKeyCheckInfo = {
-  host: string
-  port: number
-  display_host: string
-  key_type: string
-  fingerprint: string
-  status: string
-  known_hosts_path: string
 }
 
 type ConnectionGroups = Record<string, ConnectionItem[]>
@@ -306,6 +297,15 @@ export default function App() {
     showDialog,
     showToast,
     markStartupVaultUnlocked,
+    isLocalConnection
+  })
+
+  const {
+    ensureHostKeyTrusted
+  } = useHostKeyTrust({
+    lang: settings.lang,
+    showDialog,
+    showToast,
     isLocalConnection
   })
 
@@ -643,161 +643,6 @@ export default function App() {
     setShowSidebarSearch(false);
     setSidebarSearchQuery("");
   }, [isSidebarCollapsed]);
-
-  const ensureHostKeyTrusted = async (server: ConnectionItem) => {
-    if (isLocalConnection(server)) return true;
-
-    const host = String(server?.host || '').trim();
-    const port = Number(server?.port) || 22;
-
-    if (!host) {
-      showToast(
-        settings.lang === 'de'
-          ? 'Host fehlt für die SSH Verbindung'
-          : 'Missing host for SSH connection',
-        true
-      );
-      return false;
-    }
-
-    try {
-      const info = await invoke('check_host_key', {
-        host,
-        port
-      }) as HostKeyCheckInfo;
-
-      if (info?.status === 'match') {
-        return true;
-      }
-
-      if (info?.status !== 'not_found' && info?.status !== 'mismatch') {
-        showToast(
-          settings.lang === 'de'
-            ? 'Host-Fingerprint konnte nicht geprüft werden'
-            : 'Could not verify host fingerprint',
-          true
-        );
-        return false;
-      }
-
-      const isMismatch = info.status === 'mismatch';
-
-      return await new Promise<boolean>((resolve) => {
-        const statusLabel = isMismatch
-          ? (settings.lang === 'de' ? 'Geändert' : 'Changed')
-          : (settings.lang === 'de' ? 'Neu' : 'New');
-
-        const title = isMismatch
-          ? (settings.lang === 'de' ? 'SSH Host Key geändert' : 'SSH host key changed')
-          : (settings.lang === 'de' ? 'Neuer SSH Host' : 'New SSH host');
-
-        const description = isMismatch
-          ? [
-              settings.lang === 'de'
-                ? 'Der gespeicherte SSH Host Key stimmt nicht mehr mit dem aktuellen Server überein.'
-                : 'The stored SSH host key no longer matches the current server.',
-              '',
-              settings.lang === 'de'
-                ? 'Das kann nach einer Neuinstallation oder einem Serverwechsel normal sein. Es kann aber auch auf einen Man in the Middle Angriff hindeuten.'
-                : 'This can be normal after a reinstall or server migration. It can also indicate a man in the middle attack.',
-              '',
-              `Host: ${info.display_host}`,
-              `${settings.lang === 'de' ? 'Status' : 'Status'}: ${statusLabel}`,
-              `${settings.lang === 'de' ? 'Typ' : 'Type'}: ${info.key_type}`,
-              `Fingerprint: ${info.fingerprint}`,
-              `known_hosts: ${info.known_hosts_path}`,
-              '',
-              settings.lang === 'de'
-                ? 'Nur fortfahren, wenn du diese Änderung wirklich erwartest und dem Zielsystem vertraust.'
-                : 'Only continue if you truly expect this change and trust the target system.'
-            ].join('\n')
-          : [
-              settings.lang === 'de'
-                ? 'Dieser SSH Host ist noch nicht in known_hosts gespeichert.'
-                : 'This SSH host is not stored in known_hosts yet.',
-              '',
-              settings.lang === 'de'
-                ? 'Wenn du fortfährst, wird der aktuelle Host Key lokal gespeichert und künftig wiedererkannt.'
-                : 'If you continue, the current host key will be stored locally and recognized in future connections.',
-              '',
-              `Host: ${info.display_host}`,
-              `${settings.lang === 'de' ? 'Status' : 'Status'}: ${statusLabel}`,
-              `${settings.lang === 'de' ? 'Typ' : 'Type'}: ${info.key_type}`,
-              `Fingerprint: ${info.fingerprint}`,
-              `known_hosts: ${info.known_hosts_path}`
-            ].join('\n');
-
-        showDialog({
-          type: 'confirm',
-          tone: isMismatch ? 'danger' : undefined,
-          title,
-          description,
-          confirmLabel: isMismatch
-            ? (settings.lang === 'de' ? 'Ersetzen und verbinden' : 'Replace and connect')
-            : (settings.lang === 'de' ? 'Vertrauen und verbinden' : 'Trust and connect'),
-          cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
-          secondaryLabel: settings.lang === 'de' ? 'Fingerprint kopieren' : 'Copy fingerprint',
-          tertiaryLabel: settings.lang === 'de' ? 'known_hosts öffnen' : 'Open known_hosts',
-          onSecondary: async () => {
-            try {
-              await invoke('copy_text_to_clipboard', { text: String(info.fingerprint || '') });
-              showToast(settings.lang === 'de' ? 'Fingerprint kopiert' : 'Fingerprint copied');
-            } catch (e) {
-              showToast(
-                settings.lang === 'de'
-                  ? `Fingerprint konnte nicht kopiert werden: ${String(e)}`
-                  : `Could not copy fingerprint: ${String(e)}`,
-                true
-              );
-            }
-          },
-          onTertiary: async () => {
-            try {
-              await invoke('reveal_path_in_file_manager', { path: String(info.known_hosts_path || '') });
-            } catch (e) {
-              showToast(
-                settings.lang === 'de'
-                  ? `known_hosts konnte nicht geöffnet werden: ${String(e)}`
-                  : `Could not open known_hosts: ${String(e)}`,
-                true
-              );
-            }
-          },
-          onConfirm: async () => {
-            try {
-              await invoke('trust_host_key', {
-                host: info.host,
-                port: info.port
-              });
-              showToast(
-                isMismatch
-                  ? (settings.lang === 'de' ? 'Host Key ersetzt und gespeichert' : 'Host key replaced and stored')
-                  : (settings.lang === 'de' ? 'Host Key gespeichert' : 'Host key stored')
-              );
-              resolve(true);
-            } catch (e) {
-              showToast(
-                settings.lang === 'de'
-                  ? `Host Fingerprint konnte nicht gespeichert werden: ${String(e)}`
-                  : `Could not store host fingerprint: ${String(e)}`,
-                true
-              );
-              resolve(false);
-            }
-          },
-          onCancel: () => resolve(false)
-        });
-      });
-    } catch (e) {
-      showToast(
-        settings.lang === 'de'
-          ? `Host-Fingerprint Prüfung fehlgeschlagen: ${String(e)}`
-          : `Host fingerprint check failed: ${String(e)}`,
-        true
-      );
-      return false;
-    }
-  };
 
   const openTerminal = async (
     server: ConnectionItem,
