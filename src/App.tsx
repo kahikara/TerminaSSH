@@ -18,6 +18,7 @@ import SessionCloseDialog from './components/SessionCloseDialog';
 import MainCloseDialog from './components/MainCloseDialog';
 import ToastStack from './components/ToastStack';
 import InputContextMenu from './components/InputContextMenu';
+import StartupRecoveryResultDialog from './components/StartupRecoveryResultDialog';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
 
@@ -2674,65 +2675,14 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {startupRecoveryDialog.isOpen && (
-        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl overflow-hidden">
-            <div className="min-h-[52px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
-              <div className="text-[14px] font-bold text-[var(--text-main)]">
-                {settings.lang === 'de' ? 'Neuer Recovery Key' : 'New recovery key'}
-              </div>
-
-              <button
-                type="button"
-                onClick={closeStartupRecoveryDialog}
-                className="ui-icon-btn"
-                title={settings.lang === 'de' ? 'Schließen' : 'Close'}
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="p-4 flex flex-col gap-3">
-              <div className="text-[13px] leading-[1.5] text-[var(--text-muted)] whitespace-pre-line">
-                {settings.lang === 'de'
-                  ? 'Dein Master Passwort wurde zurückgesetzt. Speichere diesen neuen Recovery Key jetzt sicher.'
-                  : 'Your master password was reset. Save this new recovery key somewhere safe now.'}
-              </div>
-
-              <div className="rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-3 py-3 text-[13px] font-semibold tracking-[0.04em] text-[var(--text-main)] break-all">
-                {startupRecoveryDialog.key}
-              </div>
-            </div>
-
-            <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-end gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => { void copyStartupRecoveryKey() }}
-                className="ui-btn-ghost"
-              >
-                {settings.lang === 'de' ? 'Kopieren' : 'Copy'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { void downloadStartupRecoveryKey() }}
-                className="ui-btn-ghost"
-              >
-                {settings.lang === 'de' ? 'Key herunterladen' : 'Download key'}
-              </button>
-
-              <button
-                type="button"
-                onClick={closeStartupRecoveryDialog}
-                className="ui-btn-primary"
-              >
-                {settings.lang === 'de' ? 'Weiter' : 'Continue'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <StartupRecoveryResultDialog
+        isOpen={startupRecoveryDialog.isOpen}
+        lang={settings.lang}
+        recoveryKey={startupRecoveryDialog.key}
+        onCopy={copyStartupRecoveryKey}
+        onDownload={downloadStartupRecoveryKey}
+        onClose={closeStartupRecoveryDialog}
+      />
 
       <InputContextMenu
         inputMenu={inputMenu}
