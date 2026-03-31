@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Minus, Square, Zap } from 'lucide-react';
+import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { t } from './lib/i18n';
 import type { GlobalDialogState } from './lib/types';
@@ -25,6 +25,7 @@ import StartupRecoveryResultDialog from './components/StartupRecoveryResultDialo
 import QuickConnectDialog from './components/QuickConnectDialog';
 import TabContextMenu from './components/TabContextMenu';
 import SidebarContextMenu from './components/SidebarContextMenu';
+import LinuxTitlebar from './components/LinuxTitlebar';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
 
@@ -1106,78 +1107,25 @@ export default function App() {
       )}
 
       {useCustomLinuxTitlebar && (
-        <>
-          <div
-            className="absolute top-0 left-0 right-0 z-[300] h-[30px] flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] px-2 select-none"
-            onDoubleClick={(e) => {
-              const target = e.target as HTMLElement | null
-              if (target?.closest('[data-window-control="true"]')) return
-              e.preventDefault()
-              e.stopPropagation()
-              void invoke('window_toggle_maximize')
-                .then((value) => setIsWindowMaximized(Boolean(value)))
-                .catch(() => {})
-            }}
-            onMouseDown={(e) => {
-              const target = e.target as HTMLElement | null
-              if (target?.closest('[data-window-control="true"]')) return
-              if (e.detail > 1) return
-              void invoke('window_start_dragging').catch(() => {})
-            }}
-          >
-            <div className="flex items-center gap-1.5 min-w-0">
-              <img
-                src="/app-icon.svg"
-                alt="logo"
-                className="w-4 h-4 object-contain shrink-0"
-                onError={(e) => e.currentTarget.style.display = 'none'}
-              />
-              <span className="text-[11px] font-semibold text-[var(--text-main)] truncate">
-                Termina SSH{appVersion ? ` v${appVersion}` : ""}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-[5px]">
-              <button
-                data-window-control="true"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => {
-                  void invoke('window_minimize').catch(() => {})
-                }}
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
-                title={settings.lang === 'de' ? 'Minimieren' : 'Minimize'}
-              >
-                <Minus size={11} />
-              </button>
-
-              <button
-                data-window-control="true"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => {
-                  void invoke('window_toggle_maximize')
-                    .then((value) => setIsWindowMaximized(Boolean(value)))
-                    .catch(() => {})
-                }}
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
-                title={settings.lang === 'de' ? 'Maximieren' : 'Maximize'}
-              >
-                <Square size={9.5} className={isWindowMaximized ? 'scale-90' : ''} />
-              </button>
-
-              <button
-                data-window-control="true"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => {
-                  void invoke('window_close_main').catch(() => {})
-                }}
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
-                title={settings.lang === 'de' ? 'Schließen' : 'Close'}
-              >
-                <X size={11} />
-              </button>
-            </div>
-          </div>
-        </>
+        <LinuxTitlebar
+          lang={settings.lang}
+          appVersion={appVersion}
+          isWindowMaximized={isWindowMaximized}
+          onStartDrag={() => {
+            void invoke('window_start_dragging').catch(() => {})
+          }}
+          onToggleMaximize={() => {
+            void invoke('window_toggle_maximize')
+              .then((value) => setIsWindowMaximized(Boolean(value)))
+              .catch(() => {})
+          }}
+          onMinimize={() => {
+            void invoke('window_minimize').catch(() => {})
+          }}
+          onClose={() => {
+            void invoke('window_close_main').catch(() => {})
+          }}
+        />
       )}
 
       <div
