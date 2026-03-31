@@ -7,6 +7,7 @@ import { useConnectionHelpers } from './hooks/useConnectionHelpers';
 import { useVaultConnectionUnlock } from './hooks/useVaultConnectionUnlock';
 import { useHostKeyTrust } from './hooks/useHostKeyTrust';
 import { useConnectionCollections } from './hooks/useConnectionCollections';
+import { useQuickConnectFlow } from './hooks/useQuickConnectFlow';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -195,8 +196,6 @@ export default function App() {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [showSidebarSearch, setShowSidebarSearch] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
-  const [isQuickConnectOpen, setQuickConnectOpen] = useState(false);
-  const [quickConnectDraft, setQuickConnectDraft] = useState({ user: "", host: "", port: "22" });
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
@@ -292,6 +291,19 @@ export default function App() {
     showDialog,
     showToast,
     isLocalConnection
+  })
+
+  const {
+    isQuickConnectOpen,
+    quickConnectDraft,
+    setQuickConnectDraft,
+    openQuickConnect,
+    closeQuickConnect,
+    submitQuickConnect
+  } = useQuickConnectFlow({
+    openConnection: (server) => {
+      void openTerminal(server)
+    }
   })
 
   useEffect(() => {
@@ -473,20 +485,6 @@ export default function App() {
   }, [showSidebarSearch, closeSidebarSearch]);
 
   useEffect(() => {
-    if (!isQuickConnectOpen) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      setQuickConnectOpen(false);
-      setQuickConnectDraft({ user: "", host: "", port: "22" });
-    };
-
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isQuickConnectOpen]);
-
-  useEffect(() => {
     if (!isSidebarCollapsed) return;
     if (!showSidebarSearch && !sidebarSearchQuery) return;
     setShowSidebarSearch(false);
@@ -582,32 +580,6 @@ export default function App() {
     const newTab: AppTab = { ...server, tabId, sessionId: tabId };
     setOpenTabs(prev => [...prev, newTab]);
     setActiveTabId(tabId);
-  };
-
-  const closeQuickConnect = () => {
-    setQuickConnectOpen(false);
-    setQuickConnectDraft({ user: "", host: "", port: "22" });
-  };
-
-  const submitQuickConnect = (e?: React.FormEvent) => {
-    e?.preventDefault();
-
-    const host = quickConnectDraft.host.trim();
-    const username = quickConnectDraft.user.trim();
-    const parsedPort = parseInt(quickConnectDraft.port.trim() || "22", 10);
-    const port = Number.isFinite(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 22;
-
-    if (!host) return;
-
-    closeQuickConnect();
-    void openTerminal({
-      isQuickConnect: true,
-      quickConnectNeedsPassword: true,
-      name: host,
-      username,
-      host,
-      port
-    });
   };
 
   const closeSidebarContextMenu = useCallback(() => {
@@ -1168,7 +1140,7 @@ export default function App() {
             setConnectionDraft(null)
             setConnModalOpen(true)
           }}
-          onOpenQuickConnect={() => setQuickConnectOpen(true)}
+          onOpenQuickConnect={openQuickConnect}
           onOpenConnection={(server, options) => {
             void openTerminal(server, options)
           }}
