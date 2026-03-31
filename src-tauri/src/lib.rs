@@ -3081,11 +3081,11 @@ fn export_backup_bundle(
     let exported_at = current_export_timestamp();
 
     let bundle = BackupBundleV3 {
-        version: 3,
+        version: 4,
         exported_at,
         app_name: "TerminaSSH".to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
-        format_name: "terminassh-backup".to_string(),
+        format_name: "terminassh-backup-v4".to_string(),
         settings,
         connections,
         snippets,
@@ -3113,9 +3113,29 @@ fn import_backup_bundle(
 
     if version > 3 {
         return Err(format!(
-            "Backup version {} is newer than this app supports.",
+            "Backup version {} is not supported. Create a new backup with the current app version.",
             version
         ));
+    }
+
+    if version != 4 {
+        return Err(format!(
+            "Backup version {} is not supported. Create a new backup with the current app version.",
+            version
+        ));
+    }
+
+    let format_name = parsed
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+
+    if format_name != "terminassh-backup-v4" {
+        return Err(
+            "Backup format is not supported. Create a new backup with the current app version."
+                .to_string(),
+        );
     }
 
     let settings = parsed

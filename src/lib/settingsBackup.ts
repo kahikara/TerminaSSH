@@ -35,11 +35,60 @@ type BundleCounts = {
   tunnels: number
   sshKeys: number
   notes: number
+  recentConnections: number
 }
 
 const NOTES_STORAGE_PREFIX = "termina_notes:"
+const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections"
+const BACKUP_FORMAT_NAME = "terminassh-backup-v4"
+const BACKUP_VERSION = 4
 const MAX_BACKUP_NOTES = 250
 const MAX_BACKUP_NOTE_CHARS = 200_000
+
+function collectRecentConnectionsForBackup(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_CONNECTIONS_STORAGE_KEY)
+    if (!raw) return []
+
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+
+    return Array.from(
+      new Set(
+        parsed
+          .map((value: unknown) => String(value ?? "").trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 24)
+  } catch {
+    return []
+  }
+}
+
+function importRecentConnectionsFromBundle(bundleJson: string): number {
+  try {
+    const parsed = JSON.parse(bundleJson)
+    const rawRecent =
+      Array.isArray(parsed?.recentConnectionIds)
+        ? parsed.recentConnectionIds
+        : Array.isArray(parsed?.recent_connection_ids)
+          ? parsed.recent_connection_ids
+          : []
+
+    const normalized = Array.from(
+      new Set(
+        rawRecent
+          .map((value: unknown) => String(value ?? "").trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 24)
+
+    localStorage.setItem(RECENT_CONNECTIONS_STORAGE_KEY, JSON.stringify(normalized))
+    return normalized.length
+  } catch {
+    return 0
+  }
+}
 
 function collectNotesForBackup(): BackupNote[] {
   const keys: string[] = []
@@ -106,8 +155,9 @@ function getBundleCounts(bundleJson: string): BundleCounts {
       connections: Array.isArray(parsed?.connections) ? parsed.connections.length : 0,
       snippets: Array.isArray(parsed?.snippets) ? parsed.snippets.length : 0,
       tunnels: Array.isArray(parsed?.tunnels) ? parsed.tunnels.length : 0,
-      sshKeys: Array.isArray(parsed?.sshKeys) ? parsed.sshKeys.length : Array.isArray(parsed?.ssh_keys) ? parsed.ssh_keys.length : 0,
-      notes: Array.isArray(parsed?.notes) ? parsed.notes.length : 0
+      sshKeys: Array.isArray(parsed?.sshKeys) ? parsed.sshKeys.length : 0,
+      notes: Array.isArray(parsed?.notes) ? parsed.notes.length : 0,
+      recentConnections: Array.isArray(parsed?.recentConnectionIds) ? parsed.recentConnectionIds.length : 0
     }
   } catch {
     return {
@@ -115,7 +165,8 @@ function getBundleCounts(bundleJson: string): BundleCounts {
       snippets: 0,
       tunnels: 0,
       sshKeys: 0,
-      notes: 0
+      notes: 0,
+      recentConnections: 0
     }
   }
 }
@@ -158,7 +209,8 @@ function showExportSummaryDialog(
           `• Snippets: ${counts.snippets}`,
           `• SSH Schlüssel: ${counts.sshKeys}`,
           `• Tunnels: ${counts.tunnels}`,
-          `• Notizen: ${counts.notes}`
+          `• Notizen: ${counts.notes}`,
+          `• Recent Connections: ${counts.recentConnections}`
         ].join("\n")
       : [
           "Export summary",
@@ -177,7 +229,8 @@ function showExportSummaryDialog(
           `• Snippets: ${counts.snippets}`,
           `• SSH keys: ${counts.sshKeys}`,
           `• Tunnels: ${counts.tunnels}`,
-          `• Notes: ${counts.notes}`
+          `• Notes: ${counts.notes}`,
+          `• Recent connections: ${counts.recentConnections}`
         ].join("\n")
 
   showDialog({
@@ -227,27 +280,17 @@ function validateBackupBundle(bundleJson: string, lang: string): string | null {
   }
 
   const formatName = typeof parsed?.format === "string" ? parsed.format.trim() : ""
-  if (formatName && formatName !== "terminassh-backup") {
+  if (formatName !== BACKUP_FORMAT_NAME) {
     return lang === "de"
-      ? "Die Datei ist kein Termina SSH Backup."
-      : "The file is not a Termina SSH backup."
+      ? "Dieses Backup verwendet ein altes oder unbekanntes Format. Bitte erstelle ein neues Backup mit der aktuellen Version."
+      : "This backup uses an older or unknown format. Please create a new backup with the current version."
   }
 
-  const rawVersion = parsed?.version
-  if (rawVersion !== undefined) {
-    const version = Number(rawVersion)
-
-    if (!Number.isFinite(version) || version <= 0) {
-      return lang === "de"
-        ? "Die Backup Version ist ungültig."
-        : "The backup version is invalid."
-    }
-
-    if (version > 3) {
-      return lang === "de"
-        ? `Dieses Backup verwendet Version ${version}, diese App unterstützt aber nur bis Version 3.`
-        : `This backup uses version ${version}, but this app only supports up to version 3.`
-    }
+  const version = Number(parsed?.version)
+  if (!Number.isFinite(version) || version !== BACKUP_VERSION) {
+    return lang === "de"
+      ? `Dieses Backup verwendet Version ${String(parsed?.version ?? "-")}. Unterstützt wird nur Version ${BACKUP_VERSION}. Bitte erstelle ein neues Backup.`
+      : `This backup uses version ${String(parsed?.version ?? "-")}. Only version ${BACKUP_VERSION} is supported. Please create a new backup.`
   }
 
   const hasKnownBackupField =
@@ -518,10 +561,15 @@ function buildWarningSectionLines(warnings: string[], lang: string): string[] {
 
 
 export async function buildExportPayload(settings: any): Promise<string> {
-  return await invoke("export_backup_bundle", {
+  const rawBundle = await invoke("export_backup_bundle", {
     settingsJson: JSON.stringify(settings ?? {}),
     notesJson: JSON.stringify(collectNotesForBackup())
-  })
+  }) as string
+
+  const parsed = JSON.parse(rawBundle)
+  parsed.recentConnectionIds = collectRecentConnectionsForBackup()
+
+  return JSON.stringify(parsed, null, 2)
 }
 
 export async function saveBackupFile(encrypted = false) {
@@ -610,6 +658,7 @@ export async function handleImportConfig({
       const result: any = await invoke("import_backup_bundle", { bundleJson })
       const notesResult = importNotesFromResult(result?.notes, lang)
       const notesImported = Number(result?.notes_imported ?? notesResult.imported)
+      const recentConnectionsImported = importRecentConnectionsFromBundle(bundleJson)
 
       if (result?.settings) {
         setSettings({ ...settings, ...result.settings })
@@ -655,7 +704,8 @@ export async function handleImportConfig({
               `• Snippets: ${snippetsImported}`,
               `• SSH Schlüssel: ${sshKeysImported}`,
               `• Tunnels: ${tunnelsImported}`,
-              `• Notizen: ${notesImported}`
+              `• Notizen: ${notesImported}`,
+              `• Recent Connections: ${recentConnectionsImported}`
             ]
           : [
               "Import summary",
@@ -664,7 +714,8 @@ export async function handleImportConfig({
               `• Snippets: ${snippetsImported}`,
               `• SSH keys: ${sshKeysImported}`,
               `• Tunnels: ${tunnelsImported}`,
-              `• Notes: ${notesImported}`
+              `• Notes: ${notesImported}`,
+              `• Recent connections: ${recentConnectionsImported}`
             ]
 
       const warningHeader =
