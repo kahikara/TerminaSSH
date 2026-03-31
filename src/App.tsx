@@ -8,6 +8,7 @@ import { useVaultConnectionUnlock } from './hooks/useVaultConnectionUnlock';
 import { useHostKeyTrust } from './hooks/useHostKeyTrust';
 import { useConnectionCollections } from './hooks/useConnectionCollections';
 import { useQuickConnectFlow } from './hooks/useQuickConnectFlow';
+import { useTabDragFlow } from './hooks/useTabDragFlow';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -189,10 +190,6 @@ export default function App() {
 
   const [openTabs, setOpenTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [tabDragId, setTabDragId] = useState<string | null>(null);
-  const [tabDropId, setTabDropId] = useState<string | null>(null);
-  const [tabPointerDragging, setTabPointerDragging] = useState(false);
-  const [tabGhostPos, setTabGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [showSidebarSearch, setShowSidebarSearch] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
@@ -247,7 +244,6 @@ export default function App() {
   const settingsRef = useRef(settings);
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarSearchFocusTimerRef = useRef<number | null>(null);
-  const tabDragStartXRef = useRef<number | null>(null);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
     lang: settings.lang,
@@ -410,6 +406,31 @@ export default function App() {
     activeTabId
   })
 
+  const {
+    tabDragId,
+    tabDropId,
+    tabPointerDragging,
+    tabGhostPos,
+    handleTabPointerStart,
+    handleTabPointerEnter
+  } = useTabDragFlow({
+    onReorderTabs: (fromTabId, toTabId) => {
+      setOpenTabs((prev) => {
+        const fromIndex = prev.findIndex((tab) => tab.tabId === fromTabId)
+        const toIndex = prev.findIndex((tab) => tab.tabId === toTabId)
+
+        if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return prev
+
+        const next = [...prev]
+        const movedItems = next.splice(fromIndex, 1)
+        const moved = movedItems[0]
+        if (!moved) return prev
+        next.splice(toIndex, 0, moved)
+        return next
+      })
+    }
+  })
+
   const draggedTabGhost = useMemo<AppTab | null>(
     () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
@@ -424,6 +445,7 @@ export default function App() {
     () => openTabs.filter(isDashboardTab),
     [openTabs]
   );
+
 
   const handleMouseMove = (e: MouseEvent) => { if (isDragging.current) setSidebarWidth(Math.min(Math.max(e.clientX, 200), 600)); };
   const handleMouseUp = () => { isDragging.current = false; document.body.style.cursor = 'default'; };
@@ -984,81 +1006,6 @@ export default function App() {
       })
     );
   }, []);
-
-  const clearTabPointerState = useCallback(() => {
-    setTabDragId(null);
-    setTabDropId(null);
-    setTabPointerDragging(false);
-    setTabGhostPos(null);
-    tabDragStartXRef.current = null;
-    document.body.style.userSelect = '';
-    document.body.style.cursor = '';
-  }, []);
-
-  const handleTabPointerStart = useCallback((e: React.MouseEvent<HTMLDivElement>, tabId: string) => {
-    if (e.button !== 0) return;
-
-    const target = e.target as HTMLElement | null;
-    if (target?.closest('[data-no-tab-drag="true"]')) return;
-
-    setTabDragId(tabId);
-    setTabDropId(tabId);
-    setTabPointerDragging(false);
-    setTabGhostPos({ x: e.clientX, y: e.clientY });
-    tabDragStartXRef.current = e.clientX;
-    document.body.style.userSelect = 'none';
-  }, []);
-
-  const handleTabPointerEnter = useCallback((tabId: string) => {
-    if (!tabDragId) return;
-    if (!tabPointerDragging) return;
-    if (tabId === tabDragId) return;
-    setTabDropId(tabId);
-  }, [tabDragId, tabPointerDragging]);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!tabDragId) return;
-      if (tabDragStartXRef.current == null) return;
-
-      if (!tabPointerDragging) {
-        if (Math.abs(e.clientX - tabDragStartXRef.current) < 5) return;
-        setTabPointerDragging(true);
-        document.body.style.cursor = 'grabbing';
-      }
-
-      setTabGhostPos({ x: e.clientX, y: e.clientY });
-    };
-
-    const onUp = () => {
-      if (!tabDragId) return;
-
-      if (tabPointerDragging && tabDropId && tabDropId !== tabDragId) {
-        setOpenTabs(prev => {
-          const fromIndex = prev.findIndex((tab) => tab.tabId === tabDragId);
-          const toIndex = prev.findIndex((tab) => tab.tabId === tabDropId);
-
-          if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return prev;
-
-          const next = [...prev];
-          const [moved] = next.splice(fromIndex, 1);
-          if (!moved) return prev;
-          next.splice(toIndex, 0, moved);
-          return next;
-        });
-      }
-
-      clearTabPointerState();
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [tabDragId, tabDropId, tabPointerDragging, clearTabPointerState]);
 
     
 
