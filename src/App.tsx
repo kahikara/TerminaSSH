@@ -401,6 +401,38 @@ export default function App() {
     setSidebarContextMenu(null);
   }, []);
 
+  const openSettingsModal = useCallback(() => {
+    setIsSettingsOpen(true)
+  }, [])
+
+  const closeSettingsModal = useCallback(() => {
+    setIsSettingsOpen(false)
+  }, [])
+
+  const openNewConnectionModal = useCallback(() => {
+    setServerToEdit(null)
+    setConnectionDraft(null)
+    setConnModalOpen(true)
+  }, [])
+
+  const openEditConnectionModal = useCallback((server: ConnectionItem) => {
+    setConnectionDraft(null)
+    setServerToEdit(server)
+    setConnModalOpen(true)
+  }, [])
+
+  const openDuplicateConnectionModal = useCallback((draft: ConnectionDraft) => {
+    setServerToEdit(null)
+    setConnectionDraft(draft)
+    setConnModalOpen(true)
+  }, [])
+
+  const closeConnectionModal = useCallback(() => {
+    setConnModalOpen(false)
+    setServerToEdit(null)
+    setConnectionDraft(null)
+  }, [])
+
   const {
     editSidebarServer,
     duplicateSidebarServer,
@@ -411,16 +443,8 @@ export default function App() {
     showToast,
     showDialog,
     loadServers,
-    openEditConnectionModal: (server) => {
-      setConnectionDraft(null)
-      setServerToEdit(server)
-      setConnModalOpen(true)
-    },
-    openDuplicateConnectionModal: (draft) => {
-      setServerToEdit(null)
-      setConnectionDraft(draft)
-      setConnModalOpen(true)
-    }
+    openEditConnectionModal,
+    openDuplicateConnectionModal
   })
 
   const closeTabContextMenu = useCallback(() => {
@@ -552,7 +576,7 @@ export default function App() {
         useCustomLinuxTitlebar={useCustomLinuxTitlebar}
         lang={settings.lang}
         onGoHome={() => setActiveTabId(null)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={openSettingsModal}
         onToggleCollapse={toggleSidebarCollapse}
         onStartResize={startSidebarResize}
       >
@@ -576,20 +600,13 @@ export default function App() {
           onOpenLocalTerminalNewTab={() => {
             void openTerminal(LOCAL_TERMINAL_CONNECTION, { forceNewTab: true })
           }}
-          onOpenNewConnection={() => {
-            setServerToEdit(null)
-            setConnectionDraft(null)
-            setConnModalOpen(true)
-          }}
+          onOpenNewConnection={openNewConnectionModal}
           onOpenQuickConnect={openQuickConnect}
           onOpenConnection={(server, options) => {
             void openTerminal(server, options)
           }}
           onOpenSidebarContextMenu={openSidebarContextMenu}
-          onOpenConnectionSettings={(conn) => {
-            setServerToEdit(conn)
-            setConnModalOpen(true)
-          }}
+          onOpenConnectionSettings={openEditConnectionModal}
           onToggleFolder={(group) => {
             setCollapsedFolders({ ...collapsedFolders, [group]: !effectiveFolderCollapsed(group) })
           }}
@@ -725,11 +742,7 @@ export default function App() {
 
       <ConnectionModal
         isOpen={isConnModalOpen}
-        onClose={() => {
-          setConnModalOpen(false);
-          setServerToEdit(null);
-          setConnectionDraft(null);
-        }}
+        onClose={closeConnectionModal}
         serverToEdit={isEditableConnection(serverToEdit) ? serverToEdit : null}
         initialConnection={connectionDraft}
         onSuccess={loadServers}
@@ -740,7 +753,7 @@ export default function App() {
       />
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={closeSettingsModal}
         settings={settings}
         setSettings={setSettings}
         showToast={showToast}
