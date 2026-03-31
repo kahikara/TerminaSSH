@@ -395,23 +395,24 @@ export default function App() {
   }
 
   async function verifyStartupRecoveryKeyAndRunReset(normalizedRecoveryKey: string) {
-    try {
-      await invoke('validate_vault_recovery_key', { recoveryKey: normalizedRecoveryKey })
-
-      window.setTimeout(() => {
-        runStartupRecoveryReset(normalizedRecoveryKey)
-      }, 0)
-    } catch (e) {
-      showToast(
-        settings.lang === 'de'
-          ? `Recovery Key ungültig: ${String(e)}`
-          : `Recovery key is invalid: ${String(e)}`,
-        true
-      )
-    }
+    window.setTimeout(() => {
+      void runStartupRecoveryReset(normalizedRecoveryKey)
+    }, 0)
   }
 
-  function runStartupRecoveryReset(normalizedRecoveryKey: string) {
+  async function runStartupRecoveryReset(normalizedRecoveryKey: string) {
+    try {
+      await invoke('validate_vault_recovery_key', { recoveryKey: normalizedRecoveryKey })
+    } catch (_e) {
+      showToast(
+        settings.lang === 'de'
+          ? 'Recovery Key ist ungültig'
+          : 'Recovery key is invalid',
+        true
+      )
+      return
+    }
+
     showDialog({
       type: 'prompt',
       title: settings.lang === 'de' ? 'Neues Master Passwort' : 'New master password',
