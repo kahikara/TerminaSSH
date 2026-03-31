@@ -22,6 +22,7 @@ import MainCloseDialog from './components/MainCloseDialog';
 import ToastStack from './components/ToastStack';
 import InputContextMenu from './components/InputContextMenu';
 import StartupRecoveryResultDialog from './components/StartupRecoveryResultDialog';
+import QuickConnectDialog from './components/QuickConnectDialog';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
 
@@ -1570,105 +1571,14 @@ export default function App() {
            ))}
         </div>
       </div>
-
-      {isQuickConnectOpen && (
-        <div
-          className="fixed inset-0 z-[265] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closeQuickConnect()
-          }}
-        >
-          <div
-            className="w-full max-w-[520px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl overflow-hidden"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="min-h-[54px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] shrink-0">
-                  <Zap size={17} className="text-[var(--accent)]" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[14px] font-bold text-[var(--text-main)]">
-                    {t('quickConnect', settings.lang)}
-                  </div>
-                  <div className="text-[12px] text-[var(--text-muted)]">
-                    {settings.lang === 'de' ? 'Schnell zu einem Host verbinden' : 'Connect to a host quickly'}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={closeQuickConnect}
-                className="ui-icon-btn"
-                title={t('close', settings.lang)}
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <form onSubmit={submitQuickConnect} className="p-4 flex flex-col gap-3">
-              <div className="grid grid-cols-1 md:grid-cols-[110px_1fr_88px] gap-3">
-                <input
-                  type="text"
-                  placeholder={t('quickConnectUserPlaceholder', settings.lang)}
-                  value={quickConnectDraft.user}
-                  onChange={(e) => setQuickConnectDraft((prev) => ({ ...prev, user: e.target.value }))}
-                  className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
-                />
-
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder={t('quickConnectHostPlaceholder', settings.lang)}
-                  value={quickConnectDraft.host}
-                  onChange={(e) => setQuickConnectDraft((prev) => ({ ...prev, host: e.target.value }))}
-                  className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
-                />
-
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  placeholder="22"
-                  value={quickConnectDraft.port}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    if (next === "" || /^\d+$/.test(next)) {
-                      setQuickConnectDraft((prev) => ({ ...prev, port: next }))
-                    }
-                  }}
-                  onBlur={() => {
-                    const parsed = parseInt(quickConnectDraft.port.trim() || "22", 10)
-                    setQuickConnectDraft((prev) => ({
-                      ...prev,
-                      port: String(Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : 22)
-                    }))
-                  }}
-                  className="h-10 bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl px-3.5 text-[13px] text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/30"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={closeQuickConnect}
-                  className="ui-btn-ghost"
-                >
-                  {t('cancel', settings.lang)}
-                </button>
-
-                <button
-                  type="submit"
-                  className="ui-btn-primary"
-                  disabled={!quickConnectDraft.host.trim()}
-                >
-                  {t('connect', settings.lang)}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <QuickConnectDialog
+        isOpen={isQuickConnectOpen}
+        lang={settings.lang}
+        draft={quickConnectDraft}
+        setDraft={setQuickConnectDraft}
+        onClose={closeQuickConnect}
+        onSubmit={submitQuickConnect}
+      />
 
       {sidebarContextMenu && (
         <div className="fixed inset-0 z-[260]" onMouseDown={closeSidebarContextMenu}>
