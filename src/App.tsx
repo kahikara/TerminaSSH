@@ -298,8 +298,8 @@ export default function App() {
       type: 'prompt',
       title: settings.lang === 'de' ? 'Vault entsperren' : 'Unlock vault',
       description: settings.lang === 'de'
-        ? 'Dein Vault ist auf automatisches Entsperren beim Start gesetzt. Bitte gib dein Master Passwort ein.'
-        : 'Your vault is configured to unlock automatically at startup. Please enter your master password.',
+        ? 'Passwortschutz ist aktiviert. Bitte gib dein Master Passwort ein.'
+        : 'Password protection is enabled. Please enter your master password.',
       placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
       isPassword: true,
       confirmLabel: settings.lang === 'de' ? 'Entsperren' : 'Unlock',
@@ -488,14 +488,12 @@ export default function App() {
 
         const isProtected = Boolean(status?.is_protected)
         const isUnlocked = Boolean(status?.is_unlocked)
-        const unlockMode = String(status?.unlock_mode || '').toLowerCase()
-
         if (isUnlocked) {
           startupVaultUnlockedRef.current = true
           return
         }
 
-        if (isProtected && !isUnlocked && unlockMode === 'startup') {
+        if (isProtected && !isUnlocked) {
           openStartupVaultUnlockDialog()
         }
       } catch (e) {

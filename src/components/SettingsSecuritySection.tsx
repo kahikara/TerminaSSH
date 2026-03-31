@@ -24,8 +24,6 @@ type SettingsSecuritySectionProps = {
   showToast: (msg: string, isErr?: boolean) => void
   showDialog: any
   cardStyle: CSSProperties
-  uniformSelectStyle: CSSProperties
-  primaryBtnStyle: CSSProperties
   actionBtnStyle: CSSProperties
 }
 
@@ -49,23 +47,38 @@ const badgeBaseStyle: CSSProperties = {
   fontWeight: 700
 }
 
+const neutralBadgeStyle: CSSProperties = {
+  ...badgeBaseStyle,
+  background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+  color: "var(--text-muted)"
+}
+
 const compactPanelStyle: CSSProperties = {
   borderRadius: 14,
   border: "1px solid var(--border-subtle)",
   background: "color-mix(in srgb, var(--bg-app) 86%, var(--bg-sidebar))",
-  padding: 14
+  padding: 12
 }
 
 const compactRowStyle: CSSProperties = {
   borderRadius: 12,
   border: "1px solid var(--border-subtle)",
   background: "color-mix(in srgb, var(--bg-app) 86%, var(--bg-sidebar))",
-  padding: 14,
-  display: "flex",
+  padding: "12px 12px",
+  display: "grid",
+  gridTemplateColumns: "minmax(0,1fr) auto",
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap"
+  gap: 12
+}
+
+const toolButtonStyle: CSSProperties = {
+  minWidth: 108
+}
+
+const toolChevronButtonStyle: CSSProperties = {
+  width: 36,
+  minWidth: 36,
+  padding: 0
 }
 
 const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
@@ -76,14 +89,10 @@ export default function SettingsSecuritySection({
   showToast,
   showDialog,
   cardStyle,
-  uniformSelectStyle,
-  primaryBtnStyle,
   actionBtnStyle
 }: SettingsSecuritySectionProps) {
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null)
   const [busy, setBusy] = useState(false)
-  const [unlockMode, setUnlockMode] = useState<"demand" | "startup">("demand")
-  const [savedUnlockMode, setSavedUnlockMode] = useState<"demand" | "startup">("demand")
   const [showExtraOptions, setShowExtraOptions] = useState(false)
   const [recoveryDialog, setRecoveryDialog] = useState<{
     isOpen: boolean
@@ -99,14 +108,6 @@ export default function SettingsSecuritySection({
   const isUnlocked = Boolean(vaultStatus?.is_unlocked)
 
   const statusToneStyle = useMemo<CSSProperties>(() => {
-    if (!isProtected) {
-      return {
-        ...badgeBaseStyle,
-        background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
-        color: "var(--text-muted)"
-      }
-    }
-
     if (isUnlocked) {
       return {
         ...badgeBaseStyle,
@@ -122,15 +123,7 @@ export default function SettingsSecuritySection({
       border: "1px solid color-mix(in srgb, var(--danger) 28%, var(--border-subtle))",
       color: "var(--danger)"
     }
-  }, [isProtected, isUnlocked])
-
-  const modeToneStyle = useMemo<CSSProperties>(() => {
-    return {
-      ...badgeBaseStyle,
-      background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
-      color: "var(--text-main)"
-    }
-  }, [])
+  }, [isUnlocked])
 
   const normalizeRecoveryKey = (value: string) =>
     String(value || "")
@@ -152,12 +145,6 @@ export default function SettingsSecuritySection({
     try {
       const status = await invoke("get_vault_status") as VaultStatus
       setVaultStatus(status || {})
-      const nextMode =
-        String(status?.unlock_mode || "demand").toLowerCase() === "startup"
-          ? "startup"
-          : "demand"
-      setUnlockMode(nextMode)
-      setSavedUnlockMode(nextMode)
     } catch (e) {
       showToast(
         lang === "de"
@@ -187,7 +174,7 @@ export default function SettingsSecuritySection({
 
   const ensureVaultUnlocked = (
     description: string,
-    onUnlocked: () => void | Promise<void>
+    onUnlocked: (enteredMasterPassword?: string) => void | Promise<void>
   ) => {
     if (isUnlocked) {
       void onUnlocked()
@@ -227,7 +214,7 @@ export default function SettingsSecuritySection({
           setBusy(false)
         }
 
-        await onUnlocked()
+        await onUnlocked(value)
       }
     })
   }
@@ -291,57 +278,6 @@ export default function SettingsSecuritySection({
     }
   }
 
-  const applyUnlockModeChange = async (nextMode: "demand" | "startup") => {
-    if (busy) return
-
-    if (!isProtected) {
-      setUnlockMode(nextMode)
-      return
-    }
-
-    if (nextMode === savedUnlockMode) {
-      setUnlockMode(nextMode)
-      return
-    }
-
-    const persistUnlockMode = async () => {
-      setUnlockMode(nextMode)
-      setBusy(true)
-      try {
-        await invoke("update_vault_unlock_mode", { unlockMode: nextMode })
-        await refreshStatus()
-        showToast(
-          lang === "de"
-            ? "Unlock Mode gespeichert"
-            : "Unlock mode saved"
-        )
-      } catch (e) {
-        setUnlockMode(savedUnlockMode)
-        showToast(
-          lang === "de"
-            ? `Unlock Mode konnte nicht gespeichert werden: ${String(e)}`
-            : `Could not save unlock mode: ${String(e)}`,
-          true
-        )
-      } finally {
-        setBusy(false)
-      }
-    }
-
-    if (!isUnlocked) {
-      setUnlockMode(savedUnlockMode)
-      ensureVaultUnlocked(
-        lang === "de"
-          ? "Gib dein Master Passwort ein, um das Startverhalten zu ändern."
-          : "Enter your master password to change the startup behavior.",
-        persistUnlockMode
-      )
-      return
-    }
-
-    await persistUnlockMode()
-  }
-
   const enableProtection = () => {
     showDialog({
       type: "prompt",
@@ -364,7 +300,7 @@ export default function SettingsSecuritySection({
         try {
           const result = await invoke("enable_vault_protection", {
             masterPassword: value,
-            unlockMode
+            unlockMode: "startup"
           }) as EnableVaultProtectionResult
 
           await refreshStatus()
@@ -378,8 +314,8 @@ export default function SettingsSecuritySection({
         } catch (e) {
           showToast(
             lang === "de"
-              ? `Vault Schutz konnte nicht aktiviert werden: ${String(e)}`
-              : `Could not enable vault protection: ${String(e)}`,
+              ? `Passwortschutz konnte nicht eingeschaltet werden: ${String(e)}`
+              : `Could not turn on password protection: ${String(e)}`,
             true
           )
         } finally {
@@ -440,14 +376,67 @@ export default function SettingsSecuritySection({
   }
 
   const changeMasterPassword = () => {
-    const openChangePasswordDialog = () => {
+    const openNewPasswordDialog = (currentMasterPassword: string) => {
+      showDialog({
+        type: "prompt",
+        title: lang === "de" ? "Neues Master Passwort" : "New master password",
+        description:
+          lang === "de"
+            ? "Setze dein neues Master Passwort."
+            : "Set your new master password.",
+        placeholder: ui.securityMasterPasswordPlaceholder,
+        confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
+        isPassword: true,
+        requireConfirm: true,
+        confirmLabel: lang === "de" ? "Ändern" : "Change",
+        cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
+        validate: (value: string, confirmValue: string) => {
+          if (!value.trim()) return ui.securityMasterPasswordEmpty
+          if (value.length < 6) return ui.securityMasterPasswordTooShort
+          if (value !== confirmValue) return ui.securityMasterPasswordMismatch
+          if (value === currentMasterPassword) {
+            return lang === "de"
+              ? "Das neue Master Passwort muss sich unterscheiden"
+              : "The new master password must be different"
+          }
+          return ""
+        },
+        onConfirm: async (newValue: string) => {
+          setBusy(true)
+          try {
+            await invoke("change_vault_master_password", {
+              currentMasterPassword,
+              newMasterPassword: newValue
+            })
+            await refreshStatus()
+            showToast(
+              lang === "de"
+                ? "Master Passwort geändert"
+                : "Master password changed"
+            )
+          } catch (e) {
+            showToast(
+              lang === "de"
+                ? `Master Passwort konnte nicht geändert werden: ${String(e)}`
+                : `Could not change master password: ${String(e)}`,
+              true
+            )
+            throw e
+          } finally {
+            setBusy(false)
+          }
+        }
+      })
+    }
+
+    const askForCurrentPassword = () => {
       showDialog({
         type: "prompt",
         title: lang === "de" ? "Aktuelles Master Passwort" : "Current master password",
         description:
           lang === "de"
-            ? "Gib zuerst dein aktuelles Master Passwort ein."
-            : "Enter your current master password first.",
+            ? "Gib dein aktuelles Master Passwort ein."
+            : "Enter your current master password.",
         placeholder: ui.securityMasterPasswordPlaceholder,
         isPassword: true,
         confirmLabel: lang === "de" ? "Weiter" : "Continue",
@@ -461,67 +450,22 @@ export default function SettingsSecuritySection({
           return ""
         },
         onConfirm: async (currentValue: string) => {
-          const currentMasterPassword = String(currentValue || "")
-
-          showDialog({
-            type: "prompt",
-            title: lang === "de" ? "Neues Master Passwort" : "New master password",
-            description:
-              lang === "de"
-                ? "Setze jetzt dein neues Master Passwort."
-                : "Set your new master password now.",
-            placeholder: ui.securityMasterPasswordPlaceholder,
-            confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
-            isPassword: true,
-            requireConfirm: true,
-            confirmLabel: lang === "de" ? "Ändern" : "Change",
-            cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-            validate: (value: string, confirmValue: string) => {
-              if (!value.trim()) return ui.securityMasterPasswordEmpty
-              if (value.length < 6) return ui.securityMasterPasswordTooShort
-              if (value !== confirmValue) return ui.securityMasterPasswordMismatch
-              if (value === currentMasterPassword) {
-                return lang === "de"
-                  ? "Das neue Master Passwort muss sich unterscheiden"
-                  : "The new master password must be different"
-              }
-              return ""
-            },
-            onConfirm: async (newValue: string) => {
-              setBusy(true)
-              try {
-                await invoke("change_vault_master_password", {
-                  currentMasterPassword,
-                  newMasterPassword: newValue
-                })
-                await refreshStatus()
-                showToast(
-                  lang === "de"
-                    ? "Master Passwort geändert"
-                    : "Master password changed"
-                )
-              } catch (e) {
-                showToast(
-                  lang === "de"
-                    ? `Master Passwort konnte nicht geändert werden: ${String(e)}`
-                    : `Could not change master password: ${String(e)}`,
-                  true
-                )
-                throw e
-              } finally {
-                setBusy(false)
-              }
-            }
-          })
+          openNewPasswordDialog(String(currentValue || ""))
         }
       })
     }
 
     ensureVaultUnlocked(
       lang === "de"
-        ? "Gib dein Master Passwort ein, um das Master Passwort zu ändern."
-        : "Enter your master password to change the master password.",
-      openChangePasswordDialog
+        ? "Gib dein Master Passwort ein, um es zu ändern."
+        : "Enter your master password to change it.",
+      (enteredMasterPassword) => {
+        if (String(enteredMasterPassword || "").trim()) {
+          openNewPasswordDialog(String(enteredMasterPassword))
+          return
+        }
+        askForCurrentPassword()
+      }
     )
   }
 
@@ -530,12 +474,12 @@ export default function SettingsSecuritySection({
       showDialog({
         type: "confirm",
         tone: "danger",
-        title: lang === "de" ? "Schutz deaktivieren" : "Disable protection",
+        title: lang === "de" ? "Passwortschutz ausschalten" : "Turn off password protection",
         description:
           lang === "de"
-            ? "Der Master Passwort Schutz wird entfernt. Secrets bleiben weiter in vault.db, aber die App funktioniert danach wieder ohne Unlock."
-            : "Master password protection will be removed. Secrets stay in vault.db, but the app will work again without unlocking.",
-        confirmLabel: lang === "de" ? "Deaktivieren" : "Disable",
+            ? "Dein Vault bleibt erhalten. Danach funktioniert die App wieder ohne Passwortabfrage beim Start."
+            : "Your vault stays in place. After this, the app works again without asking for a password at startup.",
+        confirmLabel: lang === "de" ? "Ausschalten" : "Turn off",
         cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
         onConfirm: async () => {
           setBusy(true)
@@ -544,14 +488,14 @@ export default function SettingsSecuritySection({
             await refreshStatus()
             showToast(
               lang === "de"
-                ? "Vault Schutz deaktiviert"
-                : "Vault protection disabled"
+                ? "Passwortschutz ausgeschaltet"
+                : "Password protection turned off"
             )
           } catch (e) {
             showToast(
               lang === "de"
-                ? `Vault Schutz konnte nicht deaktiviert werden: ${String(e)}`
-                : `Could not disable vault protection: ${String(e)}`,
+                ? `Passwortschutz konnte nicht ausgeschaltet werden: ${String(e)}`
+                : `Could not turn off password protection: ${String(e)}`,
               true
             )
           } finally {
@@ -563,8 +507,8 @@ export default function SettingsSecuritySection({
 
     ensureVaultUnlocked(
       lang === "de"
-        ? "Gib dein Master Passwort ein, um den Schutz zu deaktivieren."
-        : "Enter your master password to disable protection.",
+        ? "Gib dein Master Passwort ein, um den Passwortschutz auszuschalten."
+        : "Enter your master password to turn off password protection.",
       openDisableProtectionDialog
     )
   }
@@ -745,120 +689,44 @@ export default function SettingsSecuritySection({
     }
   }
 
-  const statusLabel = !isProtected
-    ? ui.securityStatusOff
-    : isUnlocked
-      ? ui.securityStatusUnlocked
-      : ui.securityStatusLocked
+  const protectionLabel = isProtected
+    ? (ui.securityStatusOn || (lang === "de" ? "Passwortschutz an" : "Password protection on"))
+    : ui.securityStatusOff
 
-  const modeLabel = unlockMode === "startup" ? ui.securityModeStartup : ui.securityModeDemand
+  const lockLabel = isUnlocked
+    ? ui.securityStatusUnlocked
+    : ui.securityStatusLocked
 
   return (
     <>
-      {!isProtected && (
-        <div style={cardStyle}>
-          <div className="text-[13px] font-semibold text-[var(--text-main)]">
-            {lang === "de" ? "Schutz aktivieren" : "Enable protection"}
-          </div>
-          <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-            {lang === "de"
-              ? "Lege dein Master Passwort fest und entscheide, wann der Vault entsperrt werden soll."
-              : "Set your master password and choose when the vault should be unlocked."}
-          </div>
-
-        {vaultStatus?.has_legacy_master_key ? (
-          <div
-            style={{
-              marginTop: 12,
-              borderRadius: 12,
-              border: "1px solid color-mix(in srgb, var(--danger) 22%, var(--border-subtle))",
-              background: "color-mix(in srgb, var(--danger) 8%, var(--bg-app))",
-              padding: 12
-            }}
-          >
-            <div className="text-[12px] font-semibold text-[var(--text-main)]">
-              {ui.securityLegacyTitle}
-            </div>
-            <div className="text-[12px] leading-[1.5] text-[var(--text-muted)] mt-1">
-              {ui.securityLegacyDesc}
+      <div style={cardStyle}>
+        <div
+          style={{
+            ...rowStyle,
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div className="text-[13px] font-semibold text-[var(--text-main)]">
+              Security
             </div>
           </div>
-        ) : null}
 
           <div
             style={{
-              marginTop: 14,
-              display: "grid",
-              gridTemplateColumns: "minmax(0,1fr) auto",
-              gap: 10,
-              alignItems: "end"
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              justifyContent: "flex-end",
+              flexWrap: "wrap",
+              flex: "0 0 auto"
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <label className="text-[12px] font-semibold text-[var(--text-main)]">
-                {ui.securityModeLabel}
-              </label>
-              <select
-                value={unlockMode}
-                onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
-                style={{ ...uniformSelectStyle, marginTop: 8 }}
-                disabled={busy}
-              >
-                <option value="demand">{ui.securityModeDemand}</option>
-                <option value="startup">{ui.securityModeStartup}</option>
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={enableProtection}
-              style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
-              disabled={busy}
-            >
-              {ui.securityEnableAction}
-            </button>
-          </div>
-
-          <div className="text-[12px] text-[var(--text-muted)] mt-2">
-            {unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc}
+            <span style={neutralBadgeStyle}>{protectionLabel}</span>
+            {isProtected && <span style={statusToneStyle}>{lockLabel}</span>}
           </div>
         </div>
-      )}
-
-      {isProtected && (
-        <div style={cardStyle}>
-          <div
-            style={{
-              ...rowStyle,
-              alignItems: "flex-start",
-              justifyContent: "space-between"
-            }}
-          >
-            <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-              <div className="text-[13px] font-semibold text-[var(--text-main)]">
-                {lang === "de" ? "Sicherheit" : "Security"}
-              </div>
-              <div className="text-[12px] leading-[1.55] text-[var(--text-muted)] mt-1">
-                {lang === "de"
-                  ? "Die wichtigsten Dinge direkt sichtbar. Seltene Aktionen sind unten versteckt."
-                  : "The important things stay visible. Rare actions are hidden below."}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                justifyContent: "flex-end",
-                flexWrap: "wrap",
-                flex: "0 0 auto"
-              }}
-            >
-              <span style={modeToneStyle}>{modeLabel}</span>
-              <span style={statusToneStyle}>{statusLabel}</span>
-            </div>
-          </div>
 
         {vaultStatus?.has_legacy_master_key ? (
           <div
@@ -879,25 +747,48 @@ export default function SettingsSecuritySection({
           </div>
         ) : null}
 
-          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          {!isProtected ? (
             <div style={compactRowStyle}>
-              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+              <div style={{ minWidth: 0 }}>
                 <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Vault" : "Vault"}
+                  {lang === "de" ? "Passwortschutz" : "Password protection"}
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
                   {lang === "de"
-                    ? "Entsperren zum Arbeiten oder wieder sperren."
-                    : "Unlock for work or lock it again."}
+                    ? "Optionaler Zusatz für deinen Vault."
+                    : "Optional extra protection for your vault."}
                 </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
+              <button
+                type="button"
+                onClick={enableProtection}
+                style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
+                disabled={busy}
+              >
+                {ui.securityEnableAction}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={compactRowStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                    Vault
+                  </div>
+                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                    {lang === "de"
+                      ? "Öffnen oder wieder sperren."
+                      : "Open or lock the vault."}
+                  </div>
+                </div>
+
                 {!isUnlocked ? (
                   <button
                     type="button"
                     onClick={unlockVault}
-                    style={{ ...primaryBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
                     disabled={busy}
                   >
                     {ui.securityUnlockAction}
@@ -906,193 +797,145 @@ export default function SettingsSecuritySection({
                   <button
                     type="button"
                     onClick={() => void lockVault()}
-                    style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                    style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
                     disabled={busy}
                   >
                     {ui.securityLockAction}
                   </button>
                 )}
               </div>
-            </div>
 
-            <div style={compactRowStyle}>
-              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
-                <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Startverhalten" : "Startup behavior"}
+              <div style={compactRowStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                    {lang === "de" ? "Master Passwort" : "Master password"}
+                  </div>
+                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                    {lang === "de"
+                      ? "Ändere dein aktuelles Passwort."
+                      : "Change your current password."}
+                  </div>
                 </div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {isUnlocked
-                    ? (unlockMode === "startup" ? ui.securityModeStartupDesc : ui.securityModeDemandDesc)
-                    : (lang === "de"
-                        ? "Beim Ändern wirst du nach dem Master Passwort gefragt."
-                        : "You will be asked for the master password when changing this.")}
-                </div>
-              </div>
 
-              <div style={{ width: "220px", maxWidth: "100%", flex: "0 1 220px" }}>
-                <select
-                  value={unlockMode}
-                  onChange={(e) => void applyUnlockModeChange(e.target.value === "startup" ? "startup" : "demand")}
-                  style={uniformSelectStyle}
-                  disabled={busy}
-                >
-                  <option value="demand">{ui.securityModeDemand}</option>
-                  <option value="startup">{ui.securityModeStartup}</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={compactRowStyle}>
-              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
-                <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Master Passwort" : "Master password"}
-                </div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {lang === "de"
-                    ? "Normaler Weg, wenn du dein Passwort kennst."
-                    : "Normal path when you know your password."}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
                 <button
                   type="button"
                   onClick={changeMasterPassword}
-                  style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                  style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
                   disabled={busy}
                 >
-                  {lang === "de" ? "Master Passwort ändern" : "Change master password"}
+                  {lang === "de" ? "Ändern" : "Change"}
                 </button>
               </div>
-            </div>
 
-            <div style={compactRowStyle}>
-              <div style={{ minWidth: 0, flex: "1 1 320px" }}>
-                <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Recovery Key" : "Recovery key"}
+              <div style={compactRowStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                    {lang === "de" ? "Recovery Key" : "Recovery key"}
+                  </div>
+                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                    {lang === "de"
+                      ? "Erzeuge einen neuen Backup Key."
+                      : "Create a new backup key."}
+                  </div>
                 </div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {lang === "de"
-                    ? "Wenn der Key fehlt, erzeugst du hier einfach einen neuen."
-                    : "If the key is missing, just generate a new one here."}
-                </div>
-              </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", flex: "0 0 auto" }}>
                 <button
                   type="button"
                   onClick={regenerateRecoveryKey}
-                  style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                  style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
                   disabled={busy}
                 >
-                  {lang === "de" ? "Neuen Recovery Key" : "New recovery key"}
+                  {lang === "de" ? "Neu" : "New key"}
                 </button>
               </div>
-            </div>
-          </div>
 
-          <div
-            style={{
-              marginTop: 12,
-              borderTop: "1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent)",
-              paddingTop: 12
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setShowExtraOptions((value) => !value)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                background: "transparent",
-                border: "none",
-                padding: 0,
-                cursor: "pointer"
-              }}
-            >
-              <div style={{ minWidth: 0, textAlign: "left" }}>
-                <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Weitere Optionen" : "More options"}
-                </div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {lang === "de"
-                    ? "Notfall und seltene Aktionen."
-                    : "Emergency and rare actions."}
-                </div>
-              </div>
-
-              <span className="text-[var(--text-muted)]">
-                {showExtraOptions ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              </span>
-            </button>
-
-            {showExtraOptions && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-                <div style={compactPanelStyle}>
+              <div style={compactRowStyle}>
+                <div style={{ minWidth: 0 }}>
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                    {lang === "de" ? "Recovery Notfall" : "Recovery emergency"}
+                    {lang === "de" ? "Weitere Optionen" : "More options"}
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Nur wenn du dein Master Passwort nicht mehr kennst."
-                      : "Only if you no longer know your master password."}
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                    <button
-                      type="button"
-                      onClick={() => void importRecoveryKeyFile()}
-                      style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                      disabled={busy}
-                    >
-                      {lang === "de" ? "Recovery Datei importieren" : "Import recovery file"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={startRecoveryReset}
-                      style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                      disabled={busy}
-                    >
-                      {lang === "de" ? "Mit Recovery Key zurücksetzen" : "Reset with recovery key"}
-                    </button>
+                      ? "Backup und seltene Aktionen."
+                      : "Backup and rare actions."}
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    ...compactPanelStyle,
-                    border: "1px solid color-mix(in srgb, var(--danger) 20%, var(--border-subtle))"
-                  }}
+                <button
+                  type="button"
+                  onClick={() => setShowExtraOptions((value) => !value)}
+                  style={{ ...actionBtnStyle, ...toolChevronButtonStyle }}
+                  disabled={busy}
                 >
-                  <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                    {lang === "de" ? "Schutz deaktivieren" : "Disable protection"}
-                  </div>
-                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                    {lang === "de"
-                      ? "Optionaler Weg zurück ohne Master Passwort Schutz."
-                      : "Optional path back without master password protection."}
+                  {showExtraOptions ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+              </div>
+
+              {showExtraOptions && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={compactPanelStyle}>
+                    <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                      {lang === "de" ? "Recovery Reset" : "Recovery reset"}
+                    </div>
+                    <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                      {lang === "de"
+                        ? "Nur wenn du dein Master Passwort vergessen hast."
+                        : "Only if you forgot your master password."}
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={() => void importRecoveryKeyFile()}
+                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                        disabled={busy}
+                      >
+                        {lang === "de" ? "Datei importieren" : "Import file"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={startRecoveryReset}
+                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                        disabled={busy}
+                      >
+                        {lang === "de" ? "Zurücksetzen" : "Reset"}
+                      </button>
+                    </div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                    <button
-                      type="button"
-                      onClick={disableProtection}
-                      style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                      disabled={busy}
-                    >
-                      {lang === "de" ? "Schutz deaktivieren" : "Disable protection"}
-                    </button>
+                  <div
+                    style={{
+                      ...compactPanelStyle,
+                      border: "1px solid color-mix(in srgb, var(--danger) 20%, var(--border-subtle))"
+                    }}
+                  >
+                    <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                      {lang === "de" ? "Passwortschutz ausschalten" : "Turn off password protection"}
+                    </div>
+                    <div className="text-[12px] text-[var(--text-muted)] mt-1">
+                      {lang === "de"
+                        ? "Zurück zum normalen Vault ohne Passwortschutz."
+                        : "Go back to the normal vault without password protection."}
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={disableProtection}
+                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
+                        disabled={busy}
+                      >
+                        {lang === "de" ? "Ausschalten" : "Turn off"}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {recoveryDialog.isOpen && (
         <div
