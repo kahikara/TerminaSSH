@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { open, save } from "@tauri-apps/plugin-dialog"
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
+import { save } from "@tauri-apps/plugin-dialog"
+import { writeTextFile } from "@tauri-apps/plugin-fs"
 import type { CSSProperties } from "react"
-import { Download, Copy, X, ChevronDown, ChevronRight } from "lucide-react"
+import { Download, Copy, X } from "lucide-react"
 
 type VaultStatus = {
   is_initialized?: boolean
@@ -53,13 +53,6 @@ const neutralBadgeStyle: CSSProperties = {
   color: "var(--text-muted)"
 }
 
-const compactPanelStyle: CSSProperties = {
-  borderRadius: 14,
-  border: "1px solid var(--border-subtle)",
-  background: "color-mix(in srgb, var(--bg-app) 86%, var(--bg-sidebar))",
-  padding: 12
-}
-
 const compactRowStyle: CSSProperties = {
   borderRadius: 12,
   border: "1px solid var(--border-subtle)",
@@ -75,14 +68,6 @@ const toolButtonStyle: CSSProperties = {
   minWidth: 108
 }
 
-const toolChevronButtonStyle: CSSProperties = {
-  width: 36,
-  minWidth: 36,
-  padding: 0
-}
-
-const RECOVERY_KEY_PATTERN = /^[A-Z2-9]{4}(?:-[A-Z2-9]{4}){4}$/
-
 export default function SettingsSecuritySection({
   lang,
   ui,
@@ -93,7 +78,6 @@ export default function SettingsSecuritySection({
 }: SettingsSecuritySectionProps) {
   const [vaultStatus, setVaultStatus] = useState<VaultStatus | null>(null)
   const [busy, setBusy] = useState(false)
-  const [showExtraOptions, setShowExtraOptions] = useState(false)
   const [recoveryDialog, setRecoveryDialog] = useState<{
     isOpen: boolean
     key: string
@@ -124,22 +108,6 @@ export default function SettingsSecuritySection({
       color: "var(--danger)"
     }
   }, [isUnlocked])
-
-  const normalizeRecoveryKey = (value: string) =>
-    String(value || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, "")
-      .replace(/[^A-Z2-9-]/g, "")
-
-  const extractRecoveryKeyFromText = (content: string) => {
-    const directMatch = content.match(/Recovery Key:\s*([A-Z2-9-]+)/i)
-    if (directMatch?.[1]) {
-      return normalizeRecoveryKey(directMatch[1])
-    }
-
-    return normalizeRecoveryKey(content)
-  }
 
   const refreshStatus = async () => {
     try {
@@ -557,138 +525,6 @@ export default function SettingsSecuritySection({
     )
   }
 
-  const beginRecoveryResetWithKey = (normalizedRecoveryKey: string) => {
-    showDialog({
-      type: "prompt",
-      title: lang === "de" ? "Neues Master Passwort" : "New master password",
-      description:
-        lang === "de"
-          ? "Setze jetzt ein neues Master Passwort. Dabei wird auch ein neuer Recovery Key erstellt."
-          : "Set a new master password now. A new recovery key will be created as well.",
-      placeholder: ui.securityMasterPasswordPlaceholder,
-      confirmPlaceholder: ui.securityMasterPasswordConfirmPlaceholder,
-      isPassword: true,
-      requireConfirm: true,
-      confirmLabel: lang === "de" ? "Zurücksetzen" : "Reset",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      validate: (value: string, confirmValue: string) => {
-        if (!value.trim()) return ui.securityMasterPasswordEmpty
-        if (value.length < 6) return ui.securityMasterPasswordTooShort
-        if (value !== confirmValue) return ui.securityMasterPasswordMismatch
-        return ""
-      },
-      onConfirm: async (value: string) => {
-        setBusy(true)
-        try {
-          const result = await invoke("reset_vault_master_password_with_recovery_key", {
-            recoveryKey: normalizedRecoveryKey,
-            newMasterPassword: value
-          }) as EnableVaultProtectionResult
-
-          await refreshStatus()
-          showRecoveryKeyDialog(String(result?.recovery_key || ""), 0)
-
-          showToast(
-            lang === "de"
-              ? "Master Passwort mit Recovery Key zurückgesetzt"
-              : "Master password reset with recovery key"
-          )
-        } catch (e) {
-          showToast(
-            lang === "de"
-              ? `Recovery Reset fehlgeschlagen: ${String(e)}`
-              : `Recovery reset failed: ${String(e)}`,
-            true
-          )
-          throw e
-        } finally {
-          setBusy(false)
-        }
-      }
-    })
-  }
-
-  const startRecoveryReset = () => {
-    showDialog({
-      type: "prompt",
-      title: lang === "de" ? "Recovery Key eingeben" : "Enter recovery key",
-      description:
-        lang === "de"
-          ? "Gib deinen Recovery Key im Format ABCD-EFGH-IJKL-MNOP-QRST ein, um ein neues Master Passwort zu setzen."
-          : "Enter your recovery key in the format ABCD-EFGH-IJKL-MNOP-QRST to set a new master password.",
-      placeholder: "ABCD-EFGH-IJKL-MNOP-QRST",
-      confirmLabel: lang === "de" ? "Weiter" : "Continue",
-      cancelLabel: ui.cancelLabel || (lang === "de" ? "Abbrechen" : "Cancel"),
-      validate: (value: string) => {
-        const normalized = normalizeRecoveryKey(value)
-        if (!normalized) {
-          return lang === "de"
-            ? "Recovery Key ist erforderlich"
-            : "Recovery key is required"
-        }
-        if (!RECOVERY_KEY_PATTERN.test(normalized)) {
-          return lang === "de"
-            ? "Ungültiges Recovery Key Format"
-            : "Invalid recovery key format"
-        }
-        return ""
-      },
-      onConfirm: async (recoveryKey: string) => {
-        const normalized = normalizeRecoveryKey(recoveryKey)
-        if (!RECOVERY_KEY_PATTERN.test(normalized)) {
-          showToast(
-            lang === "de"
-              ? "Ungültiges Recovery Key Format"
-              : "Invalid recovery key format",
-            true
-          )
-          throw new Error("Invalid recovery key format")
-        }
-
-        beginRecoveryResetWithKey(normalized)
-      }
-    })
-  }
-
-  const importRecoveryKeyFile = async () => {
-    try {
-      const selected = await open({
-        multiple: false,
-        filters: [
-          { name: "Text", extensions: ["txt"] },
-          { name: "All", extensions: ["*"] }
-        ]
-      })
-
-      if (!selected) return
-
-      const path = Array.isArray(selected) ? selected[0] : selected
-      if (!path) return
-
-      const content = await readTextFile(String(path))
-      const normalized = extractRecoveryKeyFromText(content)
-
-      if (!RECOVERY_KEY_PATTERN.test(normalized)) {
-        showToast(
-          lang === "de"
-            ? "In der Datei wurde kein gültiger Recovery Key gefunden"
-            : "No valid recovery key was found in the file",
-          true
-        )
-        return
-      }
-
-      beginRecoveryResetWithKey(normalized)
-    } catch (e) {
-      showToast(
-        lang === "de"
-          ? `Recovery Datei konnte nicht importiert werden: ${String(e)}`
-          : `Could not import recovery file: ${String(e)}`,
-        true
-      )
-    }
-  }
-
   const protectionLabel = isProtected
     ? (ui.securityStatusOn || (lang === "de" ? "Passwortschutz an" : "Password protection on"))
     : ui.securityStatusOff
@@ -852,86 +688,24 @@ export default function SettingsSecuritySection({
               <div style={compactRowStyle}>
                 <div style={{ minWidth: 0 }}>
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                    {lang === "de" ? "Weitere Optionen" : "More options"}
+                    {lang === "de" ? "Passwortschutz ausschalten" : "Turn off password protection"}
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Backup und seltene Aktionen."
-                      : "Backup and rare actions."}
+                      ? "Zurück zum normalen Vault ohne Passwortschutz."
+                      : "Go back to the normal vault without password protection."}
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setShowExtraOptions((value) => !value)}
-                  style={{ ...actionBtnStyle, ...toolChevronButtonStyle }}
+                  onClick={disableProtection}
+                  style={{ ...actionBtnStyle, ...toolButtonStyle, opacity: busy ? 0.7 : 1 }}
                   disabled={busy}
                 >
-                  {showExtraOptions ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  {lang === "de" ? "Ausschalten" : "Turn off"}
                 </button>
               </div>
-
-              {showExtraOptions && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={compactPanelStyle}>
-                    <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                      {lang === "de" ? "Recovery Reset" : "Recovery reset"}
-                    </div>
-                    <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                      {lang === "de"
-                        ? "Nur wenn du dein Master Passwort vergessen hast."
-                        : "Only if you forgot your master password."}
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                      <button
-                        type="button"
-                        onClick={() => void importRecoveryKeyFile()}
-                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                        disabled={busy}
-                      >
-                        {lang === "de" ? "Datei importieren" : "Import file"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={startRecoveryReset}
-                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                        disabled={busy}
-                      >
-                        {lang === "de" ? "Zurücksetzen" : "Reset"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      ...compactPanelStyle,
-                      border: "1px solid color-mix(in srgb, var(--danger) 20%, var(--border-subtle))"
-                    }}
-                  >
-                    <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                      {lang === "de" ? "Passwortschutz ausschalten" : "Turn off password protection"}
-                    </div>
-                    <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                      {lang === "de"
-                        ? "Zurück zum normalen Vault ohne Passwortschutz."
-                        : "Go back to the normal vault without password protection."}
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                      <button
-                        type="button"
-                        onClick={disableProtection}
-                        style={{ ...actionBtnStyle, opacity: busy ? 0.7 : 1 }}
-                        disabled={busy}
-                      >
-                        {lang === "de" ? "Ausschalten" : "Turn off"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
