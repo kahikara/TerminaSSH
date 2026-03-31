@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Minus, Square, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { readTextFile } from '@tauri-apps/plugin-fs';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { t } from './lib/i18n';
 import type { GlobalDialogState } from './lib/types';
 import { useAppSettings } from './hooks/useAppSettings';
@@ -262,6 +262,13 @@ export default function App() {
   const [appVersion, setAppVersion] = useState("");
   const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState === 'visible');
   const [startupVaultGateState, setStartupVaultGateState] = useState<'checking' | 'locked' | 'open'>('checking');
+  const [startupRecoveryDialog, setStartupRecoveryDialog] = useState<{
+    isOpen: boolean
+    key: string
+  }>({
+    isOpen: false,
+    key: ''
+  });
 
   const {
     dirtyEditors,
@@ -312,6 +319,190 @@ export default function App() {
     showToast
   });
 
+  const closeStartupRecoveryDialog = useCallback(() => {
+    setStartupRecoveryDialog({ isOpen: false, key: '' })
+  }, [])
+
+  const copyStartupRecoveryKey = useCallback(async () => {
+    try {
+      try {
+        await invoke('copy_text_to_clipboard', { text: startupRecoveryDialog.key })
+      } catch {
+        await navigator.clipboard.writeText(startupRecoveryDialog.key)
+      }
+
+      showToast(
+        settings.lang === 'de'
+          ? 'Recovery Key kopiert'
+          : 'Recovery key copied'
+      )
+    } catch (e) {
+      showToast(
+        settings.lang === 'de'
+          ? `Recovery Key konnte nicht kopiert werden: ${String(e)}`
+          : `Could not copy recovery key: ${String(e)}`,
+        true
+      )
+    }
+  }, [settings.lang, showToast, startupRecoveryDialog.key])
+
+  const downloadStartupRecoveryKey = useCallback(async () => {
+    try {
+      const fileName = 'termina-ssh-recovery-key.txt'
+      const content = [
+        'Termina SSH Recovery Key',
+        '',
+        `Recovery Key: ${startupRecoveryDialog.key}`,
+        '',
+        'Store this file in a safe place.'
+      ].join('\n')
+
+      const filePath = await save({
+        defaultPath: fileName
+      })
+
+      if (!filePath) return
+
+      await writeTextFile(String(filePath), content)
+
+      showToast(
+        settings.lang === 'de'
+          ? 'Recovery Key gespeichert'
+          : 'Recovery key saved'
+      )
+    } catch (e) {
+      showToast(
+        settings.lang === 'de'
+          ? `Recovery Key konnte nicht gespeichert werden: ${String(e)}`
+          : `Could not save recovery key: ${String(e)}`,
+        true
+      )
+    }
+  }, [settings.lang, showToast, startupRecoveryDialog.key])
+
+  function showStartupRecoveryResultDialog(key: string) {
+    setStartupRecoveryDialog({
+      isOpen: true,
+      key
+    })
+  }
+
+  function reopenStartupUnlockDialog() {
+    startupVaultPromptOpenRef.current = false
+    window.setTimeout(() => {
+      openStartupVaultUnlockDialog()
+    }, 0)
+  }
+
+  function runStartupRecoveryReset(normalizedRecoveryKey: string) {
+    showDialog({
+      type: 'prompt',
+      title: settings.lang === 'de' ? 'Neues Master Passwort' : 'New master password',
+      description: settings.lang === 'de'
+        ? 'Setze jetzt ein neues Master Passwort.'
+        : 'Set your new master password now.',
+      placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
+      confirmPlaceholder: settings.lang === 'de' ? 'Master Passwort bestätigen' : 'Confirm master password',
+      isPassword: true,
+      requireConfirm: true,
+      confirmLabel: settings.lang === 'de' ? 'Zurücksetzen' : 'Reset',
+      cancelLabel: settings.lang === 'de' ? 'Zurück' : 'Back',
+      validate: (value: string, confirmValue: string) => {
+        if (!value.trim()) {
+          return settings.lang === 'de'
+            ? 'Master Passwort ist erforderlich'
+            : 'Master password is required'
+        }
+        if (value.length < 6) {
+          return settings.lang === 'de'
+            ? 'Bitte mindestens 6 Zeichen verwenden.'
+            : 'Please use at least 6 characters.'
+        }
+        if (value !== confirmValue) {
+          return settings.lang === 'de'
+            ? 'Die Passwörter stimmen nicht überein.'
+            : 'The passwords do not match.'
+        }
+        return ''
+      },
+      onConfirm: async (newMasterPassword: string) => {
+        try {
+          const result = await invoke('reset_vault_master_password_with_recovery_key', {
+            recoveryKey: normalizedRecoveryKey,
+            newMasterPassword
+          }) as RecoveryResetResult
+
+          await invoke('unlock_vault', { masterPassword: newMasterPassword })
+
+          startupVaultUnlockedRef.current = true
+          startupVaultPromptOpenRef.current = false
+          setStartupVaultGateState('open')
+
+          const newRecoveryKey = String(result?.recovery_key || '')
+          showStartupRecoveryResultDialog(newRecoveryKey)
+
+          showToast(
+            settings.lang === 'de'
+              ? 'Master Passwort zurückgesetzt'
+              : 'Master password reset'
+          )
+        } catch (e) {
+          showToast(
+            settings.lang === 'de'
+              ? `Recovery Reset fehlgeschlagen: ${String(e)}`
+              : `Recovery reset failed: ${String(e)}`,
+            true
+          )
+          throw e
+        }
+      },
+      onCancel: () => {
+        reopenStartupUnlockDialog()
+      }
+    })
+  }
+
+  async function importStartupRecoveryKeyFile() {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          { name: 'Text', extensions: ['txt'] },
+          { name: 'All', extensions: ['*'] }
+        ]
+      })
+
+      if (!selected) return
+
+      const filePath = Array.isArray(selected) ? selected[0] : selected
+      if (!filePath) return
+
+      const content = await readTextFile(String(filePath))
+      const normalizedRecoveryKey = extractRecoveryKeyFromText(content)
+
+      if (!RECOVERY_KEY_PATTERN.test(normalizedRecoveryKey)) {
+        showToast(
+          settings.lang === 'de'
+            ? 'In der Datei wurde kein gültiger Recovery Key gefunden'
+            : 'No valid recovery key was found in the file',
+          true
+        )
+        return
+      }
+
+      window.setTimeout(() => {
+        runStartupRecoveryReset(normalizedRecoveryKey)
+      }, 0)
+    } catch (e) {
+      showToast(
+        settings.lang === 'de'
+          ? `Recovery Datei konnte nicht importiert werden: ${String(e)}`
+          : `Could not import recovery file: ${String(e)}`,
+        true
+      )
+    }
+  }
+
   const openStartupVaultUnlockDialog = useCallback(() => {
     if (startupVaultPromptOpenRef.current) return
     if (startupVaultUnlockedRef.current) return
@@ -357,7 +548,6 @@ export default function App() {
               : `Could not unlock vault: ${String(e)}`,
             true
           )
-
           throw e
         }
       },
@@ -388,258 +578,15 @@ export default function App() {
           },
           onConfirm: async (recoveryKey: string) => {
             const normalizedRecoveryKey = normalizeRecoveryKey(recoveryKey)
-
             window.setTimeout(() => {
-              showDialog({
-                type: 'prompt',
-                title: settings.lang === 'de' ? 'Neues Master Passwort' : 'New master password',
-                description: settings.lang === 'de'
-                  ? 'Setze jetzt ein neues Master Passwort.'
-                  : 'Set your new master password now.',
-                placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
-                confirmPlaceholder: settings.lang === 'de' ? 'Master Passwort bestätigen' : 'Confirm master password',
-                isPassword: true,
-                requireConfirm: true,
-                confirmLabel: settings.lang === 'de' ? 'Zurücksetzen' : 'Reset',
-                cancelLabel: settings.lang === 'de' ? 'Zurück' : 'Back',
-                validate: (value: string, confirmValue: string) => {
-                  if (!value.trim()) {
-                    return settings.lang === 'de'
-                      ? 'Master Passwort ist erforderlich'
-                      : 'Master password is required'
-                  }
-                  if (value.length < 6) {
-                    return settings.lang === 'de'
-                      ? 'Bitte mindestens 6 Zeichen verwenden.'
-                      : 'Please use at least 6 characters.'
-                  }
-                  if (value !== confirmValue) {
-                    return settings.lang === 'de'
-                      ? 'Die Passwörter stimmen nicht überein.'
-                      : 'The passwords do not match.'
-                  }
-                  return ''
-                },
-                onConfirm: async (newMasterPassword: string) => {
-                  try {
-                    const result = await invoke('reset_vault_master_password_with_recovery_key', {
-                      recoveryKey: normalizedRecoveryKey,
-                      newMasterPassword
-                    }) as RecoveryResetResult
-
-                    await invoke('unlock_vault', { masterPassword: newMasterPassword })
-
-                    startupVaultUnlockedRef.current = true
-                    startupVaultPromptOpenRef.current = false
-                    setStartupVaultGateState('open')
-
-                    const newRecoveryKey = String(result?.recovery_key || '')
-
-                    window.setTimeout(() => {
-                      showDialog({
-                        type: 'alert',
-                        title: settings.lang === 'de' ? 'Neuer Recovery Key' : 'New recovery key',
-                        description: settings.lang === 'de'
-                          ? `Dein Master Passwort wurde zurückgesetzt.\n\nSpeichere diesen neuen Recovery Key jetzt sicher:\n\n${newRecoveryKey}`
-                          : `Your master password was reset.\n\nSave this new recovery key somewhere safe now:\n\n${newRecoveryKey}`,
-                        confirmLabel: settings.lang === 'de' ? 'Weiter' : 'Continue',
-                        secondaryLabel: settings.lang === 'de' ? 'Kopieren' : 'Copy',
-                        onConfirm: async () => {},
-                        onCancel: () => {},
-                        onSecondary: async () => {
-                          try {
-                            try {
-                              await invoke('copy_text_to_clipboard', { text: newRecoveryKey })
-                            } catch {
-                              await navigator.clipboard.writeText(newRecoveryKey)
-                            }
-                            showToast(
-                              settings.lang === 'de'
-                                ? 'Recovery Key kopiert'
-                                : 'Recovery key copied'
-                            )
-                          } catch (copyError) {
-                            showToast(
-                              settings.lang === 'de'
-                                ? `Recovery Key konnte nicht kopiert werden: ${String(copyError)}`
-                                : `Could not copy recovery key: ${String(copyError)}`,
-                              true
-                            )
-                          }
-                        }
-                      })
-                    }, 0)
-
-                    showToast(
-                      settings.lang === 'de'
-                        ? 'Master Passwort zurückgesetzt'
-                        : 'Master password reset'
-                    )
-                  } catch (e) {
-                    showToast(
-                      settings.lang === 'de'
-                        ? `Recovery Reset fehlgeschlagen: ${String(e)}`
-                        : `Recovery reset failed: ${String(e)}`,
-                      true
-                    )
-                    throw e
-                  }
-                },
-                onCancel: () => {
-                  startupVaultPromptOpenRef.current = false
-                  window.setTimeout(() => {
-                    openStartupVaultUnlockDialog()
-                  }, 0)
-                }
-              })
+              runStartupRecoveryReset(normalizedRecoveryKey)
             }, 0)
           },
           onSecondary: async () => {
-            try {
-              const selected = await open({
-                multiple: false,
-                filters: [
-                  { name: 'Text', extensions: ['txt'] },
-                  { name: 'All', extensions: ['*'] }
-                ]
-              })
-
-              if (!selected) return
-
-              const filePath = Array.isArray(selected) ? selected[0] : selected
-              if (!filePath) return
-
-              const content = await readTextFile(String(filePath))
-              const normalizedRecoveryKey = extractRecoveryKeyFromText(content)
-
-              if (!RECOVERY_KEY_PATTERN.test(normalizedRecoveryKey)) {
-                showToast(
-                  settings.lang === 'de'
-                    ? 'In der Datei wurde kein gültiger Recovery Key gefunden'
-                    : 'No valid recovery key was found in the file',
-                  true
-                )
-                return
-              }
-
-              window.setTimeout(() => {
-                showDialog({
-                  type: 'prompt',
-                  title: settings.lang === 'de' ? 'Neues Master Passwort' : 'New master password',
-                  description: settings.lang === 'de'
-                    ? 'Setze jetzt ein neues Master Passwort.'
-                    : 'Set your new master password now.',
-                  placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
-                  confirmPlaceholder: settings.lang === 'de' ? 'Master Passwort bestätigen' : 'Confirm master password',
-                  isPassword: true,
-                  requireConfirm: true,
-                  confirmLabel: settings.lang === 'de' ? 'Zurücksetzen' : 'Reset',
-                  cancelLabel: settings.lang === 'de' ? 'Zurück' : 'Back',
-                  validate: (value: string, confirmValue: string) => {
-                    if (!value.trim()) {
-                      return settings.lang === 'de'
-                        ? 'Master Passwort ist erforderlich'
-                        : 'Master password is required'
-                    }
-                    if (value.length < 6) {
-                      return settings.lang === 'de'
-                        ? 'Bitte mindestens 6 Zeichen verwenden.'
-                        : 'Please use at least 6 characters.'
-                    }
-                    if (value !== confirmValue) {
-                      return settings.lang === 'de'
-                        ? 'Die Passwörter stimmen nicht überein.'
-                        : 'The passwords do not match.'
-                    }
-                    return ''
-                  },
-                  onConfirm: async (newMasterPassword: string) => {
-                    try {
-                      const result = await invoke('reset_vault_master_password_with_recovery_key', {
-                        recoveryKey: normalizedRecoveryKey,
-                        newMasterPassword
-                      }) as RecoveryResetResult
-
-                      await invoke('unlock_vault', { masterPassword: newMasterPassword })
-
-                      startupVaultUnlockedRef.current = true
-                      startupVaultPromptOpenRef.current = false
-                      setStartupVaultGateState('open')
-
-                      const newRecoveryKey = String(result?.recovery_key || '')
-
-                      window.setTimeout(() => {
-                        showDialog({
-                          type: 'alert',
-                          title: settings.lang === 'de' ? 'Neuer Recovery Key' : 'New recovery key',
-                          description: settings.lang === 'de'
-                            ? `Dein Master Passwort wurde zurückgesetzt.\n\nSpeichere diesen neuen Recovery Key jetzt sicher:\n\n${newRecoveryKey}`
-                            : `Your master password was reset.\n\nSave this new recovery key somewhere safe now:\n\n${newRecoveryKey}`,
-                          confirmLabel: settings.lang === 'de' ? 'Weiter' : 'Continue',
-                          secondaryLabel: settings.lang === 'de' ? 'Kopieren' : 'Copy',
-                          onConfirm: async () => {},
-                          onCancel: () => {},
-                          onSecondary: async () => {
-                            try {
-                              try {
-                                await invoke('copy_text_to_clipboard', { text: newRecoveryKey })
-                              } catch {
-                                await navigator.clipboard.writeText(newRecoveryKey)
-                              }
-                              showToast(
-                                settings.lang === 'de'
-                                  ? 'Recovery Key kopiert'
-                                  : 'Recovery key copied'
-                              )
-                            } catch (copyError) {
-                              showToast(
-                                settings.lang === 'de'
-                                  ? `Recovery Key konnte nicht kopiert werden: ${String(copyError)}`
-                                  : `Could not copy recovery key: ${String(copyError)}`,
-                                true
-                              )
-                            }
-                          }
-                        })
-                      }, 0)
-
-                      showToast(
-                        settings.lang === 'de'
-                          ? 'Master Passwort zurückgesetzt'
-                          : 'Master password reset'
-                      )
-                    } catch (e) {
-                      showToast(
-                        settings.lang === 'de'
-                          ? `Recovery Reset fehlgeschlagen: ${String(e)}`
-                          : `Recovery reset failed: ${String(e)}`,
-                        true
-                      )
-                      throw e
-                    }
-                  },
-                  onCancel: () => {
-                    startupVaultPromptOpenRef.current = false
-                    window.setTimeout(() => {
-                      openStartupVaultUnlockDialog()
-                    }, 0)
-                  }
-                })
-              }, 0)
-            } catch (e) {
-              showToast(
-                settings.lang === 'de'
-                  ? `Recovery Datei konnte nicht importiert werden: ${String(e)}`
-                  : `Could not import recovery file: ${String(e)}`,
-                true
-              )
-            }
+            await importStartupRecoveryKeyFile()
           },
           onCancel: () => {
-            startupVaultPromptOpenRef.current = false
-            window.setTimeout(() => {
-              openStartupVaultUnlockDialog()
-            }, 0)
+            reopenStartupUnlockDialog()
           }
         })
       },
@@ -648,7 +595,7 @@ export default function App() {
         await invoke('window_close_main').catch(() => {})
       }
     })
-  }, [settings.lang, showDialog, showToast])
+  }, [settings.lang, showDialog, showToast, closeStartupRecoveryDialog, copyStartupRecoveryKey, downloadStartupRecoveryKey, startupRecoveryDialog.key])
 
   const ensureVaultUnlockedForConnection = useCallback(async (server: ConnectionItem) => {
     if (isLocalConnection(server)) return true
@@ -2708,6 +2655,65 @@ export default function App() {
             <span className="truncate flex-1 min-w-0 text-[13px] font-medium">
               {draggedTabGhost.name}
             </span>
+          </div>
+        </div>
+      )}
+
+      {startupRecoveryDialog.isOpen && (
+        <div className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[560px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl overflow-hidden">
+            <div className="min-h-[52px] px-4 flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_92%,var(--bg-app))]">
+              <div className="text-[14px] font-bold text-[var(--text-main)]">
+                {settings.lang === 'de' ? 'Neuer Recovery Key' : 'New recovery key'}
+              </div>
+
+              <button
+                type="button"
+                onClick={closeStartupRecoveryDialog}
+                className="ui-icon-btn"
+                title={settings.lang === 'de' ? 'Schließen' : 'Close'}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-3">
+              <div className="text-[13px] leading-[1.5] text-[var(--text-muted)] whitespace-pre-line">
+                {settings.lang === 'de'
+                  ? 'Dein Master Passwort wurde zurückgesetzt. Speichere diesen neuen Recovery Key jetzt sicher.'
+                  : 'Your master password was reset. Save this new recovery key somewhere safe now.'}
+              </div>
+
+              <div className="rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] px-3 py-3 text-[13px] font-semibold tracking-[0.04em] text-[var(--text-main)] break-all">
+                {startupRecoveryDialog.key}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_88%,var(--bg-sidebar))] flex justify-end gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => { void copyStartupRecoveryKey() }}
+                className="ui-btn-ghost"
+              >
+                {settings.lang === 'de' ? 'Kopieren' : 'Copy'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { void downloadStartupRecoveryKey() }}
+                className="ui-btn-ghost"
+              >
+                {settings.lang === 'de' ? 'Key herunterladen' : 'Download key'}
+              </button>
+
+              <button
+                type="button"
+                onClick={closeStartupRecoveryDialog}
+                className="ui-btn-primary"
+              >
+                {settings.lang === 'de' ? 'Weiter' : 'Continue'}
+              </button>
+            </div>
           </div>
         </div>
       )}
