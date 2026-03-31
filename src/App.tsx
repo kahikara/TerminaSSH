@@ -37,7 +37,7 @@ import SidebarShell from './components/SidebarShell';
 import DraggedTabGhost from './components/DraggedTabGhost';
 import SidebarConnectionsPanel from './components/SidebarConnectionsPanel';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
-import { destroyTerminal } from './lib/terminalSession';
+import { runOpenServerInSplitFlow } from './lib/openServerInSplitFlow';
 
 type ConnectionItem = {
   id?: number | string
@@ -518,147 +518,27 @@ export default function App() {
   })
 
   const openServerInSplit = async (server: ConnectionItem) => {
-    if (!activeTabId) {
-      await openTerminal(server);
-      return;
-    }
-
-    const currentTab = openTabs.find((tab) => tab.tabId === activeTabId);
-    if (!currentTab) {
-      await openTerminal(server);
-      return;
-    }
-
-    const currentPaneServers = currentTab.splitMode
-      ? (currentTab.paneServers || []).filter(Boolean)
-      : [currentTab];
-    const currentPaneIdentities = new Set(currentPaneServers.map((item) => getConnectionIdentity(item)));
-    const targetIdentity = getConnectionIdentity(server);
-
-    if (
-      currentTab.splitMode &&
-      currentPaneServers.length >= 2 &&
-      (currentPaneIdentities.size >= 2 || currentPaneIdentities.has(targetIdentity))
-    ) {
-      showToast(
-        settings.lang === 'de'
-          ? 'Ein Split Tab kann nur zwei verschiedene Verbindungen enthalten'
-          : 'A split tab can only contain two different connections',
-        true
-      );
-      return;
-    }
-
-    if (!isLocalConnection(server)) {
-      if (!(await ensureHostKeyTrusted(server))) {
-        return;
-      }
-    }
-
-    if (!(await ensureVaultUnlockedForConnection(server))) {
-      return;
-    }
-
-    if (needsSessionPasswordPrompt(server)) {
-      showDialog({
-        type: "prompt",
-        title:
-          settings.lang === "de"
-            ? `Passwort für ${server?.name || server?.host || "SSH Verbindung"}`
-            : `Password for ${server?.name || server?.host || "SSH connection"}`,
-        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
-        isPassword: true,
-        checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
-        onConfirm: async (pwd: string, meta?: { checked?: boolean }) => {
-          if (!pwd) return;
-
-          if (meta?.checked && server?.id != null) {
-            try {
-              await invoke("set_connection_password", {
-                id: server.id,
-                password: pwd
-              });
-              await loadServers();
-              showToast(settings.lang === "de" ? "Passwort gespeichert" : "Password saved");
-            } catch (e) {
-              showToast(
-                settings.lang === "de"
-                  ? `Passwort konnte nicht gespeichert werden: ${String(e)}`
-                  : `Could not save password: ${String(e)}`,
-                true
-              );
-            }
-          }
-
-          const rightServer = applyPromptPasswordToServer(server, pwd);
-
-          setOpenTabs(prev => {
-            const next = [...prev];
-            const idx = next.findIndex((tab) => tab.tabId === activeTabId);
-            if (idx === -1) return prev;
-
-            const baseTab = next[idx];
-            const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
-            const currentRightServer = baseTab?.splitMode ? baseTab.paneServers?.[1] || null : null;
-            const existingPaneSessionIds = baseTab?.splitMode
-              ? (baseTab.paneSessionIds || [])
-              : [baseTab.sessionId];
-            const reuseRightSession =
-              Boolean(baseTab?.splitMode) &&
-              currentRightServer != null &&
-              getConnectionIdentity(currentRightServer) === targetIdentity;
-
-            if (!reuseRightSession && existingPaneSessionIds[1]) {
-              destroyTerminal(String(existingPaneSessionIds[1]));
-            }
-
-            next[idx] = buildSplitTabFromServers(
-              leftServer,
-              rightServer,
-              activeTabId,
-              existingPaneSessionIds,
-              !reuseRightSession
-            );
-            return next;
-          });
-
-          setActiveTabId(activeTabId);
-        }
-      });
-      return;
-    }
-
-    setOpenTabs(prev => {
-      const next = [...prev];
-      const idx = next.findIndex((tab) => tab.tabId === activeTabId);
-      if (idx === -1) return prev;
-
-      const baseTab = next[idx];
-      const leftServer = baseTab?.splitMode ? baseTab.paneServers?.[0] || baseTab : baseTab;
-      const currentRightServer = baseTab?.splitMode ? baseTab.paneServers?.[1] || null : null;
-      const existingPaneSessionIds = baseTab?.splitMode
-        ? (baseTab.paneSessionIds || [])
-        : [baseTab.sessionId];
-      const reuseRightSession =
-        Boolean(baseTab?.splitMode) &&
-        currentRightServer != null &&
-        getConnectionIdentity(currentRightServer) === targetIdentity;
-
-      if (!reuseRightSession && existingPaneSessionIds[1]) {
-        destroyTerminal(String(existingPaneSessionIds[1]));
-      }
-
-      next[idx] = buildSplitTabFromServers(
-        leftServer,
-        server,
-        activeTabId,
-        existingPaneSessionIds,
-        !reuseRightSession
-      );
-      return next;
-    });
-
-    setActiveTabId(activeTabId);
+    await runOpenServerInSplitFlow({
+      lang: settings.lang,
+      server,
+      activeTabId,
+      openTabs,
+      openTerminal: async (nextServer) => {
+        await openTerminal(nextServer)
+      },
+      getConnectionIdentity,
+      isLocalConnection,
+      ensureHostKeyTrusted,
+      ensureVaultUnlockedForConnection,
+      needsSessionPasswordPrompt,
+      applyPromptPasswordToServer,
+      showDialog,
+      showToast,
+      loadServers,
+      buildSplitTabFromServers,
+      setOpenTabs,
+      setActiveTabId
+    })
   };
 
   const openSidebarContextMenu = useCallback((e: React.MouseEvent, server: ConnectionItem, isLocal = false) => {
