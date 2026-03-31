@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { GlobalDialogState } from './lib/types';
+import type { AppTab, ConnectionDraft, ConnectionItem, DashboardTab, EditableConnection, PaneStatePayload, SidebarContextMenuState, TabContextMenuState } from './lib/appTypes';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useStartupVaultGate } from './hooks/useStartupVaultGate';
 import { useConnectionHelpers } from './hooks/useConnectionHelpers';
@@ -39,90 +40,6 @@ import SidebarConnectionsPanel from './components/SidebarConnectionsPanel';
 import { runOpenTerminalFlow } from './lib/openTerminalCore';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { runOpenServerInSplitFlow } from './lib/openServerInSplitFlow';
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-  has_password?: boolean
-  sessionPassword?: string | null
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-  splitMode?: boolean
-  paneServers?: ConnectionItem[]
-  paneSessionIds?: string[]
-  focusedPaneIndex?: number
-  type?: string
-  kind?: string
-  [key: string]: unknown
-}
-
-type AppTab = ConnectionItem & {
-  tabId: string
-  sessionId: string
-}
-
-type ConnectionDraft = {
-  name?: string
-  host?: string
-  port?: number | string
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-}
-
-type SidebarContextMenuState = {
-  x: number
-  y: number
-  server: ConnectionItem
-  isLocal: boolean
-}
-
-type TabContextMenuState = {
-  x: number
-  y: number
-  tabId: string
-}
-
-type DashboardConnection = {
-  id?: string | number
-  name: string
-  host?: string
-  port?: number
-  username?: string
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-}
-
-type DashboardTab = DashboardConnection & {
-  tabId: string
-}
-
-type EditableConnection = {
-  id: number | string
-  name: string
-  host?: string
-  port?: number
-  username?: string
-  private_key?: string
-  group_name?: string
-}
-
-type PaneStatePayload = {
-  paneServers: ConnectionItem[]
-  paneSessionIds: string[]
-  focusedPaneId?: string | null
-}
 
 const LOCAL_TERMINAL_CONNECTION: ConnectionItem = {
   id: 'local',
