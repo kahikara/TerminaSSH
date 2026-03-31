@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { GlobalDialogState } from './lib/types';
 import { useAppSettings } from './hooks/useAppSettings';
@@ -224,7 +224,6 @@ export default function App() {
     isOpen: true
   });
 
-  const settingsRef = useRef(settings);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
     lang: settings.lang,
@@ -310,10 +309,6 @@ export default function App() {
     closeMainWindow
   } = useLinuxWindowChrome()
 
-
-  useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
 
   const {
     loadServers,
