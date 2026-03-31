@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Home, Settings, Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, ChevronsLeft, ChevronsRight, Search, Zap } from 'lucide-react';
+import { Server, X, Folder, Terminal as TermIcon, Plus, ChevronRight, ChevronDown, SquarePen, Search, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { t } from './lib/i18n';
 import type { GlobalDialogState } from './lib/types';
@@ -27,6 +27,8 @@ import TabContextMenu from './components/TabContextMenu';
 import SidebarContextMenu from './components/SidebarContextMenu';
 import LinuxTitlebar from './components/LinuxTitlebar';
 import TabStrip from './components/TabStrip';
+import SidebarShell from './components/SidebarShell';
+import DraggedTabGhost from './components/DraggedTabGhost';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
 
@@ -1129,45 +1131,19 @@ export default function App() {
         />
       )}
 
-      <div
-        style={{
-          width: isSidebarCollapsed ? 76 : sidebarWidth,
-          paddingTop: useCustomLinuxTitlebar ? 30 : 0
+      <SidebarShell
+        isCollapsed={isSidebarCollapsed}
+        width={sidebarWidth}
+        useCustomLinuxTitlebar={useCustomLinuxTitlebar}
+        lang={settings.lang}
+        onGoHome={() => setActiveTabId(null)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onToggleCollapse={toggleSidebarCollapse}
+        onStartResize={() => {
+          isDragging.current = true
+          document.body.style.cursor = 'col-resize'
         }}
-        className="bg-[color-mix(in_srgb,var(--bg-sidebar)_94%,var(--bg-app))] flex flex-col flex-shrink-0 h-full relative z-20 shadow-xl"
       >
-        {isSidebarCollapsed ? (
-          <div className="px-3 pt-3 pb-2 shrink-0">
-            <div className="flex justify-center">
-              <button
-                onClick={() => setActiveTabId(null)}
-                className="ui-icon-btn shrink-0"
-                title={t('home', settings.lang)}
-              >
-                <Home size={18} />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="h-[80px] grid grid-cols-[52px_minmax(0,1fr)_36px] items-center px-4 border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
-            <img
-              src="/app-icon.svg"
-              alt="logo"
-              className="w-[52px] h-[52px] object-contain justify-self-start"
-              onError={(e) => e.currentTarget.style.display = 'none'}
-            />
-            <div className="flex items-center justify-center min-w-0">
-              <span className="font-bold tracking-wide text-[14px] text-[var(--text-main)] leading-none text-center">
-                Termina SSH
-              </span>
-            </div>
-            <button onClick={() => setActiveTabId(null)} className="ui-icon-btn shrink-0 justify-self-end" title={t('home', settings.lang)}>
-              <Home size={18} />
-            </button>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto py-2 px-3 flex flex-col gap-3 min-h-0">
           <div>
             <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
               {!isSidebarCollapsed && (
@@ -1404,39 +1380,7 @@ export default function App() {
               </div>
             )}
           </div>
-        </div>
-
-        <div className="p-3 border-t border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] shrink-0">
-          <div className={`flex ${isSidebarCollapsed ? 'flex-col items-center gap-2' : 'items-center gap-2'}`}>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={isSidebarCollapsed
-                ? "ui-icon-btn shrink-0"
-                : "flex items-center justify-center gap-2.5 flex-1 min-h-9 px-3 rounded-xl bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
-              }
-              title={t('settings', settings.lang)}
-            >
-              <Settings size={16} />
-              {!isSidebarCollapsed && <span>{t('settings', settings.lang)}</span>}
-            </button>
-
-            <button
-              onClick={toggleSidebarCollapse}
-              className="ui-icon-btn shrink-0"
-              title={isSidebarCollapsed
-                ? t('sidebarExpand', settings.lang)
-                : t('sidebarCollapse', settings.lang)}
-            >
-              {isSidebarCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-            </button>
-          </div>
-        </div>
-
-        {!isSidebarCollapsed && (
-          <div className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10" onMouseDown={() => { isDragging.current = true; document.body.style.cursor = 'col-resize'; }} />
-        )}
-        <div className="absolute top-0 right-0 w-[1px] h-full bg-[var(--border-subtle)] pointer-events-none" />
-      </div>
+      </SidebarShell>
 
       <div
         style={{ paddingTop: useCustomLinuxTitlebar ? 30 : 0 }}
@@ -1603,22 +1547,12 @@ export default function App() {
         onConfirm={confirmMainCloseDialog}
       />
 
-      {tabPointerDragging && draggedTabGhost && tabGhostPos && (
-        <div
-          className="fixed z-[240] pointer-events-none"
-          style={{
-            left: tabGhostPos.x,
-            top: tabGhostPos.y,
-            transform: 'translate(-50%, -50%)'
-          }}
-        >
-          <div className="flex items-center px-3.5 h-[32px] min-w-[136px] max-w-[196px] rounded-t-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] text-[var(--text-main)] shadow-2xl opacity-95">
-            <span className="truncate flex-1 min-w-0 text-[13px] font-medium">
-              {draggedTabGhost.name}
-            </span>
-          </div>
-        </div>
-      )}
+      <DraggedTabGhost
+        isVisible={Boolean(tabPointerDragging && draggedTabGhost && tabGhostPos)}
+        x={tabGhostPos?.x ?? 0}
+        y={tabGhostPos?.y ?? 0}
+        name={draggedTabGhost?.name || ''}
+      />
       <StartupRecoveryResultDialog
         isOpen={startupRecoveryDialog.isOpen}
         lang={settings.lang}
