@@ -12,6 +12,7 @@ import { useTabDragFlow } from './hooks/useTabDragFlow';
 import { useSidebarSearchFlow } from './hooks/useSidebarSearchFlow';
 import { useLinuxWindowChrome } from './hooks/useLinuxWindowChrome';
 import { useSidebarLayout } from './hooks/useSidebarLayout';
+import { useSidebarConnectionActions } from './hooks/useSidebarConnectionActions';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -469,6 +470,28 @@ export default function App() {
     setSidebarContextMenu(null);
   }, []);
 
+  const {
+    editSidebarServer,
+    duplicateSidebarServer,
+    deleteSidebarServer
+  } = useSidebarConnectionActions({
+    lang: settings.lang,
+    closeSidebarContextMenu,
+    showToast,
+    showDialog,
+    loadServers,
+    openEditConnectionModal: (server) => {
+      setConnectionDraft(null)
+      setServerToEdit(server)
+      setConnModalOpen(true)
+    },
+    openDuplicateConnectionModal: (draft) => {
+      setServerToEdit(null)
+      setConnectionDraft(draft)
+      setConnModalOpen(true)
+    }
+  })
+
   const closeTabContextMenu = useCallback(() => {
     setTabContextMenu(null);
   }, []);
@@ -667,57 +690,6 @@ export default function App() {
       isLocal
     });
   }, []);
-
-  const editSidebarServer = useCallback((server: ConnectionItem) => {
-    closeSidebarContextMenu();
-    setConnectionDraft(null);
-    setServerToEdit(server);
-    setConnModalOpen(true);
-  }, [closeSidebarContextMenu]);
-
-  const duplicateSidebarServer = useCallback((server: ConnectionItem) => {
-    closeSidebarContextMenu();
-
-    const sourceName = String(server?.name || "").trim();
-    const duplicateName = sourceName
-      ? `${sourceName} Copy`
-      : (settings.lang === 'de' ? 'Neue Verbindung Kopie' : 'New Connection Copy');
-
-    setServerToEdit(null);
-    setConnectionDraft({
-      name: duplicateName,
-      host: String(server?.host || ""),
-      port: Number(server?.port) || 22,
-      username: String(server?.username || ""),
-      private_key: String(server?.private_key || ""),
-      group_name: String(server?.group_name || "")
-    });
-    setConnModalOpen(true);
-  }, [closeSidebarContextMenu, settings.lang]);
-
-  const deleteSidebarServer = useCallback((server: ConnectionItem) => {
-    closeSidebarContextMenu();
-    showDialog({
-      type: 'confirm',
-      tone: 'danger',
-      title: settings.lang === 'de' ? 'Verbindung löschen' : 'Delete connection',
-      description:
-        settings.lang === 'de'
-          ? `Der gespeicherte Servereintrag "${server.name}" wird entfernt.`
-          : `This removes the saved server entry "${server.name}".`,
-      confirmLabel: settings.lang === 'de' ? 'Löschen' : 'Delete',
-      cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
-      onConfirm: async () => {
-        try {
-          await invoke('delete_connection', { id: server.id, name: server.name });
-          await loadServers();
-          showToast(settings.lang === 'de' ? 'Verbindung gelöscht' : 'Connection deleted');
-        } catch (e) {
-          showToast(String(e), true);
-        }
-      }
-    });
-  }, [closeSidebarContextMenu, settings.lang, showDialog, loadServers, showToast]);
 
   const closeTab = useCallback((tabId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
