@@ -9,6 +9,7 @@ import { useHostKeyTrust } from './hooks/useHostKeyTrust';
 import { useConnectionCollections } from './hooks/useConnectionCollections';
 import { useQuickConnectFlow } from './hooks/useQuickConnectFlow';
 import { useTabDragFlow } from './hooks/useTabDragFlow';
+import { useSidebarSearchFlow } from './hooks/useSidebarSearchFlow';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -191,8 +192,6 @@ export default function App() {
   const [openTabs, setOpenTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
-  const [showSidebarSearch, setShowSidebarSearch] = useState(false);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isConnModalOpen, setConnModalOpen] = useState(false);
@@ -242,8 +241,6 @@ export default function App() {
   const isDragging = useRef(false);
   const expandedSidebarWidthRef = useRef(260);
   const settingsRef = useRef(settings);
-  const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const sidebarSearchFocusTimerRef = useRef<number | null>(null);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
     lang: settings.lang,
@@ -302,6 +299,16 @@ export default function App() {
     }
   })
 
+  const {
+    showSidebarSearch,
+    sidebarSearchQuery,
+    setSidebarSearchQuery,
+    sidebarSearchInputRef,
+    toggleSidebarSearch
+  } = useSidebarSearchFlow({
+    isSidebarCollapsed
+  })
+
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
@@ -318,14 +325,6 @@ export default function App() {
     return () => {
       document.removeEventListener('visibilitychange', syncVisibility);
       window.removeEventListener('focus', syncVisibility);
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (sidebarSearchFocusTimerRef.current !== null) {
-        clearTimeout(sidebarSearchFocusTimerRef.current);
-      }
     };
   }, []);
 
@@ -464,54 +463,6 @@ export default function App() {
     expandedSidebarWidthRef.current = sidebarWidth;
     setIsSidebarCollapsed(true);
   }, [isSidebarCollapsed, sidebarWidth]);
-
-  const closeSidebarSearch = useCallback(() => {
-    if (sidebarSearchFocusTimerRef.current !== null) {
-      clearTimeout(sidebarSearchFocusTimerRef.current);
-      sidebarSearchFocusTimerRef.current = null;
-    }
-
-    setShowSidebarSearch(false);
-    setSidebarSearchQuery("");
-  }, []);
-
-  const toggleSidebarSearch = useCallback(() => {
-    if (showSidebarSearch) {
-      closeSidebarSearch();
-      return;
-    }
-
-    if (sidebarSearchFocusTimerRef.current !== null) {
-      clearTimeout(sidebarSearchFocusTimerRef.current);
-      sidebarSearchFocusTimerRef.current = null;
-    }
-
-    setShowSidebarSearch(true);
-    sidebarSearchFocusTimerRef.current = window.setTimeout(() => {
-      sidebarSearchInputRef.current?.focus();
-      sidebarSearchInputRef.current?.select();
-      sidebarSearchFocusTimerRef.current = null;
-    }, 0);
-  }, [showSidebarSearch, closeSidebarSearch]);
-
-  useEffect(() => {
-    if (!showSidebarSearch) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      closeSidebarSearch();
-    };
-
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [showSidebarSearch, closeSidebarSearch]);
-
-  useEffect(() => {
-    if (!isSidebarCollapsed) return;
-    if (!showSidebarSearch && !sidebarSearchQuery) return;
-    setShowSidebarSearch(false);
-    setSidebarSearchQuery("");
-  }, [isSidebarCollapsed]);
 
   const openTerminal = async (
     server: ConnectionItem,
