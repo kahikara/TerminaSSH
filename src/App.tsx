@@ -11,6 +11,7 @@ import { useQuickConnectFlow } from './hooks/useQuickConnectFlow';
 import { useTabDragFlow } from './hooks/useTabDragFlow';
 import { useSidebarSearchFlow } from './hooks/useSidebarSearchFlow';
 import { useLinuxWindowChrome } from './hooks/useLinuxWindowChrome';
+import { useSidebarLayout } from './hooks/useSidebarLayout';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -172,16 +173,8 @@ export default function App() {
     return <SftpEditorWindow />
   }
 
-  const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { settings, setSettings } = useAppSettings();
   
-  useEffect(() => {
-    if (!isSidebarCollapsed) {
-      expandedSidebarWidthRef.current = sidebarWidth;
-    }
-  }, [sidebarWidth, isSidebarCollapsed]);
-
   const [openTabs, setOpenTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
@@ -227,8 +220,6 @@ export default function App() {
     isOpen: true
   });
 
-  const isDragging = useRef(false);
-  const expandedSidebarWidthRef = useRef(260);
   const settingsRef = useRef(settings);
 
   const { inputMenu, runInputMenuAction } = useInputContextMenu({
@@ -289,6 +280,13 @@ export default function App() {
   })
 
   const {
+    sidebarWidth,
+    isSidebarCollapsed,
+    toggleSidebarCollapse,
+    startSidebarResize
+  } = useSidebarLayout()
+
+  const {
     showSidebarSearch,
     sidebarSearchQuery,
     setSidebarSearchQuery,
@@ -307,6 +305,7 @@ export default function App() {
     minimizeWindow,
     closeMainWindow
   } = useLinuxWindowChrome()
+
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -374,24 +373,6 @@ export default function App() {
     [openTabs]
   );
 
-
-  const handleMouseMove = (e: MouseEvent) => { if (isDragging.current) setSidebarWidth(Math.min(Math.max(e.clientX, 200), 600)); };
-  const handleMouseUp = () => { isDragging.current = false; document.body.style.cursor = 'default'; };
-  useEffect(() => {
-    window.addEventListener('mousemove', handleMouseMove); window.addEventListener('mouseup', handleMouseUp);
-    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
-  }, []);
-
-  const toggleSidebarCollapse = useCallback(() => {
-    if (isSidebarCollapsed) {
-      setIsSidebarCollapsed(false);
-      setSidebarWidth(expandedSidebarWidthRef.current || 260);
-      return;
-    }
-
-    expandedSidebarWidthRef.current = sidebarWidth;
-    setIsSidebarCollapsed(true);
-  }, [isSidebarCollapsed, sidebarWidth]);
 
   const openTerminal = async (
     server: ConnectionItem,
@@ -927,10 +908,7 @@ export default function App() {
         onGoHome={() => setActiveTabId(null)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onToggleCollapse={toggleSidebarCollapse}
-        onStartResize={() => {
-          isDragging.current = true
-          document.body.style.cursor = 'col-resize'
-        }}
+        onStartResize={startSidebarResize}
       >
         <SidebarConnectionsPanel
           isSidebarCollapsed={isSidebarCollapsed}
