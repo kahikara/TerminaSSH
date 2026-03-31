@@ -102,6 +102,7 @@ export default function SidebarConnectionsPanel({
           {!isSidebarCollapsed && (
             <button
               onClick={onOpenLocalTerminalNewTab}
+              onContextMenu={(e) => onOpenSidebarContextMenu(e, localTerminalConnection, true)}
               className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-sidebar)]"
               title={t('localTerminal', lang)}
             >
