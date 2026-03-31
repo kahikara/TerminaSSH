@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import type { ConnectionItem } from '../lib/appTypes'
 
 type VaultStatus = {
   is_initialized?: boolean
@@ -7,30 +8,6 @@ type VaultStatus = {
   is_unlocked?: boolean
   unlock_mode?: string
   has_legacy_master_key?: boolean
-}
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-  has_password?: boolean
-  sessionPassword?: string | null
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-  splitMode?: boolean
-  paneServers?: ConnectionItem[]
-  paneSessionIds?: string[]
-  focusedPaneIndex?: number
-  type?: string
-  kind?: string
-  [key: string]: unknown
 }
 
 type UseVaultConnectionUnlockArgs = {

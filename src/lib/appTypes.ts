@@ -38,6 +38,14 @@ export type ConnectionDraft = {
   group_name?: string
 }
 
+export type QuickConnectDraft = {
+  user: string
+  host: string
+  port: string
+}
+
+export type ConnectionGroups = Record<string, ConnectionItem[]>
+
 export type PaneStatePayload = {
   paneServers: ConnectionItem[]
   paneSessionIds: string[]

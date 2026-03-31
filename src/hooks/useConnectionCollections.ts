@@ -1,49 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import type { AppTab, ConnectionGroups, ConnectionItem, DashboardConnection } from '../lib/appTypes'
 
 const RECENT_CONNECTIONS_STORAGE_KEY = 'termina_recent_connections'
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-  has_password?: boolean
-  sessionPassword?: string | null
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-  splitMode?: boolean
-  paneServers?: ConnectionItem[]
-  paneSessionIds?: string[]
-  focusedPaneIndex?: number
-  type?: string
-  kind?: string
-  [key: string]: unknown
-}
-
-type AppTab = ConnectionItem & {
-  tabId: string
-  sessionId: string
-}
-
-type ConnectionGroups = Record<string, ConnectionItem[]>
-
-type DashboardConnection = {
-  id?: string | number
-  name: string
-  host?: string
-  port?: number
-  username?: string
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-}
 
 const LOCAL_TERMINAL_CONNECTION: ConnectionItem = {
   id: 'local',

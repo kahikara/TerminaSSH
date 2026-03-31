@@ -1,34 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-  has_password?: boolean
-  sessionPassword?: string | null
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-  splitMode?: boolean
-  paneServers?: ConnectionItem[]
-  paneSessionIds?: string[]
-  focusedPaneIndex?: number
-  type?: string
-  kind?: string
-  [key: string]: unknown
-}
-
-type QuickConnectDraft = {
-  user: string
-  host: string
-  port: string
-}
+import type { ConnectionItem, QuickConnectDraft } from '../lib/appTypes'
 
 type UseQuickConnectFlowArgs = {
   openConnection: (server: ConnectionItem) => void
