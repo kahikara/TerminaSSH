@@ -5,6 +5,7 @@ import { t } from './lib/i18n';
 import type { GlobalDialogState } from './lib/types';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useStartupVaultGate } from './hooks/useStartupVaultGate';
+import { useConnectionHelpers } from './hooks/useConnectionHelpers';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -297,6 +298,13 @@ export default function App() {
     showDialog,
     showToast
   })
+
+  const {
+    isLocalConnection,
+    getConnectionIdentity,
+    needsSessionPasswordPrompt,
+    applyPromptPasswordToServer
+  } = useConnectionHelpers()
 
   const ensureVaultUnlockedForConnection = useCallback(async (server: ConnectionItem) => {
     if (isLocalConnection(server)) return true
@@ -869,50 +877,6 @@ export default function App() {
       );
       return false;
     }
-  };
-
-  const needsSessionPasswordPrompt = (server: ConnectionItem) => {
-    if (isLocalConnection(server)) return false;
-    if (server?.isQuickConnect) return !!server?.quickConnectNeedsPassword;
-
-    return server?.has_password === false && !server?.private_key;
-  };
-
-  const applyPromptPasswordToServer = (server: ConnectionItem, pwd: string): ConnectionItem => {
-    if (server?.isQuickConnect) {
-      return {
-        ...server,
-        password: pwd,
-        quickConnectNeedsPassword: false
-      };
-    }
-
-    return {
-      ...server,
-      sessionPassword: pwd
-    };
-  };
-
-  const isLocalConnection = (server: ConnectionItem | null | undefined) => {
-    return (
-      !!server?.isLocal ||
-      server?.type === 'local' ||
-      server?.kind === 'local' ||
-      server?.id === 'local' ||
-      server?.name === 'Local Terminal' ||
-      server?.host === '__local__' ||
-      server?.host === 'local'
-    );
-  };
-
-  const getConnectionIdentity = (server: ConnectionItem | null | undefined) => {
-    if (isLocalConnection(server)) return '__local__';
-    if (server?.id != null) return `id:${String(server.id)}`;
-    return [
-      String(server?.username || '').trim(),
-      String(server?.host || '').trim(),
-      String(server?.port || 22)
-    ].join('@');
   };
 
   const openTerminal = async (
