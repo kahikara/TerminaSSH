@@ -10,6 +10,7 @@ import { useConnectionCollections } from './hooks/useConnectionCollections';
 import { useQuickConnectFlow } from './hooks/useQuickConnectFlow';
 import { useTabDragFlow } from './hooks/useTabDragFlow';
 import { useSidebarSearchFlow } from './hooks/useSidebarSearchFlow';
+import { useLinuxWindowChrome } from './hooks/useLinuxWindowChrome';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -33,14 +34,6 @@ import DraggedTabGhost from './components/DraggedTabGhost';
 import SidebarConnectionsPanel from './components/SidebarConnectionsPanel';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
-
-type LinuxWindowModeInfo = {
-  wayland_undecorated?: boolean
-}
-
-type AppMetaInfo = {
-  app_version?: string
-}
 
 type ConnectionItem = {
   id?: number | string
@@ -199,10 +192,6 @@ export default function App() {
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
   const [sidebarContextMenu, setSidebarContextMenu] = useState<SidebarContextMenuState | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState | null>(null);
-  const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false);
-  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
-  const [appVersion, setAppVersion] = useState("");
-  const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState === 'visible');
 
   const {
     dirtyEditors,
@@ -309,79 +298,19 @@ export default function App() {
     isSidebarCollapsed
   })
 
+  const {
+    useCustomLinuxTitlebar,
+    isWindowMaximized,
+    appVersion,
+    startWindowDrag,
+    toggleWindowMaximize,
+    minimizeWindow,
+    closeMainWindow
+  } = useLinuxWindowChrome()
+
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
-
-  useEffect(() => {
-    const syncVisibility = () => {
-      setDocumentVisible(document.visibilityState === 'visible');
-    };
-
-    syncVisibility();
-    document.addEventListener('visibilitychange', syncVisibility);
-    window.addEventListener('focus', syncVisibility);
-
-    return () => {
-      document.removeEventListener('visibilitychange', syncVisibility);
-      window.removeEventListener('focus', syncVisibility);
-    };
-  }, []);
-
-  useEffect(() => {
-    invoke('get_linux_window_mode')
-      .then((info) => {
-        const mode = (info || {}) as LinuxWindowModeInfo
-        setUseCustomLinuxTitlebar(Boolean(mode.wayland_undecorated))
-      })
-      .catch(() => {
-        setUseCustomLinuxTitlebar(false)
-      })
-
-    invoke('get_app_meta')
-      .then((info) => {
-        const meta = (info || {}) as AppMetaInfo
-        setAppVersion(String(meta.app_version || ""))
-      })
-      .catch(() => {
-        setAppVersion("")
-      })
-  }, [])
-
-  useEffect(() => {
-    if (!useCustomLinuxTitlebar) return
-
-    let mounted = true
-    let timer: number | undefined
-
-    const syncMaximized = async () => {
-      try {
-        const value = await invoke('window_is_maximized') as boolean
-        if (mounted) setIsWindowMaximized(Boolean(value))
-      } catch {}
-    }
-
-    const handleWindowStateHint = () => {
-      void syncMaximized()
-    }
-
-    void syncMaximized()
-    window.addEventListener('resize', handleWindowStateHint)
-    window.addEventListener('focus', handleWindowStateHint)
-
-    if (documentVisible) {
-      timer = window.setInterval(() => {
-        void syncMaximized()
-      }, 2000)
-    }
-
-    return () => {
-      mounted = false
-      window.removeEventListener('resize', handleWindowStateHint)
-      window.removeEventListener('focus', handleWindowStateHint)
-      if (timer !== undefined) window.clearInterval(timer)
-    }
-  }, [useCustomLinuxTitlebar, documentVisible])
 
   const {
     loadServers,
@@ -983,20 +912,10 @@ export default function App() {
           lang={settings.lang}
           appVersion={appVersion}
           isWindowMaximized={isWindowMaximized}
-          onStartDrag={() => {
-            void invoke('window_start_dragging').catch(() => {})
-          }}
-          onToggleMaximize={() => {
-            void invoke('window_toggle_maximize')
-              .then((value) => setIsWindowMaximized(Boolean(value)))
-              .catch(() => {})
-          }}
-          onMinimize={() => {
-            void invoke('window_minimize').catch(() => {})
-          }}
-          onClose={() => {
-            void invoke('window_close_main').catch(() => {})
-          }}
+          onStartDrag={startWindowDrag}
+          onToggleMaximize={toggleWindowMaximize}
+          onMinimize={minimizeWindow}
+          onClose={closeMainWindow}
         />
       )}
 
