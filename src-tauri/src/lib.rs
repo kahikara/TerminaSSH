@@ -18,7 +18,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WindowEvent,
+};
 
 use aes_gcm::{
     aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
@@ -28,7 +30,6 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SshConnection {
@@ -233,6 +234,15 @@ pub struct LinuxWindowModeInfo {
 #[derive(Debug, Serialize)]
 pub struct AppMetaInfo {
     app_version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MainWindowState {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    maximized: bool,
 }
 
 pub enum SshMessage {
@@ -1460,6 +1470,111 @@ fn try_auth_with_default_keys(sess: &Session, username: &str) -> bool {
 
 fn current_export_timestamp() -> String {
     Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+fn is_wayland_session() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(value) = std::env::var("WINIT_UNIX_BACKEND") {
+            let value = value.trim().to_ascii_lowercase();
+            if value == "x11" {
+                return false;
+            }
+            if value == "wayland" {
+                return true;
+            }
+        }
+
+        if let Ok(value) = std::env::var("GDK_BACKEND") {
+            let backends: Vec<String> = value
+                .split(',')
+                .map(|part| part.trim().to_ascii_lowercase())
+                .filter(|part| !part.is_empty())
+                .collect();
+
+            if backends.iter().any(|part| part == "x11") {
+                return false;
+            }
+            if backends.iter().any(|part| part == "wayland") {
+                return true;
+            }
+        }
+
+        std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|value| value.eq_ignore_ascii_case("wayland"))
+                .unwrap_or(false)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+fn get_main_window_state_path() -> PathBuf {
+    PathBuf::from(get_app_dir()).join("main-window-state.json")
+}
+
+fn load_main_window_state() -> Option<MainWindowState> {
+    let path = get_main_window_state_path();
+    let content = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<MainWindowState>(&content).ok()
+}
+
+fn save_main_window_state(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let maximized = window.is_maximized().map_err(|e| e.to_string())?;
+    let previous = load_main_window_state();
+
+    let mut state = previous.unwrap_or(MainWindowState {
+        x: 0,
+        y: 0,
+        width: 1200,
+        height: 800,
+        maximized: false,
+    });
+
+    state.maximized = maximized;
+
+    if !is_wayland_session() {
+        let position = window.outer_position().map_err(|e| e.to_string())?;
+        let size = window.inner_size().map_err(|e| e.to_string())?;
+        state.x = position.x;
+        state.y = position.y;
+        state.width = size.width;
+        state.height = size.height;
+    }
+
+    let path = get_main_window_state_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let content = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+    fs::write(path, content).map_err(|e| e.to_string())
+}
+
+fn restore_main_window_state(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let Some(state) = load_main_window_state() else {
+        return Ok(());
+    };
+
+    if is_wayland_session() {
+        if state.maximized {
+            let _ = window.maximize();
+        }
+        return Ok(());
+    }
+
+    let _ = window.set_position(Position::Physical(PhysicalPosition::new(state.x, state.y)));
+
+    if state.maximized {
+        let _ = window.maximize();
+    } else {
+        let _ = window.set_size(Size::Physical(PhysicalSize::new(state.width, state.height)));
+    }
+
+    Ok(())
 }
 
 fn tcp_connect_with_timeout(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
@@ -5350,8 +5465,10 @@ fn window_start_dragging(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn save_window_state_all(app: AppHandle) -> Result<(), String> {
-    app.save_window_state(StateFlags::all())
-        .map_err(|e| e.to_string())
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found".to_string())?;
+    save_main_window_state(&window)
 }
 
 #[tauri::command]
@@ -5359,6 +5476,7 @@ fn window_close_main(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or("Main window not found".to_string())?;
+    let _ = save_main_window_state(&window);
     window.close().map_err(|e| e.to_string())
 }
 
@@ -5476,7 +5594,6 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(SshState {
             txs: Mutex::new(HashMap::new()),
             transfers: Mutex::new(HashMap::new()),
@@ -5592,6 +5709,31 @@ pub fn run() {
 
                 let version = app.package_info().version.to_string();
                 let _ = window.set_title(&format!("Termina SSH v{}", version));
+                let _ = restore_main_window_state(&window);
+
+                if !is_wayland_session() {
+                    let save_events_enabled = Arc::new(AtomicBool::new(false));
+                    let save_events_enabled_for_events = Arc::clone(&save_events_enabled);
+                    let window_for_events = window.clone();
+
+                    window.on_window_event(move |event| {
+                        if !save_events_enabled_for_events.load(Ordering::Relaxed) {
+                            return;
+                        }
+
+                        match event {
+                            WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                                let _ = save_main_window_state(&window_for_events);
+                            }
+                            _ => {}
+                        }
+                    });
+
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(1200));
+                        save_events_enabled.store(true, Ordering::Relaxed);
+                    });
+                }
             }
 
             let show_item = MenuItem::with_id(app, "tray_show", "Show", true, None::<&str>)?;
@@ -5609,8 +5751,8 @@ pub fn run() {
                         }
                     }
                     "tray_quit" => {
-                        let _ = app.save_window_state(StateFlags::all());
                         if let Some(window) = app.get_webview_window("main") {
+                            let _ = save_main_window_state(&window);
                             let _ = window.show();
                             let _ = window.unminimize();
                             let _ = window.set_focus();
