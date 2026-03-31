@@ -8,6 +8,7 @@ import { useStartupVaultGate } from './hooks/useStartupVaultGate';
 import { useConnectionHelpers } from './hooks/useConnectionHelpers';
 import { useVaultConnectionUnlock } from './hooks/useVaultConnectionUnlock';
 import { useHostKeyTrust } from './hooks/useHostKeyTrust';
+import { useConnectionCollections } from './hooks/useConnectionCollections';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -23,8 +24,6 @@ import InputContextMenu from './components/InputContextMenu';
 import StartupRecoveryResultDialog from './components/StartupRecoveryResultDialog';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
-
-const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections";
 
 type LinuxWindowModeInfo = {
   wayland_undecorated?: boolean
@@ -118,8 +117,6 @@ type PaneStatePayload = {
   focusedPaneId?: string | null
 }
 
-type ConnectionGroups = Record<string, ConnectionItem[]>
-
 const LOCAL_TERMINAL_CONNECTION: ConnectionItem = {
   id: 'local',
   isLocal: true,
@@ -156,12 +153,6 @@ const createClosedDialogState = (): GlobalDialogState => ({
   validate: undefined
 })
 
-const isDashboardConnection = (
-  value: ConnectionItem | null | undefined
-): value is DashboardConnection => {
-  return typeof value?.name === 'string' && value.name.trim().length > 0
-}
-
 const isDashboardTab = (value: AppTab): value is AppTab & DashboardTab => {
   return typeof value?.tabId === 'string' && typeof value?.name === 'string' && value.name.trim().length > 0
 }
@@ -191,22 +182,10 @@ export default function App() {
 
   const [openTabs, setOpenTabs] = useState<AppTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [lastActiveConnectionId, setLastActiveConnectionId] = useState<string | null>(null);
   const [tabDragId, setTabDragId] = useState<string | null>(null);
   const [tabDropId, setTabDropId] = useState<string | null>(null);
   const [tabPointerDragging, setTabPointerDragging] = useState(false);
   const [tabGhostPos, setTabGhostPos] = useState<{ x: number; y: number } | null>(null);
-  const [connections, setConnections] = useState<ConnectionItem[]>([]);
-  const [recentConnectionIds, setRecentConnectionIds] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(RECENT_CONNECTIONS_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.map((value) => String(value)) : [];
-    } catch {
-      return [];
-    }
-  });
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [showSidebarSearch, setShowSidebarSearch] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
@@ -391,151 +370,28 @@ export default function App() {
     }
   }, [useCustomLinuxTitlebar, documentVisible])
 
-    const loadServers = useCallback(async () => {
-    try {
-      const items = await invoke('get_connections');
-      setConnections(Array.isArray(items) ? (items as ConnectionItem[]) : []);
-    } catch (e) {
-      setConnections([]);
-      showToast(
-        settings.lang === 'de'
-          ? `Verbindungen konnten nicht geladen werden: ${String(e)}`
-          : `Could not load connections: ${String(e)}`,
-        true
-      );
-    }
-  }, [settings.lang, showToast]);
+  const {
+    loadServers,
+    groups,
+    collapsedConnections,
+    sidebarVisibleGroups,
+    sidebarVisibleRootServers,
+    isSidebarSearching,
+    effectiveFolderCollapsed,
+    recentConnectionsForDashboard,
+    isLocalActive,
+    isServerActive
+  } = useConnectionCollections({
+    lang: settings.lang,
+    customFolders: settings.customFolders || [],
+    showToast,
+    sidebarSearchQuery,
+    showSidebarSearch,
+    collapsedFolders,
+    openTabs,
+    activeTabId
+  })
 
-  useEffect(() => {
-    loadServers();
-  }, [loadServers]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(RECENT_CONNECTIONS_STORAGE_KEY, JSON.stringify(recentConnectionIds));
-    } catch {}
-  }, [recentConnectionIds]);
-
-  useEffect(() => {
-    const validIds = new Set(connections.map((conn) => String(conn.id)));
-
-    setRecentConnectionIds((prev) => {
-      const next = prev.filter((id) => validIds.has(String(id)));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [connections]);
-
-  const { groups, rootServers } = useMemo(() => {
-    const grps: ConnectionGroups = {};
-    const root: ConnectionItem[] = [];
-    (settings.customFolders || []).forEach((f: string) => grps[f] = []);
-
-    connections.forEach((curr) => {
-      const g = curr.group_name;
-      if (!g || g.trim() === '') {
-        root.push(curr);
-      } else {
-        if (!grps[g]) grps[g] = [];
-        grps[g].push(curr);
-      }
-    });
-    return { groups: grps, rootServers: root };
-  }, [connections, settings.customFolders]);
-
-  const collapsedConnections = useMemo<ConnectionItem[]>(() => {
-    const items: ConnectionItem[] = [LOCAL_TERMINAL_CONNECTION];
-
-    rootServers.forEach((conn) => items.push(conn));
-    Object.keys(groups).sort().forEach((group) => {
-      groups[group].forEach((conn) => items.push(conn));
-    });
-
-    return items;
-  }, [rootServers, groups]);
-
-  const normalizedSidebarSearch = sidebarSearchQuery.trim().toLowerCase();
-  const isSidebarSearching = showSidebarSearch && normalizedSidebarSearch.length > 0;
-
-  const matchesSidebarSearch = (conn: ConnectionItem) => {
-    if (!normalizedSidebarSearch) return true;
-    const haystack = [
-      conn?.name || "",
-      conn?.host || "",
-      conn?.username || ""
-    ].join(" ").toLowerCase();
-    return haystack.includes(normalizedSidebarSearch);
-  };
-
-  const filteredRootServers = useMemo<ConnectionItem[]>(() => {
-    if (!isSidebarSearching) return rootServers;
-    return rootServers.filter((conn) => matchesSidebarSearch(conn));
-  }, [rootServers, isSidebarSearching, normalizedSidebarSearch]);
-
-  const filteredGroups = useMemo<ConnectionGroups>(() => {
-    if (!isSidebarSearching) return groups;
-
-    const next: ConnectionGroups = {};
-    Object.keys(groups).forEach((group) => {
-      const matches = groups[group].filter((conn) => matchesSidebarSearch(conn));
-      if (matches.length > 0) next[group] = matches;
-    });
-    return next;
-  }, [groups, isSidebarSearching, normalizedSidebarSearch]);
-
-  const sidebarVisibleGroups = isSidebarSearching ? filteredGroups : groups;
-  const sidebarVisibleRootServers = isSidebarSearching ? filteredRootServers : rootServers;
-
-  const effectiveFolderCollapsed = (group: string) => {
-    if (!isSidebarSearching) return Boolean(collapsedFolders[group]);
-    return false;
-  };
-
-  const activeTab = useMemo<AppTab | null>(
-    () => openTabs.find((tab) => tab.tabId === activeTabId) || null,
-    [openTabs, activeTabId]
-  );
-
-  useEffect(() => {
-    if (!activeTab) return;
-
-    if (activeTab.isLocal) {
-      setLastActiveConnectionId("__local__");
-      return;
-    }
-
-    if (activeTab.id != null) {
-      setLastActiveConnectionId(String(activeTab.id));
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (!activeTab) return;
-    if (activeTab.isLocal) return;
-    if (activeTab.id == null) return;
-
-    const id = String(activeTab.id);
-    setRecentConnectionIds((prev) => [id, ...prev.filter((value) => value !== id)].slice(0, 12));
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (lastActiveConnectionId == null) return;
-
-    const stillOpen = openTabs.some((tab) => {
-      if (lastActiveConnectionId === "__local__") {
-        return !!tab?.isLocal;
-      }
-      return tab?.id != null && String(tab.id) === String(lastActiveConnectionId);
-    });
-
-    if (!stillOpen) {
-      setLastActiveConnectionId(null);
-    }
-  }, [openTabs, lastActiveConnectionId]);
-
-  const activeConnectionId = activeTab?.isLocal ? "__local__" : activeTab?.id != null ? String(activeTab.id) : null;
-  const sidebarActiveConnectionId = activeConnectionId ?? lastActiveConnectionId;
-  const isLocalActive = sidebarActiveConnectionId === "__local__";
-  const isServerActive = (conn: ConnectionItem) => sidebarActiveConnectionId != null && String(sidebarActiveConnectionId) === String(conn.id);
   const draggedTabGhost = useMemo<AppTab | null>(
     () => openTabs.find((tab) => tab.tabId === tabDragId) || null,
     [openTabs, tabDragId]
@@ -545,19 +401,6 @@ export default function App() {
     () => tabContextMenu ? openTabs.find((tab) => tab.tabId === tabContextMenu.tabId) || null : null,
     [openTabs, tabContextMenu]
   );
-
-  const recentConnectionsForDashboard = useMemo<DashboardConnection[]>(() => {
-    const baseConnections = !recentConnectionIds.length
-      ? connections.slice(0, 6)
-      : connections
-          .filter((conn) => recentConnectionIds.includes(String(conn.id)))
-          .sort(
-            (a, b) =>
-              recentConnectionIds.indexOf(String(a.id)) - recentConnectionIds.indexOf(String(b.id))
-          )
-
-    return baseConnections.filter(isDashboardConnection)
-  }, [connections, recentConnectionIds]);
 
   const dashboardActiveTabs = useMemo<DashboardTab[]>(
     () => openTabs.filter(isDashboardTab),
