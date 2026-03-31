@@ -13,6 +13,7 @@ import { useSidebarSearchFlow } from './hooks/useSidebarSearchFlow';
 import { useLinuxWindowChrome } from './hooks/useLinuxWindowChrome';
 import { useSidebarLayout } from './hooks/useSidebarLayout';
 import { useSidebarConnectionActions } from './hooks/useSidebarConnectionActions';
+import { useTabContextActions } from './hooks/useTabContextActions';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -704,69 +705,25 @@ export default function App() {
     });
   }, []);
 
-  const duplicateTabSession = (tab: AppTab, paneIndex?: number) => {
-    closeTabContextMenu();
-
-    const targetServer =
-      typeof paneIndex === 'number' && tab.splitMode
-        ? tab.paneServers?.[paneIndex] || null
-        : tab;
-
-    if (!targetServer) return;
-    void openTerminal(targetServer, { forceNewTab: true });
-  };
-
-  const openTabInSplit = (tab: AppTab) => {
-    closeTabContextMenu();
-    if (tab.splitMode) return;
-
-    setOpenTabs(prev =>
-      prev.map(curr =>
-        curr.tabId !== tab.tabId
-          ? curr
-          : buildSplitTabFromServers(curr, curr, curr.tabId, [curr.sessionId], true)
-      )
-    );
-    setActiveTabId(tab.tabId);
-  };
-
-  const removeSplitFromTab = (tab: AppTab) => {
-    closeTabContextMenu();
-    if (!tab.splitMode) return;
-
-    const keepIndex = tab.focusedPaneIndex === 1 ? 1 : 0;
-    const removeIndex = keepIndex === 1 ? 0 : 1;
-    const removeSessionId = tab.paneSessionIds?.[removeIndex];
-
-    if (removeSessionId) {
-      destroyTerminal(String(removeSessionId));
+  const {
+    duplicateTabSession,
+    openTabInSplit,
+    removeSplitFromTab,
+    closeTabFromContextMenu
+  } = useTabContextActions({
+    closeTabContextMenu,
+    openTerminalNewTab: (server) => {
+      void openTerminal(server, { forceNewTab: true })
+    },
+    buildSplitTabFromServers,
+    updateOpenTabs: (updater) => {
+      setOpenTabs(updater)
+    },
+    setActiveTabId,
+    closeTab: (tabId) => {
+      closeTab(tabId)
     }
-
-    setOpenTabs(prev =>
-      prev.map(curr => {
-        if (curr.tabId !== tab.tabId) return curr;
-
-        const keepServer = curr.paneServers?.[keepIndex] || curr;
-        const keepSessionId = curr.paneSessionIds?.[keepIndex] || curr.sessionId || curr.tabId;
-
-        return {
-          ...keepServer,
-          tabId: curr.tabId,
-          sessionId: keepSessionId,
-          splitMode: false,
-          paneServers: undefined,
-          paneSessionIds: undefined,
-          focusedPaneIndex: undefined
-        };
-      })
-    );
-    setActiveTabId(tab.tabId);
-  };
-
-  const closeTabFromContextMenu = (tab: AppTab) => {
-    closeTabContextMenu();
-    closeTab(tab.tabId);
-  };
+  })
 
   const updateTabFromPaneState = useCallback((
     tabId: string,
