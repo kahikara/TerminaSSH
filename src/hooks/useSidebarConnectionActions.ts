@@ -1,28 +1,7 @@
 import { useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { GlobalDialogState } from '../lib/types'
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  private_key?: string
-  group_name?: string
-  [key: string]: unknown
-}
-
-type ConnectionDraft = {
-  name?: string
-  host?: string
-  port?: number | string
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-}
+import type { ConnectionDraft, ConnectionItem } from '../lib/appTypes'
 
 type UseSidebarConnectionActionsArgs = {
   lang: string

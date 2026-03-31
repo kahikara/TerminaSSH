@@ -1,34 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { destroyTerminal } from './terminalSession'
-
-type ConnectionItem = {
-  id?: number | string
-  name?: string
-  host?: string
-  port?: number
-  username?: string
-  password?: string
-  private_key?: string
-  passphrase?: string
-  group_name?: string
-  has_password?: boolean
-  sessionPassword?: string | null
-  isLocal?: boolean
-  isQuickConnect?: boolean
-  quickConnectNeedsPassword?: boolean
-  splitMode?: boolean
-  paneServers?: ConnectionItem[]
-  paneSessionIds?: string[]
-  focusedPaneIndex?: number
-  type?: string
-  kind?: string
-  [key: string]: unknown
-}
-
-type AppTab = ConnectionItem & {
-  tabId: string
-  sessionId: string
-}
+import type { Dispatch, SetStateAction } from 'react'
+import type { AppTab, ConnectionItem } from './appTypes'
 
 type RunOpenServerInSplitFlowArgs = {
   lang: string
@@ -52,8 +25,8 @@ type RunOpenServerInSplitFlowArgs = {
     existingPaneSessionIds?: string[],
     forceNewRightSession?: boolean
   ) => AppTab
-  setOpenTabs: React.Dispatch<React.SetStateAction<AppTab[]>>
-  setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>
+  setOpenTabs: Dispatch<SetStateAction<AppTab[]>>
+  setActiveTabId: Dispatch<SetStateAction<string | null>>
 }
 
 export async function runOpenServerInSplitFlow({
