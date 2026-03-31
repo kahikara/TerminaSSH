@@ -36,6 +36,7 @@ import TabStrip from './components/TabStrip';
 import SidebarShell from './components/SidebarShell';
 import DraggedTabGhost from './components/DraggedTabGhost';
 import SidebarConnectionsPanel from './components/SidebarConnectionsPanel';
+import { runOpenTerminalFlow } from './lib/openTerminalCore';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { runOpenServerInSplitFlow } from './lib/openServerInSplitFlow';
 
@@ -381,91 +382,24 @@ export default function App() {
     server: ConnectionItem,
     options: { forceNewTab?: boolean; openInSplit?: boolean } = {}
   ) => {
-    const findExistingTabId = (): string | null => {
-      if (options.forceNewTab) return null;
-      if (server?.isQuickConnect) return null;
-
-      if (isLocalConnection(server)) {
-        const existingLocal = openTabs.find((tab) => tab?.isLocal);
-        return existingLocal?.tabId || null;
-      }
-
-      if (server?.id != null) {
-        const existingServer = openTabs.find((tab) => String(tab?.id) === String(server.id));
-        return existingServer?.tabId || null;
-      }
-
-      return null;
-    };
-
-    if (options.openInSplit) {
-      await openServerInSplit(server);
-      return;
-    }
-
-    const existingTabId = findExistingTabId();
-    if (existingTabId) {
-      setActiveTabId(existingTabId);
-      return;
-    }
-
-    if (!(await ensureHostKeyTrusted(server))) {
-      return;
-    }
-
-    if (!(await ensureVaultUnlockedForConnection(server))) {
-      return;
-    }
-
-    if (needsSessionPasswordPrompt(server)) {
-      showDialog({
-        type: "prompt",
-        title:
-          settings.lang === "de"
-            ? `Passwort für ${server?.name || server?.host || "SSH Verbindung"}`
-            : `Password for ${server?.name || server?.host || "SSH connection"}`,
-        placeholder: settings.lang === "de" ? "SSH Passwort eingeben" : "Enter SSH password",
-        isPassword: true,
-        checkboxLabel: settings.lang === "de" ? "Passwort speichern" : "Save password",
-        onConfirm: async (pwd: string, meta?: { checked?: boolean }) => {
-          if (!pwd) return;
-
-          if (meta?.checked && server?.id != null) {
-            try {
-              await invoke("set_connection_password", {
-                id: server.id,
-                password: pwd
-              });
-              await loadServers();
-              showToast(settings.lang === "de" ? "Passwort gespeichert" : "Password saved");
-            } catch (e) {
-              showToast(
-                settings.lang === "de"
-                  ? `Passwort konnte nicht gespeichert werden: ${String(e)}`
-                  : `Could not save password: ${String(e)}`,
-                true
-              );
-            }
-          }
-
-          const tabId = createTabId();
-          const resolvedServer = applyPromptPasswordToServer(server, pwd);
-          const newTab: AppTab = {
-            ...resolvedServer,
-            tabId,
-            sessionId: tabId
-          };
-          setOpenTabs(prev => [...prev, newTab]);
-          setActiveTabId(tabId);
-        }
-      });
-      return;
-    }
-
-    const tabId = createTabId();
-    const newTab: AppTab = { ...server, tabId, sessionId: tabId };
-    setOpenTabs(prev => [...prev, newTab]);
-    setActiveTabId(tabId);
+    await runOpenTerminalFlow({
+      lang: settings.lang,
+      server,
+      options,
+      openTabs,
+      isLocalConnection,
+      ensureHostKeyTrusted,
+      ensureVaultUnlockedForConnection,
+      needsSessionPasswordPrompt,
+      applyPromptPasswordToServer,
+      showDialog,
+      showToast,
+      loadServers,
+      setOpenTabs,
+      setActiveTabId,
+      createTabId,
+      openServerInSplit
+    })
   };
 
   const closeSidebarContextMenu = useCallback(() => {
