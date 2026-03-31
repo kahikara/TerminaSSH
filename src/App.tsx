@@ -6,6 +6,7 @@ import type { GlobalDialogState } from './lib/types';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useStartupVaultGate } from './hooks/useStartupVaultGate';
 import { useConnectionHelpers } from './hooks/useConnectionHelpers';
+import { useVaultConnectionUnlock } from './hooks/useVaultConnectionUnlock';
 import { useToasts } from './hooks/useToasts';
 import SettingsModal from './components/SettingsModal';
 import TerminalPane from './components/TerminalPane';
@@ -30,14 +31,6 @@ type LinuxWindowModeInfo = {
 
 type AppMetaInfo = {
   app_version?: string
-}
-
-type VaultStatus = {
-  is_initialized?: boolean
-  is_protected?: boolean
-  is_unlocked?: boolean
-  unlock_mode?: string
-  has_legacy_master_key?: boolean
 }
 
 type ConnectionItem = {
@@ -306,88 +299,15 @@ export default function App() {
     applyPromptPasswordToServer
   } = useConnectionHelpers()
 
-  const ensureVaultUnlockedForConnection = useCallback(async (server: ConnectionItem) => {
-    if (isLocalConnection(server)) return true
-
-    const likelyNeedsVault =
-      Boolean(server?.has_password) ||
-      Boolean(String(server?.private_key || '').trim())
-
-    if (!likelyNeedsVault) {
-      return true
-    }
-
-    try {
-      const status = await invoke('get_vault_status') as VaultStatus
-      const isProtected = Boolean(status?.is_protected)
-      const isUnlocked = Boolean(status?.is_unlocked)
-
-      if (!isProtected || isUnlocked) {
-        if (isUnlocked) {
-          markStartupVaultUnlocked()
-        }
-        return true
-      }
-
-      return await new Promise<boolean>((resolve) => {
-        const openUnlockPrompt = () => {
-          showDialog({
-            type: 'prompt',
-            title: settings.lang === 'de' ? 'Vault entsperren' : 'Unlock vault',
-            description: settings.lang === 'de'
-              ? 'Diese Verbindung benötigt Zugriff auf den Vault. Bitte gib dein Master Passwort ein.'
-              : 'This connection needs access to the vault. Please enter your master password.',
-            placeholder: settings.lang === 'de' ? 'Master Passwort' : 'Master password',
-            isPassword: true,
-            confirmLabel: settings.lang === 'de' ? 'Entsperren' : 'Unlock',
-            cancelLabel: settings.lang === 'de' ? 'Abbrechen' : 'Cancel',
-            validate: (value: string) => {
-              if (!String(value || '').trim()) {
-                return settings.lang === 'de'
-                  ? 'Master Passwort ist erforderlich'
-                  : 'Master password is required'
-              }
-              return ''
-            },
-            onConfirm: async (value: string) => {
-              try {
-                await invoke('unlock_vault', { masterPassword: value })
-                markStartupVaultUnlocked()
-
-                showToast(
-                  settings.lang === 'de'
-                    ? 'Vault entsperrt'
-                    : 'Vault unlocked'
-                )
-
-                resolve(true)
-              } catch (e) {
-                showToast(
-                  settings.lang === 'de'
-                    ? `Vault konnte nicht entsperrt werden: ${String(e)}`
-                    : `Could not unlock vault: ${String(e)}`,
-                  true
-                )
-
-                throw e
-              }
-            },
-            onCancel: () => resolve(false)
-          })
-        }
-
-        openUnlockPrompt()
-      })
-    } catch (e) {
-      showToast(
-        settings.lang === 'de'
-          ? `Vault Status konnte nicht geladen werden: ${String(e)}`
-          : `Could not load vault status: ${String(e)}`,
-        true
-      )
-      return false
-    }
-  }, [markStartupVaultUnlocked, settings.lang, showDialog, showToast])
+  const {
+    ensureVaultUnlockedForConnection
+  } = useVaultConnectionUnlock({
+    lang: settings.lang,
+    showDialog,
+    showToast,
+    markStartupVaultUnlocked,
+    isLocalConnection
+  })
 
   useEffect(() => {
     settingsRef.current = settings;
