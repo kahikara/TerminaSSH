@@ -23,6 +23,7 @@ import ToastStack from './components/ToastStack';
 import InputContextMenu from './components/InputContextMenu';
 import StartupRecoveryResultDialog from './components/StartupRecoveryResultDialog';
 import QuickConnectDialog from './components/QuickConnectDialog';
+import TabContextMenu from './components/TabContextMenu';
 import { useInputContextMenu } from './hooks/useInputContextMenu';
 import { destroyTerminal } from './lib/terminalSession';
 
@@ -1657,75 +1658,38 @@ export default function App() {
         </div>
       )}
 
-      {tabContextMenu && tabContextMenuTab && (
-        <div className="fixed inset-0 z-[260]" onMouseDown={closeTabContextMenu} onContextMenu={(e) => e.preventDefault()}>
-          <div
-            className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
-            style={{
-              left: Math.max(8, Math.min(tabContextMenu.x, window.innerWidth - 228)),
-              top: Math.max(8, Math.min(tabContextMenu.y, window.innerHeight - (tabContextMenuTab.splitMode ? 212 : 176)))
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {!tabContextMenuTab.splitMode ? (
-              <>
-                <button
-                  onClick={() => duplicateTabSession(tabContextMenuTab)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>{settings.lang === 'de' ? 'Session duplizieren' : 'Duplicate session'}</span>
-                </button>
-
-                <button
-                  onClick={() => openTabInSplit(tabContextMenuTab)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <Folder size={14} />
-                  <span>{settings.lang === 'de' ? 'Im Split öffnen' : 'Open in split'}</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => duplicateTabSession(tabContextMenuTab, 0)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>{settings.lang === 'de' ? 'Linke Session duplizieren' : 'Duplicate left session'}</span>
-                </button>
-
-                <button
-                  onClick={() => duplicateTabSession(tabContextMenuTab, 1)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>{settings.lang === 'de' ? 'Rechte Session duplizieren' : 'Duplicate right session'}</span>
-                </button>
-
-                <button
-                  onClick={() => removeSplitFromTab(tabContextMenuTab)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <ChevronsLeft size={14} />
-                  <span>{settings.lang === 'de' ? 'Split aufheben' : 'Remove split'}</span>
-                </button>
-              </>
-            )}
-
-            <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
-
-            <button
-              onClick={() => closeTabFromContextMenu(tabContextMenuTab)}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
-            >
-              <X size={14} />
-              <span>{settings.lang === 'de' ? 'Tab schließen' : 'Close tab'}</span>
-            </button>
-          </div>
-        </div>
-      )}
+      <TabContextMenu
+        isOpen={Boolean(tabContextMenu && tabContextMenuTab)}
+        x={tabContextMenu?.x ?? 0}
+        y={tabContextMenu?.y ?? 0}
+        splitMode={Boolean(tabContextMenuTab?.splitMode)}
+        lang={settings.lang}
+        onClose={closeTabContextMenu}
+        onDuplicateSession={() => {
+          if (!tabContextMenuTab) return
+          duplicateTabSession(tabContextMenuTab)
+        }}
+        onOpenInSplit={() => {
+          if (!tabContextMenuTab) return
+          openTabInSplit(tabContextMenuTab)
+        }}
+        onDuplicateLeftSession={() => {
+          if (!tabContextMenuTab) return
+          duplicateTabSession(tabContextMenuTab, 0)
+        }}
+        onDuplicateRightSession={() => {
+          if (!tabContextMenuTab) return
+          duplicateTabSession(tabContextMenuTab, 1)
+        }}
+        onRemoveSplit={() => {
+          if (!tabContextMenuTab) return
+          removeSplitFromTab(tabContextMenuTab)
+        }}
+        onCloseTab={() => {
+          if (!tabContextMenuTab) return
+          closeTabFromContextMenu(tabContextMenuTab)
+        }}
+      />
 
       <ConnectionModal
         isOpen={isConnModalOpen}
