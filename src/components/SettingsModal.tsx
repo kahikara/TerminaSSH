@@ -113,8 +113,6 @@ export default function SettingsModal({
                 showToast={showToast}
                 showDialog={showDialog}
                 cardStyle={cardStyle}
-                uniformSelectStyle={uniformSelectStyle}
-                primaryBtnStyle={primaryBtnStyle}
                 actionBtnStyle={actionBtnStyle}
               />
             )}
