@@ -8,10 +8,10 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::local_fs::normalize_local_path;
-use crate::{
-    connect_runtime_details, connect_ssh_session, load_connection_runtime_details, SshState,
-    VaultState,
+use crate::ssh_runtime::{
+    connect_runtime_details, connect_ssh_session, load_connection_runtime_details,
 };
+use crate::{SshState, VaultState};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct FileItem {

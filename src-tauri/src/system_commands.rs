@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use crate::tcp_connect_with_timeout;
+use crate::ssh_runtime::tcp_connect_with_timeout;
 
 #[tauri::command]
 pub(crate) fn write_clipboard(app: AppHandle, text: String) -> Result<(), String> {

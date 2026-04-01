@@ -2,7 +2,8 @@ use serde::Serialize;
 use std::io::Read;
 use tauri::State;
 
-use crate::{connect_ssh_session, VaultState};
+use crate::ssh_runtime::connect_ssh_session;
+use crate::VaultState;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct StatusBarInfo {

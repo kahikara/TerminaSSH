@@ -9,10 +9,10 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::host_keys::ensure_known_host_match_for_session;
-use crate::{
-    SSH_CONNECT_TIMEOUT_SECS, SshMessage, SshState, VaultState, authenticate_session,
-    connect_ssh_session_with_password_override, tcp_connect_with_timeout,
+use crate::ssh_runtime::{
+    authenticate_session, connect_ssh_session_with_password_override, tcp_connect_with_timeout,
 };
+use crate::{SSH_CONNECT_TIMEOUT_SECS, SshMessage, SshState, VaultState};
 
 fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBool>) {
     if !sent.swap(true, Ordering::Relaxed) {

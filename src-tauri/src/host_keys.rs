@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use crate::{home_dir, tcp_connect_with_timeout, SSH_CONNECT_TIMEOUT_SECS};
+use crate::ssh_runtime::tcp_connect_with_timeout;
+use crate::{home_dir, SSH_CONNECT_TIMEOUT_SECS};
 
 #[derive(Debug, Serialize)]
 pub struct HostKeyCheckInfo {

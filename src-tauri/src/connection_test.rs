@@ -1,7 +1,7 @@
 use serde::Serialize;
 use ssh2::{CheckResult, KnownHostFileKind, KnownHostKeyFormat};
 
-use crate::authenticate_session;
+use crate::ssh_runtime::authenticate_session;
 use crate::connections::{normalize_connection_fields, validate_connection, SshConnection};
 use crate::host_keys::{
     HostKeyCheckInfo, check_known_host_status_for_session, format_known_host_name,
