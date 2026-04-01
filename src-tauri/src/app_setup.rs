@@ -116,29 +116,23 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), tauri::Error> {
     Ok(())
 }
 
-pub(crate) fn prepare_runtime() {
+pub(crate) fn prepare_runtime() -> Result<(), String> {
     #[cfg(target_os = "linux")]
     maybe_relaunch_appimage_with_wayland_preload();
 
-    if let Err(e) = init_db() {
-        eprintln!("Database init failed: {}", e);
-    }
+    init_db().map_err(|e| format!("Database init failed: {}", e))?;
+    init_vault_db().map_err(|e| format!("Vault init failed: {}", e))?;
+    migrate_legacy_master_key_to_vault()
+        .map_err(|e| format!("Legacy master.key migration failed: {}", e))?;
 
-    if let Err(e) = init_vault_db() {
-        eprintln!("Vault init failed: {}", e);
-    }
-
-    if let Err(e) = migrate_legacy_master_key_to_vault() {
-        eprintln!("Legacy master.key migration failed: {}", e);
-    }
+    Ok(())
 }
 
 pub(crate) fn setup_app(
     app: &mut tauri::App,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if let Err(e) = ensure_vault_runtime_ready(&app.state::<VaultState>()) {
-        eprintln!("Vault runtime init failed: {}", e);
-    }
+    ensure_vault_runtime_ready(&app.state::<VaultState>())
+        .map_err(|e| std::io::Error::other(format!("Vault runtime init failed: {}", e)))?;
 
     setup_main_window(&app.handle());
     setup_tray(app)?;

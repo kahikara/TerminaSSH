@@ -93,7 +93,7 @@ pub(crate) const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    app_setup::prepare_runtime();
+    app_setup::prepare_runtime().expect("Runtime preparation failed");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
