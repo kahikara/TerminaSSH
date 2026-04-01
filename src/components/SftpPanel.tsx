@@ -496,6 +496,10 @@ export default function SftpPanel({
     () => selectedVisibleEntries.filter((file) => !file.is_dir),
     [selectedVisibleEntries]
   )
+  const allSelectedEntriesAreFiles = useMemo(
+    () => selectedVisibleEntries.length > 0 && selectedDownloadableEntries.length === selectedVisibleEntries.length,
+    [selectedVisibleEntries, selectedDownloadableEntries]
+  )
   const selectedEntryCount = selectedVisibleEntries.length
   const selectedFileBytes = useMemo(
     () => selectedVisibleEntries.reduce((sum, file) => sum + (file.is_dir ? 0 : file.size), 0),
@@ -626,7 +630,7 @@ export default function SftpPanel({
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
-    const actionCount = (selectedDownloadableEntries.length > 0 ? 1 : 0) + (selectedVisibleEntries.length > 0 ? 1 : 0)
+    const actionCount = (allSelectedEntriesAreFiles ? 1 : 0) + (selectedVisibleEntries.length > 0 ? 1 : 0)
     const menuHeight = actionCount > 1 ? 90 : 54
 
     setSelectionMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, menuHeight))
@@ -975,6 +979,8 @@ export default function SftpPanel({
   }
 
   async function downloadSelected() {
+    if (!allSelectedEntriesAreFiles) return
+
     const targets = selectedDownloadableEntries
     if (!targets.length) return
 
@@ -1890,7 +1896,7 @@ export default function SftpPanel({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {selectedDownloadableEntries.length > 0 && (
+          {allSelectedEntriesAreFiles && (
             <button
               style={menuButtonStyle}
               onClick={() => {
