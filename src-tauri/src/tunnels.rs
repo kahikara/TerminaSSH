@@ -7,8 +7,10 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tauri::State;
 
+use crate::app_state::SshState;
+use crate::db_core::{ensure_connection_exists, open_db};
 use crate::ssh_runtime::{connect_runtime_details, load_connection_runtime_details};
-use crate::{SshState, VaultState, ensure_connection_exists, open_db};
+use crate::vault_core::VaultState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SshTunnel {

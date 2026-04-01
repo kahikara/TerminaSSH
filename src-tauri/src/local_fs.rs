@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-use crate::home_dir;
+use crate::app_paths::home_dir;
 use crate::sftp_commands::{FileItem, SftpReadFilePayload};
 
 pub(crate) fn normalize_local_path(path: &str) -> Result<PathBuf, String> {

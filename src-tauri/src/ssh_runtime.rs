@@ -4,11 +4,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::State;
 
+use crate::app_paths::home_dir;
+use crate::db_core::{open_db, open_vault_db};
 use crate::host_keys::ensure_known_host_match_for_session;
-use crate::{
-    ensure_vault_runtime_ready, home_dir, init_vault_db, open_db, open_vault_db,
-    read_vault_secret_plaintext, require_runtime_vault_dek, SSH_CONNECT_TIMEOUT_SECS, VaultState,
+use crate::vault_core::{
+    ensure_vault_runtime_ready, init_vault_db, read_vault_secret_plaintext,
+    require_runtime_vault_dek, VaultState,
 };
+use crate::SSH_CONNECT_TIMEOUT_SECS;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConnectionRuntimeDetails {

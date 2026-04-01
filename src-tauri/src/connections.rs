@@ -4,9 +4,11 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{
-    SshState, VaultState, delete_vault_secret, ensure_connection_exists, init_vault_db, open_db,
-    open_vault_db, require_runtime_vault_dek, upsert_vault_secret,
+use crate::app_state::SshState;
+use crate::db_core::{ensure_connection_exists, open_db, open_vault_db};
+use crate::vault_core::{
+    delete_vault_secret, init_vault_db, require_runtime_vault_dek, upsert_vault_secret,
+    VaultState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]

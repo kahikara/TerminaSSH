@@ -8,16 +8,16 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tauri::State;
 
-use crate::ssh_runtime::load_connection_runtime_details;
 use crate::app_paths::{
     cleanup_imported_key_files, ensure_unique_key_path, get_keys_dir, read_file_base64_if_exists,
     sanitize_key_file_stem,
 };
-use crate::{
-    current_export_timestamp, init_vault_db, open_db, open_vault_db, require_runtime_vault_dek,
-    upsert_vault_secret, validate_snippet, VaultState,
-};
+use crate::db_core::{current_export_timestamp, open_db, open_vault_db, validate_snippet};
 use crate::ssh_keys::{fingerprint_for_pubkey_path, read_public_key_for_path};
+use crate::ssh_runtime::load_connection_runtime_details;
+use crate::vault_core::{
+    init_vault_db, require_runtime_vault_dek, upsert_vault_secret, VaultState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupSnippet {

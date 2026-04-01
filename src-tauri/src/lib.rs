@@ -64,8 +64,6 @@ use crate::window_commands::{
     window_toggle_maximize,
 };
 
-pub(crate) use crate::app_paths::home_dir;
-
 pub(crate) use crate::db_core::{
     current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, open_db,
     open_vault_db, validate_snippet,
