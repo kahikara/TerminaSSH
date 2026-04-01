@@ -508,27 +508,36 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     () => visibleFiles.filter((file) => !file.is_dir).length,
     [visibleFiles]
   )
-  const visibleFileBytes = useMemo(
-    () => visibleFiles.reduce((sum, file) => sum + (file.is_dir ? 0 : file.size), 0),
-    [visibleFiles]
-  )
   const selectedVisibleEntries = useMemo(
     () => visibleFiles.filter((file) => selectedItems.includes(file.name)),
     [visibleFiles, selectedItems]
   )
-  const selectedEntryCount = selectedVisibleEntries.length + (selectedItems.includes("__parent__") ? 1 : 0)
-  const selectedFolderCount = useMemo(
-    () => selectedVisibleEntries.filter((file) => file.is_dir).length,
-    [selectedVisibleEntries]
-  )
-  const selectedFileCount = useMemo(
-    () => selectedVisibleEntries.filter((file) => !file.is_dir).length,
-    [selectedVisibleEntries]
-  )
+  const selectedEntryCount = selectedVisibleEntries.length
   const selectedFileBytes = useMemo(
     () => selectedVisibleEntries.reduce((sum, file) => sum + (file.is_dir ? 0 : file.size), 0),
     [selectedVisibleEntries]
   )
+  const visibleStatusText = useMemo(
+    () => lang === "de"
+      ? `${visibleFolderCount} Ordner, ${visibleFileCount} Dateien`
+      : `${visibleFolderCount} folders, ${visibleFileCount} files`,
+    [lang, visibleFolderCount, visibleFileCount]
+  )
+  const selectedStatusText = useMemo(() => {
+    if (selectedEntryCount === 0) return ""
+
+    const parts = [
+      lang === "de"
+        ? `${selectedEntryCount} ausgewählt`
+        : `${selectedEntryCount} selected`
+    ]
+
+    if (selectedFileBytes > 0) {
+      parts.push(formatBytes(selectedFileBytes))
+    }
+
+    return parts.join(", ")
+  }, [lang, selectedEntryCount, selectedFileBytes])
 
   function isItemSelected(itemName: string) {
     return selectedItems.includes(itemName)
@@ -1767,55 +1776,44 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
       <div
         style={{
-          minHeight: 30,
-          padding: "0 10px",
+          minHeight: 28,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
+          padding: "0 12px",
           borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-          background: "color-mix(in srgb, var(--bg-sidebar) 92%, var(--bg-app))",
-          color: "var(--text-muted, #94a3b8)",
+          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
           fontSize: 11,
+          color: "var(--text-muted, #94a3b8)",
           flexShrink: 0
         }}
       >
         <div
           style={{
+            flex: 1,
+            minWidth: 0,
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            minWidth: 0,
+            whiteSpace: "nowrap",
             overflow: "hidden",
-            whiteSpace: "nowrap"
+            textOverflow: "ellipsis"
           }}
         >
-          <span>{lang === "de" ? `Ordner: ${visibleFolderCount}` : `Folders: ${visibleFolderCount}`}</span>
-          <span>{lang === "de" ? `Dateien: ${visibleFileCount}` : `Files: ${visibleFileCount}`}</span>
-          <span>{lang === "de" ? `Größe: ${formatBytes(visibleFileBytes)}` : `Size: ${formatBytes(visibleFileBytes)}`}</span>
+          <span>{visibleStatusText}</span>
         </div>
 
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
+            flex: 1,
             minWidth: 0,
-            overflow: "hidden",
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
             whiteSpace: "nowrap",
-            justifyContent: "flex-end"
+            overflow: "hidden",
+            textOverflow: "ellipsis"
           }}
         >
-          {selectedEntryCount > 0 ? (
-            <>
-              <span>{lang === "de" ? `Auswahl: ${selectedEntryCount}` : `Selected: ${selectedEntryCount}`}</span>
-              <span>{lang === "de" ? `Dateien: ${selectedFileCount}` : `Files: ${selectedFileCount}`}</span>
-              <span>{lang === "de" ? `Ordner: ${selectedFolderCount}` : `Folders: ${selectedFolderCount}`}</span>
-              <span>{lang === "de" ? `Größe: ${formatBytes(selectedFileBytes)}` : `Size: ${formatBytes(selectedFileBytes)}`}</span>
-            </>
-          ) : (
-            <span>{lang === "de" ? "Keine Auswahl" : "No selection"}</span>
-          )}
+          {selectedStatusText ? <span>{selectedStatusText}</span> : null}
         </div>
       </div>
 
