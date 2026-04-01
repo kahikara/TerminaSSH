@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, TryRecvError};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::host_keys::ensure_known_host_match_for_session;
 use crate::ssh_runtime::{
@@ -18,6 +18,19 @@ fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBo
     if !sent.swap(true, Ordering::Relaxed) {
         let _ = app.emit(&format!("term-exit-{}", session_id), true);
     }
+}
+
+fn cleanup_session_sender(app: &AppHandle, session_id: &str) {
+    if let Some(state) = app.try_state::<SshState>() {
+        if let Ok(mut txs) = state.txs.lock() {
+            txs.remove(session_id);
+        }
+    }
+}
+
+fn finish_session(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBool>) {
+    cleanup_session_sender(app, session_id);
+    emit_session_exit_once(app, session_id, sent);
 }
 
 fn register_session_sender(
@@ -237,13 +250,13 @@ pub(crate) fn start_local_pty(
                 Ok(_) => {
                     let _ = app_for_reader
                         .emit(&event_name, "\r\n[Lokale Shell beendet]\r\n".to_string());
-                    emit_session_exit_once(&app_for_reader, &session_id_reader, &exit_sent_reader);
+                    finish_session(&app_for_reader, &session_id_reader, &exit_sent_reader);
                     break;
                 }
                 Err(_) => {
                     let _ = app_for_reader
                         .emit(&event_name, "\r\n[Lokale Shell beendet]\r\n".to_string());
-                    emit_session_exit_once(&app_for_reader, &session_id_reader, &exit_sent_reader);
+                    finish_session(&app_for_reader, &session_id_reader, &exit_sent_reader);
                     break;
                 }
             }
@@ -270,7 +283,7 @@ pub(crate) fn start_local_pty(
         }
         let _ = child.kill();
         let _ = child.wait();
-        emit_session_exit_once(&app_for_wait, &session_id_wait, &exit_sent_wait);
+        finish_session(&app_for_wait, &session_id_wait, &exit_sent_wait);
     });
 
     Ok(())
@@ -313,7 +326,7 @@ pub(crate) fn start_quick_ssh(
                     ),
                 );
                 let _ = app_handle.emit(&connect_event, false);
-                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                 return;
             }
         };
@@ -326,7 +339,7 @@ pub(crate) fn start_quick_ssh(
                 ),
             );
             let _ = app_handle.emit(&connect_event, false);
-            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
             let _ = channel.close();
             return;
         }
@@ -339,7 +352,7 @@ pub(crate) fn start_quick_ssh(
                 ),
             );
             let _ = app_handle.emit(&connect_event, false);
-            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
             let _ = channel.close();
             return;
         }
@@ -369,7 +382,7 @@ pub(crate) fn start_quick_ssh(
                     Err(TryRecvError::Disconnected) => {
                         let _ = channel.close();
                         let _ = app_handle.emit(&connect_event, false);
-                        emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                        finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                         return;
                     }
                 }
@@ -381,7 +394,7 @@ pub(crate) fn start_quick_ssh(
                     "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
                 );
                 let _ = app_handle.emit(&connect_event, false);
-                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                 let _ = channel.wait_close();
                 break;
             }
@@ -425,7 +438,7 @@ pub(crate) fn start_ssh(
                     ),
                 );
                 let _ = app_handle.emit(&connect_event, false);
-                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                 return;
             }
         };
@@ -438,7 +451,7 @@ pub(crate) fn start_ssh(
                 ),
             );
             let _ = app_handle.emit(&connect_event, false);
-            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
             let _ = channel.close();
             return;
         }
@@ -451,7 +464,7 @@ pub(crate) fn start_ssh(
                 ),
             );
             let _ = app_handle.emit(&connect_event, false);
-            emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+            finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
             let _ = channel.close();
             return;
         }
@@ -479,7 +492,7 @@ pub(crate) fn start_ssh(
                     Err(TryRecvError::Disconnected) => {
                         let _ = channel.close();
                         let _ = app_handle.emit(&connect_event, false);
-                        emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                        finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                         return;
                     }
                 }
@@ -490,7 +503,7 @@ pub(crate) fn start_ssh(
                     "\r\n\x1b[1;31m[Verbindung beendet]\x1b[0m\r\n".to_string(),
                 );
                 let _ = app_handle.emit(&connect_event, false);
-                emit_session_exit_once(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
                 let _ = channel.wait_close();
                 break;
             }
