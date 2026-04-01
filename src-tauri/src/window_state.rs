@@ -55,7 +55,7 @@ pub(crate) fn is_wayland_session() -> bool {
 }
 
 fn get_main_window_state_path() -> PathBuf {
-    PathBuf::from(crate::get_app_dir()).join("main-window-state.json")
+    PathBuf::from(get_app_dir()).join("main-window-state.json")
 }
 
 fn load_main_window_state() -> Option<MainWindowState> {
