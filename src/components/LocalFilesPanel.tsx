@@ -1175,7 +1175,7 @@ export default function LocalFilesPanel({
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
       const win = new WebviewWindow(label, {
-        title: `Edit: ${file.name}`,
+        title: `Termina SSH · Edit: ${file.name}`,
         url: editorUrl,
         width: editorWindowState.width,
         height: editorWindowState.height,
@@ -1183,6 +1183,9 @@ export default function LocalFilesPanel({
         minHeight: 520,
         center: !editorWindowState.maximized,
         resizable: true,
+        visible: true,
+        focus: true,
+        skipTaskbar: false,
         decorations: !Boolean(linuxWindowMode?.wayland_undecorated)
       })
 
