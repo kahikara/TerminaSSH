@@ -1350,6 +1350,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
           server={activePaneServer}
           lang={settings?.lang || "en"}
           visible={showSftp}
+          showStatusBar={settings.showFileBrowserStatusBar !== false}
           onClose={() => setShowSftp(false)}
         />
       )}
@@ -1358,6 +1359,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
         <LocalFilesPanel
           lang={settings?.lang || "en"}
           visible={showLocalFiles}
+          showStatusBar={settings.showFileBrowserStatusBar !== false}
           onClose={() => setShowLocalFiles(false)}
         />
       )}

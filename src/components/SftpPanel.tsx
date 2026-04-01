@@ -402,7 +402,13 @@ function sftpEntryStyle(hovered: boolean, selected = false): React.CSSProperties
   }
 }
 
-export default function SftpPanel({ server, visible, onClose, lang = "de" }: any) {
+export default function SftpPanel({
+  server,
+  visible,
+  onClose,
+  lang = "de",
+  showStatusBar = true
+}: any) {
   const [path, setPath] = useState("/")
   const [files, setFiles] = useState<FileItem[]>([])
   const [progress, setProgress] = useState<TransferProgress | null>(null)
@@ -1647,48 +1653,50 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
         ))}
       </div>
 
-      <div
-        style={{
-          minHeight: 28,
-          display: "flex",
-          alignItems: "center",
-          padding: "0 12px",
-          borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
-          background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
-          fontSize: 11,
-          color: "var(--text-muted, #94a3b8)",
-          flexShrink: 0
-        }}
-      >
+      {showStatusBar && (
         <div
           style={{
-            flex: 1,
-            minWidth: 0,
+            minHeight: 28,
             display: "flex",
             alignItems: "center",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
+            padding: "0 12px",
+            borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+            background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))",
+            fontSize: 11,
+            color: "var(--text-muted, #94a3b8)",
+            flexShrink: 0
           }}
         >
-          <span>{visibleStatusText}</span>
-        </div>
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              alignItems: "center",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            <span>{visibleStatusText}</span>
+          </div>
 
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }}
-        >
-          {selectedStatusText ? <span>{selectedStatusText}</span> : null}
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}
+          >
+            {selectedStatusText ? <span>{selectedStatusText}</span> : null}
+          </div>
         </div>
-      </div>
+      )}
 
       {contextMenuItem && (() => {
         const entry = visibleFiles.find((f) => f.name === contextMenuItem)

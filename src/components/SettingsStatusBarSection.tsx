@@ -21,6 +21,13 @@ export default function SettingsStatusBarSection({
         />
       </FieldRow>
 
+      <FieldRow label={ui.showFileBrowserStatusBarLabel} desc={ui.showFileBrowserStatusBarLabelDesc}>
+        <Toggle
+          checked={settings.showFileBrowserStatusBar !== false}
+          onChange={(next) => setSettings({ ...settings, showFileBrowserStatusBar: next })}
+        />
+      </FieldRow>
+
       <FieldRow label={ui.showStatusBarSessionLabel} desc={ui.showStatusBarSessionLabelDesc}>
         <Toggle
           checked={settings.showStatusBarSession !== false}

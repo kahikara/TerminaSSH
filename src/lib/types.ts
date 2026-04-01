@@ -49,6 +49,7 @@ export type AppSettings = {
   showDashboardActiveSessions: boolean
   showDashboardRecentConnections: boolean
   showStatusBar: boolean
+  showFileBrowserStatusBar: boolean
   showStatusBarSession: boolean
   showStatusBarTunnel: boolean
   showStatusBarLoad: boolean
