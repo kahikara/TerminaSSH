@@ -1,3 +1,4 @@
+use aes_gcm::aead::rand_core::RngCore;
 use tauri::State;
 use std::path::Path;
 
