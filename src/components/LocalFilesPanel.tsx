@@ -291,17 +291,20 @@ function getBreadcrumbMenuPosition(
   const menuHeight = Math.min(220, Math.max(44, itemCount * 34 + 8))
   const gap = 6
 
-  const spaceBelow = panelRect.bottom - buttonRect.bottom
-  const openUp = spaceBelow < menuHeight + gap
+  const left = Math.max(
+    8,
+    Math.min(buttonRect.left - panelRect.left, panelRect.width - menuWidth - 8)
+  )
 
+  const openUp = panelRect.bottom - buttonRect.bottom < menuHeight + gap
   const top = openUp
-    ? -(menuHeight + gap - Math.max(0, buttonRect.height - 4))
-    : buttonRect.height + gap
+    ? Math.max(8, buttonRect.top - panelRect.top - menuHeight - gap)
+    : Math.min(panelRect.height - menuHeight - 8, buttonRect.bottom - panelRect.top + gap)
 
   return {
     position: "absolute",
+    left,
     top,
-    left: 0,
     width: menuWidth,
     minWidth: menuWidth,
     maxHeight: 220,
@@ -311,7 +314,7 @@ function getBreadcrumbMenuPosition(
     boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
     overflowX: "hidden",
     overflowY: "auto",
-    zIndex: 35
+    zIndex: 90
   }
 }
 
@@ -1644,99 +1647,62 @@ export default function LocalFilesPanel({
           {compactBreadcrumbParts(pathParts(path)).map((part, i, arr) => (
             <React.Fragment key={part.collapsed ? `collapsed-${i}` : part.full}>
               {part.collapsed ? (
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
 
-                      if (breadcrumbMenuParts.length > 0) {
-                        setBreadcrumbMenuParts([])
-                        setBreadcrumbMenuStyle(null)
-                        return
-                      }
+                    if (breadcrumbMenuParts.length > 0) {
+                      setBreadcrumbMenuParts([])
+                      setBreadcrumbMenuStyle(null)
+                      return
+                    }
 
-                      const hiddenParts = part.hiddenParts || []
-                      if (!hiddenParts.length) return
+                    const hiddenParts = part.hiddenParts || []
+                    if (!hiddenParts.length) return
 
-                      const panelEl = panelRef.current
-                      const buttonEl = e.currentTarget as HTMLButtonElement
+                    const panelEl = panelRef.current
+                    const buttonEl = e.currentTarget as HTMLButtonElement
 
-                      setMenuItem(null)
-                      setMenuStyle(null)
-                      setContextMenuItem(null)
-                      setContextMenuStyle(null)
-                      setSortMenuOpen(false)
-                      setSortMenuStyle(null)
-                      setRootsMenuOpen(false)
-                      setRootsMenuStyle(null)
-                      setBrowserMenuOpen(false)
-                      setBrowserMenuStyle(null)
-                      setSelectionMenuOpen(false)
-                      setSelectionMenuStyle(null)
+                    setMenuItem(null)
+                    setMenuStyle(null)
+                    setContextMenuItem(null)
+                    setContextMenuStyle(null)
+                    setSortMenuOpen(false)
+                    setSortMenuStyle(null)
+                    setRootsMenuOpen(false)
+                    setRootsMenuStyle(null)
+                    setBrowserMenuOpen(false)
+                    setBrowserMenuStyle(null)
+                    setSelectionMenuOpen(false)
+                    setSelectionMenuStyle(null)
 
-                      if (panelEl && buttonEl) {
-                        const panelRect = panelEl.getBoundingClientRect()
-                        const buttonRect = buttonEl.getBoundingClientRect()
-                        setBreadcrumbMenuStyle(getBreadcrumbMenuPosition(buttonRect, panelRect, hiddenParts.length))
-                      } else {
-                        setBreadcrumbMenuStyle(null)
-                      }
+                    if (panelEl && buttonEl) {
+                      const panelRect = panelEl.getBoundingClientRect()
+                      const buttonRect = buttonEl.getBoundingClientRect()
+                      setBreadcrumbMenuStyle(getBreadcrumbMenuPosition(buttonRect, panelRect, hiddenParts.length))
+                    } else {
+                      setBreadcrumbMenuStyle(null)
+                    }
 
-                      setBreadcrumbMenuParts(hiddenParts)
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      border: "none",
-                      background: "transparent",
-                      color: "var(--text-muted, #94a3b8)",
-                      cursor: "pointer",
-                      padding: 0,
-                      fontSize: 12,
-                      whiteSpace: "nowrap",
-                      flexShrink: 0
-                    }}
-                    title={lang === "de" ? "Versteckte Ebenen anzeigen" : "Show hidden levels"}
-                  >
-                    {part.label}
-                  </button>
-
-                  {breadcrumbMenuParts.length > 0 && (
-                    <div
-                      style={breadcrumbMenuStyle || {
-                        position: "absolute",
-                        top: 22,
-                        left: 0,
-                        width: 188,
-                        minWidth: 188,
-                        maxHeight: 220,
-                        borderRadius: 10,
-                        border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-                        background: "color-mix(in srgb, var(--bg-app) 92%, black)",
-                        boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
-                        overflowX: "hidden",
-                        overflowY: "auto",
-                        zIndex: 35
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {breadcrumbMenuParts.map((hiddenPart) => (
-                        <button
-                          key={hiddenPart.full}
-                          style={menuButtonStyle}
-                          title={hiddenPart.full}
-                          onClick={() => {
-                            clearTransientChrome()
-                            void load(hiddenPart.full)
-                          }}
-                        >
-                          {hiddenPart.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                    setBreadcrumbMenuParts(hiddenParts)
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--text-muted, #94a3b8)",
+                    cursor: "pointer",
+                    padding: 0,
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0
+                  }}
+                  title={lang === "de" ? "Versteckte Ebenen anzeigen" : "Show hidden levels"}
+                >
+                  {part.label}
+                </button>
               ) : (
                 <button
                   onClick={() => {
@@ -1770,6 +1736,42 @@ export default function LocalFilesPanel({
           ))}
         </div>
       </div>
+
+      {breadcrumbMenuParts.length > 0 && (
+        <div
+          data-local-context-menu="true"
+          style={breadcrumbMenuStyle || {
+            position: "absolute",
+            left: 8,
+            top: 84,
+            width: 188,
+            minWidth: 188,
+            maxHeight: 220,
+            borderRadius: 10,
+            border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+            background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+            overflowX: "hidden",
+            overflowY: "auto",
+            zIndex: 90
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {breadcrumbMenuParts.map((hiddenPart) => (
+            <button
+              key={hiddenPart.full}
+              style={menuButtonStyle}
+              title={hiddenPart.full}
+              onClick={() => {
+                clearTransientChrome()
+                void load(hiddenPart.full)
+              }}
+            >
+              {hiddenPart.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div
         ref={listRef}
