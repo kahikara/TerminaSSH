@@ -2,6 +2,7 @@ mod window_state;
 mod window_commands;
 mod backup;
 mod external_commands;
+mod status_bar;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
@@ -36,6 +37,7 @@ use crate::backup::{export_backup_bundle, import_backup_bundle};
 use crate::external_commands::{
     copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,
 };
+use crate::status_bar::get_status_bar_info;
 use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
 use crate::window_commands::{
     current_window_is_maximized, current_window_minimize, current_window_start_dragging,
@@ -130,11 +132,6 @@ pub struct ActiveTunnelItem {
     id: i32,
 }
 
-#[derive(Debug, Serialize)]
-pub struct StatusBarInfo {
-    load: Option<String>,
-    ram: Option<String>,
-}
 
 #[derive(Debug, Serialize)]
 pub struct HostKeyCheckInfo {
@@ -3204,7 +3201,7 @@ fn connect_ssh_session_with_password_override(
     connect_runtime_details(&details)
 }
 
-fn connect_ssh_session(id: i32, vault_state: &State<'_, VaultState>) -> Result<Session, String> {
+pub(crate) fn connect_ssh_session(id: i32, vault_state: &State<'_, VaultState>) -> Result<Session, String> {
     connect_ssh_session_with_password_override(id, None, vault_state)
 }
 
@@ -4507,79 +4504,6 @@ fn measure_tcp_latency(host: String, port: u16) -> Result<u128, String> {
     Ok(start.elapsed().as_millis())
 }
 
-fn parse_meminfo_value_kib(source: &str, key: &str) -> Option<u64> {
-    source.lines().find_map(|line| {
-        let mut parts = line.split_whitespace();
-        let label = parts.next()?;
-        if label.trim_end_matches(':') != key {
-            return None;
-        }
-        parts.next()?.parse::<u64>().ok()
-    })
-}
-
-#[tauri::command]
-fn get_status_bar_info(
-    server_id: i32,
-    vault_state: State<'_, VaultState>,
-) -> Result<StatusBarInfo, String> {
-    const STATUS_SPLIT_MARKER: &str = "--TERMSSH--";
-
-    let sess = connect_ssh_session(server_id, &vault_state)?;
-    let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
-    channel
-        .exec("sh -c 'if [ -r /proc/loadavg ] && [ -r /proc/meminfo ]; then cat /proc/loadavg && printf \"\\n--TERMSSH--\\n\" && cat /proc/meminfo; else printf \"--TERMSSH--\\n\"; fi'")
-        .map_err(|e| e.to_string())?;
-
-    let mut output = String::new();
-    channel
-        .read_to_string(&mut output)
-        .map_err(|e| e.to_string())?;
-    let _ = channel.wait_close();
-
-    let normalized_output = output.replace("\r\n", "\n");
-    let marker_with_newlines = format!("\n{}\n", STATUS_SPLIT_MARKER);
-
-    let (load_part, mem_part) = if let Some((left, right)) =
-        normalized_output.split_once(&marker_with_newlines)
-    {
-        (left, right)
-    } else if let Some(rest) = normalized_output.strip_prefix(&format!("{STATUS_SPLIT_MARKER}\n")) {
-        ("", rest)
-    } else {
-        (normalized_output.as_str(), "")
-    };
-
-    let load = load_part
-        .split_whitespace()
-        .next()
-        .filter(|value| *value != STATUS_SPLIT_MARKER)
-        .and_then(|value| {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-
-            match trimmed.parse::<f64>() {
-                Ok(_) => Some(trimmed.to_string()),
-                Err(_) => None,
-            }
-        });
-
-    let mem_total_kib = parse_meminfo_value_kib(mem_part, "MemTotal");
-    let mem_available_kib = parse_meminfo_value_kib(mem_part, "MemAvailable");
-
-    let ram = match (mem_total_kib, mem_available_kib) {
-        (Some(total), Some(available)) => {
-            let used = total.saturating_sub(available) as f64 / 1024.0 / 1024.0;
-            let total_gb = total as f64 / 1024.0 / 1024.0;
-            Some(format!("{used:.1} / {total_gb:.1} GB"))
-        }
-        _ => None,
-    };
-
-    Ok(StatusBarInfo { load, ram })
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
