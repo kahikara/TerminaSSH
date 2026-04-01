@@ -1,25 +1,25 @@
-mod window_state;
-mod window_commands;
+mod app_paths;
+mod app_setup;
+mod app_state;
 mod backup;
-mod external_commands;
-mod status_bar;
-mod host_keys;
 mod connection_test;
-mod snippets;
-mod system_commands;
-mod local_fs;
 mod connections;
-mod ssh_runtime;
-mod ssh_keys;
+mod db_core;
+mod external_commands;
+mod host_keys;
+mod local_fs;
 mod pty_commands;
 mod sftp_commands;
+mod snippets;
+mod ssh_keys;
+mod ssh_runtime;
+mod status_bar;
+mod system_commands;
 mod tunnels;
 mod vault_commands;
-mod app_paths;
-mod db_core;
 mod vault_core;
-mod app_state;
-mod app_setup;
+mod window_commands;
+mod window_state;
 
 use crate::backup::{export_backup_bundle, import_backup_bundle};
 use crate::connection_test::{check_host_key, test_connection, trust_host_key};
@@ -65,11 +65,14 @@ use crate::window_commands::{
 };
 
 pub(crate) use crate::app_paths::home_dir;
+
 pub(crate) use crate::db_core::{
     current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, open_db,
     open_vault_db, validate_snippet,
 };
+
 pub use crate::app_state::{AppMetaInfo, LinuxWindowModeInfo, SshMessage, SshState};
+
 pub(crate) use crate::vault_core::{
     count_legacy_secret_entries, decode_vault_with_recovery, decode_vault_with_secret,
     delete_legacy_master_key, delete_vault_secret, ensure_vault_runtime_ready,
@@ -77,9 +80,11 @@ pub(crate) use crate::vault_core::{
     load_vault_status, normalize_vault_unlock_mode, read_vault_secret_plaintext,
     require_runtime_vault_dek, upsert_vault_secret, vault_encrypt_combined,
 };
+
 pub use crate::vault_core::{
     EnableVaultProtectionResult, VaultRuntimeState, VaultState, VaultStatus,
 };
+
 pub(crate) use crate::vault_core::{
     DEFAULT_VAULT_UNLOCK_MODE, VAULT_DB_FILE_NAME, VAULT_KEY_LEN, VAULT_SALT_LEN,
     VAULT_SCHEMA_VERSION, VAULT_VALIDATION_TEXT,
