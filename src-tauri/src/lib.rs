@@ -18,21 +18,69 @@ mod vault_commands;
 mod app_paths;
 mod db_core;
 mod vault_core;
+mod app_state;
 
-use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+
 use tauri::menu::{Menu, MenuItem};
-use tauri::{Emitter, Manager, WindowEvent};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
-
+use crate::app_paths::maybe_relaunch_appimage_with_wayland_preload;
 use crate::backup::{export_backup_bundle, import_backup_bundle};
+use crate::connection_test::{check_host_key, test_connection, trust_host_key};
+use crate::connections::{
+    delete_connection, get_connections, save_connection, set_connection_password,
+    update_connection,
+};
+use crate::external_commands::{
+    copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,
+};
+use crate::local_fs::{
+    get_local_home_dir, get_local_roots, local_delete, local_list_dir, local_mkdir,
+    local_read_file, local_rename, local_write_file,
+};
+use crate::pty_commands::{
+    close_session, resize_pty, start_local_pty, start_quick_ssh, start_ssh, write_to_pty,
+};
+use crate::sftp_commands::{
+    cancel_transfer, sftp_delete, sftp_download, sftp_list_dir, sftp_mkdir, sftp_read_file,
+    sftp_rename, sftp_upload, sftp_write_file,
+};
+use crate::snippets::{add_snippet, delete_snippet, get_snippets, update_snippet};
+use crate::ssh_keys::{
+    delete_ssh_key, generate_ssh_key, get_managed_keys_dir, get_ssh_keys, save_ssh_key,
+};
+use crate::status_bar::get_status_bar_info;
+use crate::system_commands::{measure_tcp_latency, read_clipboard, write_clipboard};
+use crate::tunnels::{
+    delete_tunnel, get_active_tunnels, get_tunnels, save_tunnel, start_tunnel, stop_tunnel,
+    update_tunnel,
+};
+use crate::vault_commands::{
+    change_vault_master_password, disable_vault_protection, enable_vault_protection,
+    get_vault_status, lock_vault, regenerate_vault_recovery_key,
+    reset_vault_master_password_with_recovery_key, unlock_vault, update_vault_unlock_mode,
+    validate_vault_recovery_key,
+};
+use crate::window_commands::{
+    current_window_is_maximized, current_window_minimize, current_window_start_dragging,
+    current_window_toggle_maximize, get_app_meta, get_linux_window_mode, save_window_state_all,
+    window_close_main, window_is_maximized, window_minimize, window_start_dragging,
+    window_toggle_maximize,
+};
+use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
+
 pub(crate) use crate::app_paths::home_dir;
+pub(crate) use crate::db_core::{
+    current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, init_db,
+    open_db, open_vault_db, validate_snippet,
+};
+pub use crate::app_state::{AppMetaInfo, LinuxWindowModeInfo, SshMessage, SshState};
 pub(crate) use crate::vault_core::{
     count_legacy_secret_entries, decode_vault_with_recovery, decode_vault_with_secret,
     delete_legacy_master_key, delete_vault_secret, ensure_vault_runtime_ready,
@@ -49,86 +97,8 @@ pub(crate) use crate::vault_core::{
     VAULT_SCHEMA_VERSION, VAULT_VALIDATION_TEXT,
 };
 
-pub(crate) use crate::db_core::{
-    current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, init_db,
-    open_db, open_vault_db, validate_snippet,
-};
-
-use crate::app_paths::maybe_relaunch_appimage_with_wayland_preload;
-use crate::external_commands::{
-    copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,
-};
-use crate::connections::{
-    delete_connection, get_connections, save_connection, set_connection_password,
-    update_connection,
-};
-use crate::connection_test::{
-    check_host_key, test_connection, trust_host_key,
-};
-use crate::pty_commands::{
-    close_session, resize_pty, start_local_pty, start_quick_ssh, start_ssh, write_to_pty,
-};
-use crate::sftp_commands::{
-    cancel_transfer, sftp_delete, sftp_download, sftp_list_dir, sftp_mkdir, sftp_read_file,
-    sftp_rename, sftp_upload, sftp_write_file,
-};
-use crate::ssh_keys::{
-    delete_ssh_key, generate_ssh_key, get_managed_keys_dir, get_ssh_keys,
-    save_ssh_key,
-};
-use crate::local_fs::{
-    get_local_home_dir, get_local_roots, local_delete, local_list_dir, local_mkdir,
-    local_read_file, local_rename, local_write_file,
-};
-use crate::snippets::{add_snippet, delete_snippet, get_snippets, update_snippet};
-use crate::tunnels::{
-    TunnelRuntimeEntry, delete_tunnel, get_active_tunnels, get_tunnels, save_tunnel,
-    start_tunnel, stop_tunnel, update_tunnel,
-};
-use crate::status_bar::get_status_bar_info;
-use crate::system_commands::{measure_tcp_latency, read_clipboard, write_clipboard};
-use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
-use crate::vault_commands::{
-    change_vault_master_password, disable_vault_protection, enable_vault_protection,
-    get_vault_status, lock_vault, regenerate_vault_recovery_key,
-    reset_vault_master_password_with_recovery_key, unlock_vault, update_vault_unlock_mode,
-    validate_vault_recovery_key,
-};
-use crate::window_commands::{
-    current_window_is_maximized, current_window_minimize, current_window_start_dragging,
-    current_window_toggle_maximize, get_app_meta, get_linux_window_mode, save_window_state_all,
-    window_close_main, window_is_maximized, window_minimize, window_start_dragging,
-    window_toggle_maximize,
-};
-
-#[derive(Debug, Serialize)]
-pub struct LinuxWindowModeInfo {
-    wayland_undecorated: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AppMetaInfo {
-    app_version: String,
-}
-
-pub enum SshMessage {
-    Input(String),
-    Resize(u32, u32),
-}
-
-pub struct SshState {
-    txs: Mutex<HashMap<String, Sender<SshMessage>>>,
-    transfers: Mutex<HashMap<String, Arc<AtomicBool>>>,
-    tunnel_runtime: Mutex<HashMap<i32, TunnelRuntimeEntry>>,
-}
-
 pub(crate) const SSH_CONNECT_TIMEOUT_SECS: u64 = 5;
-const DB_BUSY_TIMEOUT_SECS: u64 = 5;
-
-#[cfg(not(unix))]
-fn set_private_file_permissions(_path: &Path) -> Result<(), String> {
-    Ok(())
-}
+pub(crate) const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -352,4 +322,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("Fehler beim Starten");
 }
-
