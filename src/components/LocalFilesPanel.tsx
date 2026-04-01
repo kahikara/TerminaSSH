@@ -919,7 +919,12 @@ export default function LocalFilesPanel({
         e.preventDefault()
         e.stopPropagation()
 
-        if (menuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen || contextMenuItem) {
+        if (selectedItems.length > 0) {
+          selectSingleItem(null)
+          return
+        }
+
+        if (hasTransientMenuOpen) {
           clearTransientChrome()
           return
         }
@@ -1038,6 +1043,7 @@ export default function LocalFilesPanel({
     menuItem,
     sortMenuOpen,
     rootsMenuOpen,
+    hasTransientMenuOpen,
     errorText,
     successText,
     navigableEntries,

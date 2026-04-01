@@ -1209,14 +1209,61 @@ export default function SftpPanel({
       const tag = target?.tagName?.toLowerCase()
       const isTyping = tag === "input" || tag === "textarea" || Boolean(target?.isContentEditable)
 
+      if (conflict.open) {
+        if (e.key === "Escape") {
+          e.preventDefault()
+          e.stopPropagation()
+          closeConflict("cancel")
+        }
+        return
+      }
+
+      if (renameItem) {
+        if (e.key === "Escape") {
+          e.preventDefault()
+          e.stopPropagation()
+          setRenameItem(null)
+          setRenameValue("")
+        }
+        return
+      }
+
+      if (newFolderOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault()
+          e.stopPropagation()
+          setNewFolderOpen(false)
+          setNewFolderValue("")
+        }
+        return
+      }
+
+      if (deleteItems.length > 0) {
+        if (e.key === "Escape") {
+          e.preventDefault()
+          e.stopPropagation()
+          setDeleteItems([])
+        }
+        return
+      }
+
       if (isTyping) return
 
       if (e.key === "Escape") {
-        if (hasTransientMenuOpen) {
-          e.preventDefault()
-          e.stopPropagation()
-          clearTransientChrome()
+        e.preventDefault()
+        e.stopPropagation()
+
+        if (selectedItems.length > 0) {
+          selectSingleItem(null)
+          return
         }
+
+        if (hasTransientMenuOpen) {
+          clearTransientChrome()
+          return
+        }
+
+        onClose?.()
         return
       }
 
@@ -1290,7 +1337,7 @@ export default function SftpPanel({
 
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [visible, hasTransientMenuOpen, navigableEntries, activeItem, selectedItems, path, visibleFiles])
+  }, [visible, hasTransientMenuOpen, conflict.open, renameItem, newFolderOpen, deleteItems.length, navigableEntries, activeItem, selectedItems, path, visibleFiles, onClose])
 
   return (
     <div
