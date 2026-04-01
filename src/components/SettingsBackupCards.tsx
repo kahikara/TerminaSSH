@@ -58,12 +58,12 @@ export default function SettingsBackupCards({
       >
         <Save size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
-          {lang === "de" ? "Ohne Passwort exportieren" : "Export without password"}
+          {lang === "de" ? "JSON Backup ohne Passwort" : "JSON backup without password"}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
           {lang === "de"
-            ? "Speichert das Backup als lesbare JSON Datei."
-            : "Saves the backup as a readable JSON file."}
+            ? "Speichert das Backup als lesbare JSON Datei ohne Passwortschutz."
+            : "Saves the backup as a readable JSON file without password protection."}
         </div>
       </button>
 
@@ -74,7 +74,7 @@ export default function SettingsBackupCards({
       >
         <Database size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
-          {lang === "de" ? "Mit Passwort exportieren" : "Export with password"}
+          {lang === "de" ? "Verschlüsseltes Backup mit Passwort" : "Encrypted backup with password"}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
           {lang === "de"
@@ -94,8 +94,8 @@ export default function SettingsBackupCards({
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
           {lang === "de"
-            ? "Importiert normale JSON Backups oder verschlüsselte Backups."
-            : "Imports plain JSON backups or encrypted backups."}
+            ? "Importiert JSON Backups ohne Passwort oder verschlüsselte Backups mit Passwort."
+            : "Imports JSON backups without password or encrypted backups with password."}
         </div>
       </button>
     </div>

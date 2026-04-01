@@ -38,6 +38,8 @@ type BundleCounts = {
   recentConnections: number
 }
 
+type BackupMode = "plain" | "encrypted"
+
 const NOTES_STORAGE_PREFIX = "termina_notes:"
 const RECENT_CONNECTIONS_STORAGE_KEY = "termina_recent_connections"
 const BACKUP_FORMAT_NAME = "terminassh-backup-v4"
@@ -171,6 +173,18 @@ function getBundleCounts(bundleJson: string): BundleCounts {
   }
 }
 
+function getBackupModeLabel(lang: string, mode: BackupMode): string {
+  if (lang === "de") {
+    return mode === "encrypted"
+      ? "Verschlüsseltes Backup mit Passwort"
+      : "JSON Backup ohne Passwort"
+  }
+
+  return mode === "encrypted"
+    ? "Encrypted backup with password"
+    : "JSON backup without password"
+}
+
 function showExportSummaryDialog(
   showDialog: (config: any) => void,
   showToast: (msg: string, isErr?: boolean) => void,
@@ -185,10 +199,7 @@ function showExportSummaryDialog(
   const title =
     lang === "de" ? "Backup exportiert" : "Backup exported"
 
-  const modeLabel =
-    encrypted
-      ? lang === "de" ? "Verschlüsselt" : "Encrypted"
-      : lang === "de" ? "Unverschlüsselt" : "Plain"
+  const modeLabel = getBackupModeLabel(lang, encrypted ? "encrypted" : "plain")
 
   const description =
     lang === "de"
@@ -653,7 +664,7 @@ export async function handleImportConfig({
 
     if (!path) return
 
-    const applyImportedBundle = async (bundleJson: string) => {
+    const applyImportedBundle = async (bundleJson: string, mode: BackupMode) => {
       const bundleMeta = getBundleMeta(bundleJson)
       const result: any = await invoke("import_backup_bundle", { bundleJson })
       const notesResult = importNotesFromResult(result?.notes, lang)
@@ -674,11 +685,14 @@ export async function handleImportConfig({
       const title =
         lang === "de" ? "Backup Import abgeschlossen" : "Backup import completed"
 
+      const modeLabel = getBackupModeLabel(lang, mode)
+
       const details =
         lang === "de"
           ? [
               "Backup Details",
               "",
+              `• Modus: ${modeLabel}`,
               `• Bundle Version: ${bundleMeta.version || "-"}`,
               `• App: ${bundleMeta.appName || "-"}`,
               `• App Version: ${bundleMeta.appVersion || "-"}`,
@@ -688,6 +702,7 @@ export async function handleImportConfig({
           : [
               "Backup details",
               "",
+              `• Mode: ${modeLabel}`,
               `• Bundle version: ${bundleMeta.version || "-"}`,
               `• App: ${bundleMeta.appName || "-"}`,
               `• App version: ${bundleMeta.appVersion || "-"}`,
@@ -758,7 +773,7 @@ export async function handleImportConfig({
         return
       }
 
-      await applyImportedBundle(rawContent)
+      await applyImportedBundle(rawContent, "plain")
       return
     } catch {
     }
@@ -803,7 +818,7 @@ export async function handleImportConfig({
           return
         }
 
-        await applyImportedBundle(decrypted)
+        await applyImportedBundle(decrypted, "encrypted")
       }
     })
   } catch (e: any) {
