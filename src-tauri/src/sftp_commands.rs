@@ -33,6 +33,30 @@ pub(crate) struct SftpProgress {
     current_file: String,
 }
 
+fn register_transfer_session(
+    state: &State<'_, SshState>,
+    session_id: &str,
+    cancel_flag: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let mut transfers = state
+        .transfers
+        .lock()
+        .map_err(|_| "SFTP transfer state lock failed".to_string())?;
+
+    if transfers.contains_key(session_id) {
+        return Err(format!("Transfer '{}' is already active", session_id));
+    }
+
+    transfers.insert(session_id.to_string(), cancel_flag);
+    Ok(())
+}
+
+fn clear_transfer_session(state: &State<'_, SshState>, session_id: &str) {
+    if let Ok(mut transfers) = state.transfers.lock() {
+        transfers.remove(session_id);
+    }
+}
+
 fn normalize_remote_path(path: &str) -> Result<String, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -177,10 +201,14 @@ pub(crate) fn sftp_write_file(
 
 #[tauri::command]
 pub(crate) fn cancel_transfer(session_id: String, state: State<'_, SshState>) {
-    if let Ok(transfers) = state.transfers.lock() {
-        if let Some(flag) = transfers.get(&session_id) {
-            flag.store(true, Ordering::Relaxed);
-        }
+    let flag = state
+        .transfers
+        .lock()
+        .ok()
+        .and_then(|transfers| transfers.get(&session_id).cloned());
+
+    if let Some(flag) = flag {
+        flag.store(true, Ordering::Relaxed);
     }
 }
 
@@ -277,11 +305,7 @@ pub(crate) async fn sftp_upload(
     let remote_path = normalize_remote_path(&remote_path)?;
     let runtime_details = load_connection_runtime_details(id, None, &vault_state)?;
     let cancel_flag = Arc::new(AtomicBool::new(false));
-    state
-        .transfers
-        .lock()
-        .map_err(|_| "SFTP transfer state lock failed".to_string())?
-        .insert(session_id.clone(), Arc::clone(&cancel_flag));
+    register_transfer_session(&state, &session_id, Arc::clone(&cancel_flag))?;
     let s_id = session_id.clone();
     let join_result = tauri::async_runtime::spawn_blocking(move || {
         let sess = connect_runtime_details(&runtime_details)?;
@@ -301,9 +325,7 @@ pub(crate) async fn sftp_upload(
     })
     .await;
 
-    if let Ok(mut transfers) = state.transfers.lock() {
-        transfers.remove(&session_id);
-    }
+    clear_transfer_session(&state, &session_id);
 
     let inner_result = join_result.map_err(|_| "Thread Error".to_string())?;
     inner_result
@@ -412,11 +434,7 @@ pub(crate) async fn sftp_download(
 
     let runtime_details = load_connection_runtime_details(id, None, &vault_state)?;
     let cancel_flag = Arc::new(AtomicBool::new(false));
-    state
-        .transfers
-        .lock()
-        .map_err(|_| "SFTP transfer state lock failed".to_string())?
-        .insert(session_id.clone(), Arc::clone(&cancel_flag));
+    register_transfer_session(&state, &session_id, Arc::clone(&cancel_flag))?;
     let s_id = session_id.clone();
     let join_result = tauri::async_runtime::spawn_blocking(move || {
         let sess = connect_runtime_details(&runtime_details)?;
@@ -436,9 +454,7 @@ pub(crate) async fn sftp_download(
     })
     .await;
 
-    if let Ok(mut transfers) = state.transfers.lock() {
-        transfers.remove(&session_id);
-    }
+    clear_transfer_session(&state, &session_id);
 
     let inner_result = join_result.map_err(|_| "Thread Error".to_string())?;
     inner_result
