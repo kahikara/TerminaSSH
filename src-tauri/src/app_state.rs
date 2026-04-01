@@ -26,3 +26,13 @@ pub struct SshState {
     pub(crate) transfers: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub(crate) tunnel_runtime: Mutex<HashMap<i32, TunnelRuntimeEntry>>,
 }
+
+impl SshState {
+    pub(crate) fn new() -> Self {
+        Self {
+            txs: Mutex::new(HashMap::new()),
+            transfers: Mutex::new(HashMap::new()),
+            tunnel_runtime: Mutex::new(HashMap::new()),
+        }
+    }
+}

@@ -26,6 +26,18 @@ pub struct VaultRuntimeState {
     pub(crate) session_dek: Option<Vec<u8>>,
 }
 
+impl VaultState {
+    pub(crate) fn new() -> Self {
+        Self {
+            runtime: Mutex::new(VaultRuntimeState {
+                is_unlocked: false,
+                unlock_mode: DEFAULT_VAULT_UNLOCK_MODE.to_string(),
+                session_dek: None,
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct VaultStatus {
     pub(crate) is_initialized: bool,

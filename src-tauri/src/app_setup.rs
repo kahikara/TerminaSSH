@@ -7,7 +7,11 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, WindowEvent};
 
-use crate::vault_core::{ensure_vault_runtime_ready, VaultState};
+use crate::app_paths::maybe_relaunch_appimage_with_wayland_preload;
+use crate::db_core::init_db;
+use crate::vault_core::{
+    ensure_vault_runtime_ready, init_vault_db, migrate_legacy_master_key_to_vault, VaultState,
+};
 use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
 
 fn setup_main_window(app: &tauri::AppHandle) {
@@ -110,6 +114,23 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), tauri::Error> {
     }
 
     Ok(())
+}
+
+pub(crate) fn prepare_runtime() {
+    #[cfg(target_os = "linux")]
+    maybe_relaunch_appimage_with_wayland_preload();
+
+    if let Err(e) = init_db() {
+        eprintln!("Database init failed: {}", e);
+    }
+
+    if let Err(e) = init_vault_db() {
+        eprintln!("Vault init failed: {}", e);
+    }
+
+    if let Err(e) = migrate_legacy_master_key_to_vault() {
+        eprintln!("Legacy master.key migration failed: {}", e);
+    }
 }
 
 pub(crate) fn setup_app(

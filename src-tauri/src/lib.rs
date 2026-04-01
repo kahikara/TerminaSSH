@@ -21,11 +21,6 @@ mod vault_core;
 mod app_state;
 mod app_setup;
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-
-use crate::app_paths::maybe_relaunch_appimage_with_wayland_preload;
 use crate::backup::{export_backup_bundle, import_backup_bundle};
 use crate::connection_test::{check_host_key, test_connection, trust_host_key};
 use crate::connections::{
@@ -71,17 +66,16 @@ use crate::window_commands::{
 
 pub(crate) use crate::app_paths::home_dir;
 pub(crate) use crate::db_core::{
-    current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, init_db,
-    open_db, open_vault_db, validate_snippet,
+    current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, open_db,
+    open_vault_db, validate_snippet,
 };
 pub use crate::app_state::{AppMetaInfo, LinuxWindowModeInfo, SshMessage, SshState};
 pub(crate) use crate::vault_core::{
     count_legacy_secret_entries, decode_vault_with_recovery, decode_vault_with_secret,
     delete_legacy_master_key, delete_vault_secret, ensure_vault_runtime_ready,
     finalize_legacy_master_key_cleanup_with_dek, generate_recovery_key, init_vault_db,
-    load_vault_status, migrate_legacy_master_key_to_vault, normalize_vault_unlock_mode,
-    read_vault_secret_plaintext, require_runtime_vault_dek, upsert_vault_secret,
-    vault_encrypt_combined,
+    load_vault_status, normalize_vault_unlock_mode, read_vault_secret_plaintext,
+    require_runtime_vault_dek, upsert_vault_secret, vault_encrypt_combined,
 };
 pub use crate::vault_core::{
     EnableVaultProtectionResult, VaultRuntimeState, VaultState, VaultStatus,
@@ -96,20 +90,7 @@ pub(crate) const DB_BUSY_TIMEOUT_SECS: u64 = 5;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(target_os = "linux")]
-    maybe_relaunch_appimage_with_wayland_preload();
-
-    if let Err(e) = init_db() {
-        eprintln!("Database init failed: {}", e);
-    }
-
-    if let Err(e) = init_vault_db() {
-        eprintln!("Vault init failed: {}", e);
-    }
-
-    if let Err(e) = migrate_legacy_master_key_to_vault() {
-        eprintln!("Legacy master.key migration failed: {}", e);
-    }
+    app_setup::prepare_runtime();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -117,18 +98,8 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(SshState {
-            txs: Mutex::new(HashMap::new()),
-            transfers: Mutex::new(HashMap::new()),
-            tunnel_runtime: Mutex::new(HashMap::new()),
-        })
-        .manage(VaultState {
-            runtime: Mutex::new(VaultRuntimeState {
-                is_unlocked: false,
-                unlock_mode: DEFAULT_VAULT_UNLOCK_MODE.to_string(),
-                session_dek: None,
-            }),
-        })
+        .manage(SshState::new())
+        .manage(VaultState::new())
         .invoke_handler(tauri::generate_handler![
             save_connection,
             get_connections,
