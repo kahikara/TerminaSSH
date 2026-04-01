@@ -16,7 +16,7 @@ mod tunnels;
 
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
-use ssh2::{CheckResult, KnownHostFileKind, KnownHostKeyFormat, Session};
+use ssh2::Session;
 use std::collections::HashMap;
 use std::fs;
 use std::net::{TcpStream, ToSocketAddrs};
@@ -47,7 +47,7 @@ use crate::connections::{
     update_connection,
 };
 use crate::connection_test::{
-    check_host_key, test_connection, trust_host_key, ConnectionTestResult,
+    check_host_key, test_connection, trust_host_key,
 };
 use crate::pty_commands::{
     close_session, resize_pty, start_local_pty, start_quick_ssh, start_ssh, write_to_pty,
