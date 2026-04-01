@@ -66,7 +66,7 @@ fn ensure_ssh_key_unique(
     Ok(())
 }
 
-pub(crate) pub(crate) fn read_public_key_for_path(private_key_path: &str) -> String {
+pub(crate) fn read_public_key_for_path(private_key_path: &str) -> String {
     let pub_path = format!("{}.pub", private_key_path);
     fs::read_to_string(pub_path)
         .unwrap_or_default()
@@ -74,7 +74,7 @@ pub(crate) pub(crate) fn read_public_key_for_path(private_key_path: &str) -> Str
         .to_string()
 }
 
-pub(crate) pub(crate) fn fingerprint_for_pubkey_path(pub_path: &str) -> String {
+pub(crate) fn fingerprint_for_pubkey_path(pub_path: &str) -> String {
     match run_ssh_keygen(&["-lf", pub_path]) {
         Ok(out) if out.status.success() => {
             let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
