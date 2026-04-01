@@ -5,6 +5,7 @@ mod external_commands;
 mod status_bar;
 mod host_keys;
 mod snippets;
+mod system_commands;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
@@ -32,7 +33,6 @@ use aes_gcm::{
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::backup::{export_backup_bundle, import_backup_bundle};
 use crate::external_commands::{
@@ -45,6 +45,7 @@ use crate::host_keys::{
 };
 use crate::snippets::{add_snippet, delete_snippet, get_snippets, update_snippet};
 use crate::status_bar::get_status_bar_info;
+use crate::system_commands::{measure_tcp_latency, read_clipboard, write_clipboard};
 use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
 use crate::window_commands::{
     current_window_is_maximized, current_window_minimize, current_window_start_dragging,
@@ -1207,7 +1208,7 @@ pub(crate) fn current_export_timestamp() -> String {
     Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
-fn tcp_connect_with_timeout(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
+pub(crate) fn tcp_connect_with_timeout(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, String> {
     let addr_str = format!("{}:{}", host, port);
     let addrs: Vec<_> = addr_str
         .to_socket_addrs()
@@ -1952,15 +1953,6 @@ fn lock_vault(vault_state: State<'_, VaultState>) -> Result<(), String> {
     runtime.is_unlocked = false;
     runtime.session_dek = None;
     Ok(())
-}
-
-#[tauri::command]
-fn write_clipboard(app: AppHandle, text: String) -> Result<(), String> {
-    app.clipboard().write_text(text).map_err(|e| e.to_string())
-}
-#[tauri::command]
-fn read_clipboard(app: AppHandle) -> Result<String, String> {
-    app.clipboard().read_text().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -4232,12 +4224,6 @@ fn close_session(session_id: String, state: State<'_, SshState>) {
     if let Ok(mut txs) = state.txs.lock() {
         txs.remove(&session_id);
     }
-}
-#[tauri::command]
-fn measure_tcp_latency(host: String, port: u16) -> Result<u128, String> {
-    let start = std::time::Instant::now();
-    tcp_connect_with_timeout(&host, port, Duration::from_millis(1500))?;
-    Ok(start.elapsed().as_millis())
 }
 
 
