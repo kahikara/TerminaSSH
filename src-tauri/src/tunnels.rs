@@ -4,11 +4,12 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tauri::State;
 
 use crate::{
-    SshState, connect_runtime_details, ensure_connection_exists, load_connection_runtime_details,
-    open_db,
+    SshState, VaultState, connect_runtime_details, ensure_connection_exists,
+    load_connection_runtime_details, open_db,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
