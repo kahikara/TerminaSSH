@@ -20,6 +20,49 @@ fn emit_session_exit_once(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBo
     }
 }
 
+fn register_session_sender(
+    state: &State<'_, SshState>,
+    session_id: &str,
+    tx: std::sync::mpsc::Sender<SshMessage>,
+) -> Result<(), String> {
+    let mut txs = state
+        .txs
+        .lock()
+        .map_err(|_| "PTY state lock failed".to_string())?;
+
+    if txs.contains_key(session_id) {
+        return Err(format!("Session '{}' is already active", session_id));
+    }
+
+    txs.insert(session_id.to_string(), tx);
+    Ok(())
+}
+
+fn send_session_message(
+    state: &State<'_, SshState>,
+    session_id: &str,
+    message: SshMessage,
+) -> Result<(), String> {
+    let tx = {
+        let txs = state
+            .txs
+            .lock()
+            .map_err(|_| "PTY state lock failed".to_string())?;
+        txs.get(session_id).cloned()
+    }
+    .ok_or_else(|| format!("Session '{}' is not active", session_id))?;
+
+    match tx.send(message) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            if let Ok(mut txs) = state.txs.lock() {
+                txs.remove(session_id);
+            }
+            Err(format!("Session '{}' is no longer active", session_id))
+        }
+    }
+}
+
 fn sanitize_local_shell_env(cmd: &mut CommandBuilder) {
     for key in [
         "APPIMAGE",
@@ -172,11 +215,7 @@ pub(crate) fn start_local_pty(
         .map_err(|e| format!("Writer Fehler: {}", e))?;
 
     let (tx, rx) = channel::<SshMessage>();
-    state
-        .txs
-        .lock()
-        .map_err(|_| "PTY state lock failed".to_string())?
-        .insert(session_id.clone(), tx);
+    register_session_sender(&state, &session_id, tx)?;
 
     let event_name = format!("term-output-{}", session_id);
     let app_for_reader = app_handle.clone();
@@ -253,11 +292,7 @@ pub(crate) fn start_quick_ssh(
 ) -> Result<(), String> {
     let sess = connect_quick_session(host, port, username, password, private_key, passphrase)?;
     let (tx, rx) = channel::<SshMessage>();
-    state
-        .txs
-        .lock()
-        .map_err(|_| "SSH state lock failed".to_string())?
-        .insert(session_id.clone(), tx);
+    register_session_sender(&state, &session_id, tx)?;
 
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
@@ -371,11 +406,7 @@ pub(crate) fn start_ssh(
 ) -> Result<(), String> {
     let sess = connect_ssh_session_with_password_override(id, password_override, &vault_state)?;
     let (tx, rx) = channel::<SshMessage>();
-    state
-        .txs
-        .lock()
-        .map_err(|_| "SSH state lock failed".to_string())?
-        .insert(session_id.clone(), tx);
+    register_session_sender(&state, &session_id, tx)?;
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
     let _ = app_handle.emit(&connect_event, true);
@@ -476,15 +507,7 @@ pub(crate) fn write_to_pty(
     input: String,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    if let Some(tx) = state
-        .txs
-        .lock()
-        .map_err(|_| "PTY state lock failed".to_string())?
-        .get(&session_id)
-    {
-        let _ = tx.send(SshMessage::Input(input));
-    }
-    Ok(())
+    send_session_message(&state, &session_id, SshMessage::Input(input))
 }
 #[tauri::command]
 pub(crate) fn resize_pty(
@@ -493,15 +516,7 @@ pub(crate) fn resize_pty(
     rows: u32,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    if let Some(tx) = state
-        .txs
-        .lock()
-        .map_err(|_| "PTY state lock failed".to_string())?
-        .get(&session_id)
-    {
-        let _ = tx.send(SshMessage::Resize(cols, rows));
-    }
-    Ok(())
+    send_session_message(&state, &session_id, SshMessage::Resize(cols, rows))
 }
 #[tauri::command]
 pub(crate) fn close_session(session_id: String, state: State<'_, SshState>) {
