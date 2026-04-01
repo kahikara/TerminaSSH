@@ -16,7 +16,8 @@ use crate::db_core::{current_export_timestamp, open_db, open_vault_db, validate_
 use crate::ssh_keys::{fingerprint_for_pubkey_path, read_public_key_for_path};
 use crate::ssh_runtime::load_connection_runtime_details;
 use crate::vault_core::{
-    init_vault_db, require_runtime_vault_dek, upsert_vault_secret, VaultState,
+    delete_vault_secret, init_vault_db, require_runtime_vault_dek, upsert_vault_secret,
+    VaultState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
