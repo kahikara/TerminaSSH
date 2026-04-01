@@ -460,6 +460,8 @@ export default function LocalFilesPanel({
   const [rootsMenuStyle, setRootsMenuStyle] = useState<React.CSSProperties | null>(null)
   const [browserMenuOpen, setBrowserMenuOpen] = useState(false)
   const [browserMenuStyle, setBrowserMenuStyle] = useState<React.CSSProperties | null>(null)
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false)
+  const [selectionMenuStyle, setSelectionMenuStyle] = useState<React.CSSProperties | null>(null)
   const [panelWidth, setPanelWidth] = useState(readStoredPanelWidth())
   const [sortMode, setSortMode] = useState<LocalSortMode>("folders")
   const [menuItem, setMenuItem] = useState<string | null>(null)
@@ -504,7 +506,7 @@ export default function LocalFilesPanel({
     return hasLocalParentPath(path) ? ["__parent__", ...entries] : entries
   }, [path, visibleFiles])
 
-  const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen)
+  const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen || selectionMenuOpen)
 
   const visibleFolderCount = useMemo(
     () => visibleFiles.filter((file) => file.is_dir).length,
@@ -634,14 +636,24 @@ export default function LocalFilesPanel({
     setRootsMenuStyle(null)
     setBrowserMenuOpen(false)
     setBrowserMenuStyle(null)
+    setSelectionMenuOpen(false)
+    setSelectionMenuStyle(null)
   }
 
   function openBrowserContextMenu(clientX: number, clientY: number) {
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
-    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 160))
+    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 124))
     setBrowserMenuOpen(true)
+  }
+
+  function openSelectionContextMenu(clientX: number, clientY: number) {
+    const panelRect = panelRef.current?.getBoundingClientRect()
+    if (!panelRect) return
+
+    setSelectionMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 54))
+    setSelectionMenuOpen(true)
   }
 
   function openEntryContextMenu(entry: FileItem, clientX: number, clientY: number) {
@@ -651,7 +663,7 @@ export default function LocalFilesPanel({
     if (selectedVisibleEntries.length > 1 && selectedItems.includes(entry.name)) {
       setContextMenuItem(null)
       setContextMenuStyle(null)
-      openBrowserContextMenu(clientX, clientY)
+      openSelectionContextMenu(clientX, clientY)
       return
     }
 
@@ -1907,6 +1919,36 @@ export default function LocalFilesPanel({
         )
       })()}
 
+      {selectionMenuOpen && (
+        <div
+          data-local-context-menu="true"
+          style={selectionMenuStyle || {
+            position: "absolute",
+            left: 8,
+            top: 8,
+            width: 176,
+            minWidth: 176,
+            borderRadius: 10,
+            border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+            background: "var(--bg-app, #020617)",
+            boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+            overflow: "hidden",
+            zIndex: 80
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
+            onClick={() => {
+              clearTransientChrome()
+              openDeleteSelection()
+            }}
+          >
+            {lang === "de" ? "Auswahl löschen" : "Delete selected"}
+          </button>
+        </div>
+      )}
+
       {browserMenuOpen && (
         <div
           data-local-context-menu="true"
@@ -1925,18 +1967,6 @@ export default function LocalFilesPanel({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {selectedVisibleEntries.length > 0 && (
-            <button
-              style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
-              onClick={() => {
-                clearTransientChrome()
-                openDeleteSelection()
-              }}
-            >
-              {lang === "de" ? "Auswahl löschen" : "Delete selected"}
-            </button>
-          )}
-
           <button
             style={menuButtonStyle}
             onClick={() => {
