@@ -12,12 +12,12 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub(crate) struct ConnectionRuntimeDetails {
-    host: String,
-    port: u16,
-    username: String,
-    password: String,
-    private_key: String,
-    passphrase: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) username: String,
+    pub(crate) password: String,
+    pub(crate) private_key: String,
+    pub(crate) passphrase: String,
 }
 
 fn default_ssh_private_key_paths() -> Vec<PathBuf> {
