@@ -1318,6 +1318,24 @@ export default function SftpPanel({
         return
       }
 
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault()
+        e.stopPropagation()
+
+        if (e.shiftKey) {
+          selectRangeToItem(current)
+          return
+        }
+
+        if (mod) {
+          toggleItemSelection(current)
+          return
+        }
+
+        selectSingleItem(current)
+        return
+      }
+
       if (e.key === "ArrowDown") {
         e.preventDefault()
         e.stopPropagation()
