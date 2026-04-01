@@ -27,17 +27,19 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
+use tauri::{Emitter, Manager, WindowEvent};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 
 use crate::backup::{export_backup_bundle, import_backup_bundle};
+pub(crate) use crate::app_paths::home_dir;
 pub(crate) use crate::vault_core::{
     count_legacy_secret_entries, decode_vault_with_recovery, decode_vault_with_secret,
-    delete_legacy_master_key, delete_vault_secret, derive_vault_key_from_secret,
-    ensure_vault_runtime_ready, finalize_legacy_master_key_cleanup_with_dek,
-    generate_recovery_key, init_vault_db, load_vault_status, migrate_legacy_master_key_to_vault,
-    normalize_vault_unlock_mode, read_vault_secret_plaintext, require_runtime_vault_dek,
-    upsert_vault_secret, vault_decrypt_combined, vault_encrypt_combined,
+    delete_legacy_master_key, delete_vault_secret, ensure_vault_runtime_ready,
+    finalize_legacy_master_key_cleanup_with_dek, generate_recovery_key, init_vault_db,
+    load_vault_status, migrate_legacy_master_key_to_vault, normalize_vault_unlock_mode,
+    read_vault_secret_plaintext, require_runtime_vault_dek, upsert_vault_secret,
+    vault_encrypt_combined,
 };
 pub use crate::vault_core::{
     EnableVaultProtectionResult, VaultRuntimeState, VaultState, VaultStatus,
