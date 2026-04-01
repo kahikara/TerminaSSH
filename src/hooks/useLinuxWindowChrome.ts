@@ -36,8 +36,7 @@ export function useLinuxWindowChrome() {
     invoke('get_linux_window_mode')
       .then((info) => {
         const mode = (info || {}) as LinuxWindowModeInfo
-        const useCustomChrome = Boolean(mode.wayland_undecorated) && !(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        setUseCustomLinuxTitlebar(useCustomChrome)
+        setUseCustomLinuxTitlebar(Boolean(mode.wayland_undecorated))
       })
       .catch(() => {
         setUseCustomLinuxTitlebar(false)

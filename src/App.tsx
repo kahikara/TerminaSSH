@@ -134,12 +134,6 @@ export default function App() {
     });
   }, [settings.closeToTray, settings.lang, showToast]);
 
-  useEffect(() => {
-    invoke("current_window_apply_default_icon").catch((e) => {
-      console.error("main window icon apply failed", e)
-    })
-  }, [])
-
   const [dialog, setDialog] = useState<GlobalDialogState>(createClosedDialogState());
   const showDialog = useCallback((config: Partial<GlobalDialogState>) => {
     setDialog({

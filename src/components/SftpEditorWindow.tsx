@@ -336,8 +336,7 @@ export default function SftpEditorWindow() {
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
       isWaylandUndecorated = Boolean(linuxWindowMode?.wayland_undecorated)
-      const useCustomChrome = isWaylandUndecorated && !(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      setUseCustomWindowChrome(useCustomChrome)
+      setUseCustomWindowChrome(isWaylandUndecorated)
     } catch {
       setUseCustomWindowChrome(false)
     }
@@ -824,9 +823,6 @@ export default function SftpEditorWindow() {
 
   useEffect(() => {
     applyTheme()
-    void invoke("current_window_apply_default_icon").catch((e) => {
-      console.error("editor icon apply failed", e)
-    })
     void loadFile(true)
   }, [])
 

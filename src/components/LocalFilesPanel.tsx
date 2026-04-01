@@ -1174,8 +1174,6 @@ export default function LocalFilesPanel({
       const linuxWindowMode = await invoke("get_linux_window_mode")
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
-      const useCustomEditorChrome = Boolean(linuxWindowMode?.wayland_undecorated) && !(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-
       const win = new WebviewWindow(label, {
         title: `Termina SSH · Edit: ${file.name}`,
         url: editorUrl,
@@ -1188,7 +1186,7 @@ export default function LocalFilesPanel({
         visible: true,
         focus: true,
         skipTaskbar: false,
-        decorations: !useCustomEditorChrome
+        decorations: !Boolean(linuxWindowMode?.wayland_undecorated)
       })
 
       if (editorWindowState.maximized) {
