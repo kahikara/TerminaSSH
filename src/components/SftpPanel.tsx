@@ -61,6 +61,15 @@ function buildRemotePath(path: string, name: string) {
   return path + (path.endsWith("/") ? "" : "/") + name
 }
 
+function buildLocalTargetPath(path: string, name: string) {
+  const separator = path.includes("\\") && !path.includes("/") ? "\\" : "/"
+  const trimmed = separator === "\\"
+    ? path.replace(/\\+$/, "")
+    : path.replace(/\/+$/, "")
+
+  return `${trimmed}${separator}${name}`
+}
+
 function uniqueRenamedName(original: string, files: FileItem[]) {
   const dot = original.lastIndexOf(".")
   const hasExt = dot > 0
@@ -423,7 +432,7 @@ export default function SftpPanel({
   const [renameValue, setRenameValue] = useState("")
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderValue, setNewFolderValue] = useState("")
-  const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
+  const [deleteItems, setDeleteItems] = useState<FileItem[]>([])
 
   const initialSettings = readTerminaSettings()
   const [showHidden, setShowHidden] = useState(Boolean(initialSettings.sftpHidden))
@@ -480,6 +489,10 @@ export default function SftpPanel({
   const selectedVisibleEntries = useMemo(
     () => visibleFiles.filter((file) => selectedItems.includes(file.name)),
     [visibleFiles, selectedItems]
+  )
+  const selectedDownloadableEntries = useMemo(
+    () => selectedVisibleEntries.filter((file) => !file.is_dir),
+    [selectedVisibleEntries]
   )
   const selectedEntryCount = selectedVisibleEntries.length
   const selectedFileBytes = useMemo(
@@ -589,13 +602,20 @@ export default function SftpPanel({
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
-    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 160))
+    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 232))
     setBrowserMenuOpen(true)
   }
 
   function openEntryContextMenu(entry: FileItem, clientX: number, clientY: number) {
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
+
+    if (selectedVisibleEntries.length > 1 && selectedItems.includes(entry.name)) {
+      setContextMenuItem(null)
+      setContextMenuStyle(null)
+      openBrowserContextMenu(clientX, clientY)
+      return
+    }
 
     selectSingleItem(entry.name)
     setContextMenuItem(entry.name)
@@ -927,6 +947,62 @@ export default function SftpPanel({
     }
   }
 
+  async function downloadSelected() {
+    const targets = selectedDownloadableEntries
+    if (!targets.length) return
+
+    if (targets.length === 1) {
+      await download(targets[0])
+      return
+    }
+
+    try {
+      const targetDir = await open({
+        directory: true,
+        multiple: false,
+        title: lang === "de" ? "Zielordner wählen" : "Choose target folder"
+      })
+
+      if (!targetDir || Array.isArray(targetDir)) return
+
+      setIsTransferring(true)
+      setProgress({
+        transferred: 0,
+        total: 0,
+        speed: 0,
+        current_file: targets[0].name
+      })
+
+      for (const file of targets) {
+        setProgress({
+          transferred: 0,
+          total: file.size || 0,
+          speed: 0,
+          current_file: file.name
+        })
+
+        await invoke("sftp_download", {
+          id: server.id,
+          sessionId: transferSessionId,
+          remotePath: buildRemotePath(path, file.name),
+          localPath: buildLocalTargetPath(targetDir, file.name)
+        })
+      }
+
+      clearProgressSoon()
+    } catch (e) {
+      console.error(e)
+      setIsTransferring(false)
+      setProgress(null)
+    }
+  }
+
+  function openDeleteSelection(items?: FileItem[]) {
+    const targets = (items && items.length ? items : selectedVisibleEntries).filter((item) => !item.is_dir || item.is_dir)
+    if (!targets.length) return
+    setDeleteItems(targets)
+  }
+
   async function doRename() {
     if (!renameItem || !renameValue.trim()) return
     try {
@@ -944,13 +1020,16 @@ export default function SftpPanel({
   }
 
   async function doDelete() {
-    if (!deleteItem) return
+    if (!deleteItems.length) return
     try {
-      await invoke("sftp_delete", {
-        id: server.id,
-        path: buildRemotePath(path, deleteItem.name)
-      })
-      setDeleteItem(null)
+      for (const item of deleteItems) {
+        await invoke("sftp_delete", {
+          id: server.id,
+          path: buildRemotePath(path, item.name)
+        })
+      }
+      setDeleteItems([])
+      selectSingleItem(null)
       await load(path)
     } catch (e) {
       console.error(e)
@@ -1165,6 +1244,14 @@ export default function SftpPanel({
         e.stopPropagation()
         clearTransientChrome()
         activateEntry(current)
+        return
+      }
+
+      if (e.key === "Delete" && selectedVisibleEntries.length > 0) {
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        openDeleteSelection()
       }
     }
 
@@ -1642,7 +1729,7 @@ export default function SftpPanel({
                   style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
                   onClick={() => {
                     clearTransientChrome()
-                    setDeleteItem(f)
+                    setDeleteItems([f])
                   }}
                 >
                   {t("delete", lang)}
@@ -1759,7 +1846,7 @@ export default function SftpPanel({
               style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
               onClick={() => {
                 clearTransientChrome()
-                setDeleteItem(entry)
+                setDeleteItems([entry])
               }}
             >
               {t("delete", lang)}
@@ -1786,6 +1873,30 @@ export default function SftpPanel({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {selectedDownloadableEntries.length > 0 && (
+            <button
+              style={menuButtonStyle}
+              onClick={() => {
+                clearTransientChrome()
+                void downloadSelected()
+              }}
+            >
+              {lang === "de" ? "Auswahl herunterladen" : "Download selected"}
+            </button>
+          )}
+
+          {selectedVisibleEntries.length > 0 && (
+            <button
+              style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
+              onClick={() => {
+                clearTransientChrome()
+                openDeleteSelection()
+              }}
+            >
+              {lang === "de" ? "Auswahl löschen" : "Delete selected"}
+            </button>
+          )}
+
           <button
             style={menuButtonStyle}
             onClick={() => {
@@ -1974,15 +2085,19 @@ export default function SftpPanel({
         </div>
       )}
 
-      {deleteItem && (
+      {deleteItems.length > 0 && (
         <div style={modalOverlay}>
           <div style={modalBox}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{t("deleteTitle", lang)}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted, #94a3b8)", marginBottom: 12 }}>
-              {t("deleteText", lang).replace("{name}", deleteItem.name)}
+              {deleteItems.length === 1
+                ? t("deleteText", lang).replace("{name}", deleteItems[0].name)
+                : (lang === "de"
+                    ? `${deleteItems.length} ausgewählte Einträge werden gelöscht.`
+                    : `Delete ${deleteItems.length} selected entries.`)}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button style={modalBtn} onClick={() => setDeleteItem(null)}>{t("cancel", lang)}</button>
+              <button style={modalBtn} onClick={() => setDeleteItems([])}>{t("cancel", lang)}</button>
               <button style={modalBtn} onClick={doDelete}>{t("delete", lang)}</button>
             </div>
           </div>

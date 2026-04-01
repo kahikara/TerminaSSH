@@ -471,7 +471,7 @@ export default function LocalFilesPanel({
   const [renameValue, setRenameValue] = useState("")
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderValue, setNewFolderValue] = useState("")
-  const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
+  const [deleteItems, setDeleteItems] = useState<FileItem[]>([])
   const [errorText, setErrorText] = useState("")
   const [successText, setSuccessText] = useState("")
   const [actionBusy, setActionBusy] = useState(false)
@@ -628,13 +628,20 @@ export default function LocalFilesPanel({
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
-    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 124))
+    setBrowserMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 176, 160))
     setBrowserMenuOpen(true)
   }
 
   function openEntryContextMenu(entry: FileItem, clientX: number, clientY: number) {
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
+
+    if (selectedVisibleEntries.length > 1 && selectedItems.includes(entry.name)) {
+      setContextMenuItem(null)
+      setContextMenuStyle(null)
+      openBrowserContextMenu(clientX, clientY)
+      return
+    }
 
     selectSingleItem(entry.name)
     setContextMenuItem(entry.name)
@@ -734,7 +741,7 @@ export default function LocalFilesPanel({
     setRenameValue("")
     setNewFolderOpen(false)
     setNewFolderValue("")
-    setDeleteItem(null)
+    setDeleteItems([])
     setErrorText("")
     setSuccessText("")
   }, [visible])
@@ -865,11 +872,11 @@ export default function LocalFilesPanel({
         return
       }
 
-      if (deleteItem) {
+      if (deleteItems.length > 0) {
         if (e.key === "Escape" && !actionBusy) {
           e.preventDefault()
           e.stopPropagation()
-          setDeleteItem(null)
+          setDeleteItems([])
           return
         }
 
@@ -978,12 +985,18 @@ export default function LocalFilesPanel({
       }
 
       if (e.key === "Delete" && current && current !== "__parent__") {
-        const entry = visibleFiles.find((f) => f.name === current)
-        if (!entry) return
+        const targets = selectedVisibleEntries.length > 0
+          ? selectedVisibleEntries
+          : (() => {
+              const entry = visibleFiles.find((f) => f.name === current)
+              return entry ? [entry] : []
+            })()
+
+        if (!targets.length) return
 
         e.preventDefault()
         e.stopPropagation()
-        setDeleteItem(entry)
+        openDeleteSelection(targets)
         clearTransientChrome()
       }
     }
@@ -1088,22 +1101,31 @@ export default function LocalFilesPanel({
     }
   }
 
-  async function doDelete() {
-    if (!deleteItem || actionBusy) return
+  function openDeleteSelection(items?: FileItem[]) {
+    const targets = (items && items.length ? items : selectedVisibleEntries).filter((item) => !item.is_dir || item.is_dir)
+    if (!targets.length) return
+    setDeleteItems(targets)
+  }
 
-    const targetName = deleteItem.name
+  async function doDelete() {
+    if (!deleteItems.length || actionBusy) return
+
+    const targetCount = deleteItems.length
 
     setActionBusy(true)
     try {
-      await invoke("local_delete", {
-        path: buildLocalPath(path, deleteItem.name)
-      })
-      setDeleteItem(null)
+      for (const item of deleteItems) {
+        await invoke("local_delete", {
+          path: buildLocalPath(path, item.name)
+        })
+      }
+      setDeleteItems([])
+      selectSingleItem(null)
       await load(path)
       setSuccessText(
         lang === "de"
-          ? `Eintrag gelöscht: ${targetName}`
-          : `Deleted entry: ${targetName}`
+          ? `${targetCount} Einträge gelöscht`
+          : `Deleted ${targetCount} entries`
       )
     } catch (e) {
       console.error(e)
@@ -1769,7 +1791,7 @@ export default function LocalFilesPanel({
                   style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
                   onClick={() => {
                     clearTransientChrome()
-                    setDeleteItem(f)
+                    setDeleteItems([f])
                   }}
                 >
                   {t("delete", lang)}
@@ -1874,7 +1896,7 @@ export default function LocalFilesPanel({
               style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
               onClick={() => {
                 clearTransientChrome()
-                setDeleteItem(entry)
+                setDeleteItems([entry])
               }}
             >
               {t("delete", lang)}
@@ -1901,6 +1923,18 @@ export default function LocalFilesPanel({
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {selectedVisibleEntries.length > 0 && (
+            <button
+              style={{ ...menuButtonStyle, color: "var(--danger, #ef4444)" }}
+              onClick={() => {
+                clearTransientChrome()
+                openDeleteSelection()
+              }}
+            >
+              {lang === "de" ? "Auswahl löschen" : "Delete selected"}
+            </button>
+          )}
+
           <button
             style={menuButtonStyle}
             onClick={() => {
@@ -2011,17 +2045,21 @@ export default function LocalFilesPanel({
         </div>
       )}
 
-      {deleteItem && (
+      {deleteItems.length > 0 && (
         <div style={modalOverlay}>
           <div style={modalBox}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{t("deleteTitle", lang)}</div>
             <div style={{ fontSize: 12, color: "var(--text-muted, #94a3b8)", marginBottom: 12 }}>
-              {t("deleteText", lang).replace("{name}", deleteItem.name)}
+              {deleteItems.length === 1
+                ? t("deleteText", lang).replace("{name}", deleteItems[0].name)
+                : (lang === "de"
+                    ? `${deleteItems.length} ausgewählte Einträge werden gelöscht.`
+                    : `Delete ${deleteItems.length} selected entries.`)}
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
                 style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
-                onClick={() => { if (!actionBusy) setDeleteItem(null) }}
+                onClick={() => { if (!actionBusy) setDeleteItems([]) }}
                 disabled={actionBusy}
               >
                 {t("cancel", lang)}
