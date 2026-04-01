@@ -3109,14 +3109,7 @@ fn import_backup_bundle(
         return Err("Backup root must be a JSON object".to_string());
     }
 
-    let version = parsed.get("version").and_then(|v| v.as_u64()).unwrap_or(2);
-
-    if version > 3 {
-        return Err(format!(
-            "Backup version {} is not supported. Create a new backup with the current app version.",
-            version
-        ));
-    }
+    let version = parsed.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
 
     if version != 4 {
         return Err(format!(
@@ -3216,12 +3209,6 @@ fn import_backup_bundle(
     let vault_conn = open_vault_db()?;
     let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
 
-    if version < 3 {
-        warnings.push(
-            "This backup uses an older format. Some data such as portable SSH key content may be unavailable."
-                .to_string(),
-        );
-    }
     let mut key_path_map: HashMap<String, String> = HashMap::new();
 
     let mut conn = open_db()?;
