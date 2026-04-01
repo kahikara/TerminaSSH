@@ -65,18 +65,18 @@ use crate::window_commands::{
 };
 
 pub(crate) use crate::db_core::{
-    current_export_timestamp, ensure_connection_exists, ignore_duplicate_column_error, open_db,
-    open_vault_db, validate_snippet,
+    current_export_timestamp, ignore_duplicate_column_error, open_db, open_vault_db,
+    validate_snippet,
 };
 
 pub use crate::app_state::{AppMetaInfo, LinuxWindowModeInfo, SshMessage, SshState};
 
 pub(crate) use crate::vault_core::{
     count_legacy_secret_entries, decode_vault_with_recovery, decode_vault_with_secret,
-    delete_legacy_master_key, delete_vault_secret, ensure_vault_runtime_ready,
+    delete_legacy_master_key, ensure_vault_runtime_ready,
     finalize_legacy_master_key_cleanup_with_dek, generate_recovery_key, init_vault_db,
-    load_vault_status, normalize_vault_unlock_mode, read_vault_secret_plaintext,
-    require_runtime_vault_dek, upsert_vault_secret, vault_encrypt_combined,
+    load_vault_status, normalize_vault_unlock_mode, require_runtime_vault_dek,
+    vault_encrypt_combined,
 };
 
 pub use crate::vault_core::{
