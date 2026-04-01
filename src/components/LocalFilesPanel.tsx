@@ -560,9 +560,14 @@ export default function LocalFilesPanel({
   }
 
   function selectRangeToItem(itemName: string) {
-    const anchor = isNavigableItem(selectionAnchor)
+    if (itemName === "__parent__") {
+      selectSingleItem("__parent__")
+      return
+    }
+
+    const anchor = isNavigableItem(selectionAnchor) && selectionAnchor !== "__parent__"
       ? selectionAnchor
-      : isNavigableItem(activeItem)
+      : isNavigableItem(activeItem) && activeItem !== "__parent__"
         ? activeItem
         : itemName
 
@@ -577,12 +582,19 @@ export default function LocalFilesPanel({
     const from = Math.min(startIndex, endIndex)
     const to = Math.max(startIndex, endIndex)
 
-    setSelectedItems(navigableEntries.slice(from, to + 1))
+    setSelectedItems(
+      navigableEntries.slice(from, to + 1).filter((entry) => entry !== "__parent__")
+    )
     setActiveItem(itemName)
     setSelectionAnchor(anchor || itemName)
   }
 
   function toggleItemSelection(itemName: string) {
+    if (itemName === "__parent__") {
+      selectSingleItem("__parent__")
+      return
+    }
+
     const exists = selectedItems.includes(itemName)
 
     if (!exists) {
@@ -1600,19 +1612,9 @@ export default function LocalFilesPanel({
 
               activateEntry("__parent__")
             }}
-            onClick={(e) => {
+            onClick={() => {
               if (hasTransientMenuOpen) {
                 clearTransientChrome()
-                return
-              }
-
-              if (e.shiftKey) {
-                selectRangeToItem("__parent__")
-                return
-              }
-
-              if (e.ctrlKey || e.metaKey) {
-                toggleItemSelection("__parent__")
                 return
               }
 
