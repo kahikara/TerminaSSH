@@ -2,6 +2,7 @@ use aes_gcm::aead::rand_core::RngCore;
 use tauri::State;
 use std::path::Path;
 
+use crate::app_paths::get_key_path;
 use crate::{
     count_legacy_secret_entries, current_export_timestamp, decode_vault_with_recovery,
     decode_vault_with_secret, delete_legacy_master_key, finalize_legacy_master_key_cleanup_with_dek,
@@ -94,7 +95,7 @@ pub(crate) fn enable_vault_protection(
         )
         .map_err(|e| e.to_string())?;
 
-    if Path::new(&crate::get_key_path()).exists() {
+    if Path::new(&get_key_path()).exists() {
         delete_legacy_master_key()?;
     }
 

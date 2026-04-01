@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
-use crate::get_keys_dir;
+use crate::app_paths::get_keys_dir;
 use crate::host_keys::run_ssh_keygen;
 use crate::open_db;
 

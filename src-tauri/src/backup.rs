@@ -9,11 +9,13 @@ use std::path::Path;
 use tauri::State;
 
 use crate::ssh_runtime::load_connection_runtime_details;
+use crate::app_paths::{
+    cleanup_imported_key_files, ensure_unique_key_path, get_keys_dir, read_file_base64_if_exists,
+    sanitize_key_file_stem,
+};
 use crate::{
-    cleanup_imported_key_files, current_export_timestamp, ensure_unique_key_path,
-    get_keys_dir, init_vault_db, open_db, open_vault_db, read_file_base64_if_exists,
-    require_runtime_vault_dek, sanitize_key_file_stem, upsert_vault_secret,
-    validate_snippet, VaultState,
+    current_export_timestamp, init_vault_db, open_db, open_vault_db, require_runtime_vault_dek,
+    upsert_vault_secret, validate_snippet, VaultState,
 };
 use crate::ssh_keys::{fingerprint_for_pubkey_path, read_public_key_for_path};
 
