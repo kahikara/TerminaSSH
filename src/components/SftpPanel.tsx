@@ -463,6 +463,36 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
 
   const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || browserMenuOpen)
 
+  const visibleFolderCount = useMemo(
+    () => visibleFiles.filter((file) => file.is_dir).length,
+    [visibleFiles]
+  )
+  const visibleFileCount = useMemo(
+    () => visibleFiles.filter((file) => !file.is_dir).length,
+    [visibleFiles]
+  )
+  const visibleFileBytes = useMemo(
+    () => visibleFiles.reduce((sum, file) => sum + (file.is_dir ? 0 : file.size), 0),
+    [visibleFiles]
+  )
+  const selectedVisibleEntries = useMemo(
+    () => visibleFiles.filter((file) => selectedItems.includes(file.name)),
+    [visibleFiles, selectedItems]
+  )
+  const selectedEntryCount = selectedVisibleEntries.length + (selectedItems.includes("__parent__") ? 1 : 0)
+  const selectedFolderCount = useMemo(
+    () => selectedVisibleEntries.filter((file) => file.is_dir).length,
+    [selectedVisibleEntries]
+  )
+  const selectedFileCount = useMemo(
+    () => selectedVisibleEntries.filter((file) => !file.is_dir).length,
+    [selectedVisibleEntries]
+  )
+  const selectedFileBytes = useMemo(
+    () => selectedVisibleEntries.reduce((sum, file) => sum + (file.is_dir ? 0 : file.size), 0),
+    [selectedVisibleEntries]
+  )
+
   function isItemSelected(itemName: string) {
     return selectedItems.includes(itemName)
   }
@@ -1606,6 +1636,60 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
             )}
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          minHeight: 30,
+          padding: "0 10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          borderTop: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+          background: "color-mix(in srgb, var(--bg-sidebar) 92%, var(--bg-app))",
+          color: "var(--text-muted, #94a3b8)",
+          fontSize: 11,
+          flexShrink: 0
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            minWidth: 0,
+            overflow: "hidden",
+            whiteSpace: "nowrap"
+          }}
+        >
+          <span>{lang === "de" ? `Ordner: ${visibleFolderCount}` : `Folders: ${visibleFolderCount}`}</span>
+          <span>{lang === "de" ? `Dateien: ${visibleFileCount}` : `Files: ${visibleFileCount}`}</span>
+          <span>{lang === "de" ? `Größe: ${formatBytes(visibleFileBytes)}` : `Size: ${formatBytes(visibleFileBytes)}`}</span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            minWidth: 0,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            justifyContent: "flex-end"
+          }}
+        >
+          {selectedEntryCount > 0 ? (
+            <>
+              <span>{lang === "de" ? `Auswahl: ${selectedEntryCount}` : `Selected: ${selectedEntryCount}`}</span>
+              <span>{lang === "de" ? `Dateien: ${selectedFileCount}` : `Files: ${selectedFileCount}`}</span>
+              <span>{lang === "de" ? `Ordner: ${selectedFolderCount}` : `Folders: ${selectedFolderCount}`}</span>
+              <span>{lang === "de" ? `Größe: ${formatBytes(selectedFileBytes)}` : `Size: ${formatBytes(selectedFileBytes)}`}</span>
+            </>
+          ) : (
+            <span>{lang === "de" ? "Keine Auswahl" : "No selection"}</span>
+          )}
+        </div>
       </div>
 
       {contextMenuItem && (() => {
