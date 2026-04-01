@@ -100,6 +100,16 @@ pub struct ImportBackupResult {
     warnings: Vec<String>,
 }
 
+fn cleanup_imported_vault_secrets(
+    vault_conn: &rusqlite::Connection,
+    pending_secret_imports: &[(i32, String, String)],
+) {
+    for (connection_id, _, _) in pending_secret_imports {
+        let _ = delete_vault_secret(vault_conn, *connection_id, "password");
+        let _ = delete_vault_secret(vault_conn, *connection_id, "passphrase");
+    }
+}
+
 #[tauri::command]
 pub(crate) fn export_backup_bundle(
     settings_json: String,
@@ -823,14 +833,27 @@ pub(crate) fn import_backup_bundle(
         tunnels_imported += 1;
     }
 
-    tx.commit().map_err(|e| {
-        cleanup_imported_key_files(&created_imported_key_paths);
-        e.to_string()
-    })?;
+    for (connection_id, password, passphrase) in &pending_secret_imports {
+        if let Err(err) = upsert_vault_secret(&vault_conn, *connection_id, "password", password, &dek)
+        {
+            cleanup_imported_vault_secrets(&vault_conn, &pending_secret_imports);
+            cleanup_imported_key_files(&created_imported_key_paths);
+            return Err(err);
+        }
 
-    for (connection_id, password, passphrase) in pending_secret_imports {
-        upsert_vault_secret(&vault_conn, connection_id, "password", &password, &dek)?;
-        upsert_vault_secret(&vault_conn, connection_id, "passphrase", &passphrase, &dek)?;
+        if let Err(err) =
+            upsert_vault_secret(&vault_conn, *connection_id, "passphrase", passphrase, &dek)
+        {
+            cleanup_imported_vault_secrets(&vault_conn, &pending_secret_imports);
+            cleanup_imported_key_files(&created_imported_key_paths);
+            return Err(err);
+        }
+    }
+
+    if let Err(err) = tx.commit() {
+        cleanup_imported_vault_secrets(&vault_conn, &pending_secret_imports);
+        cleanup_imported_key_files(&created_imported_key_paths);
+        return Err(err.to_string());
     }
 
     Ok(ImportBackupResult {
