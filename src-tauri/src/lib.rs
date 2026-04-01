@@ -20,9 +20,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WindowEvent,
-};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use aes_gcm::{
     aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
