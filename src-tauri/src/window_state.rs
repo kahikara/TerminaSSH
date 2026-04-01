@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+
+use crate::app_paths::get_app_dir;
 use tauri::{PhysicalPosition, PhysicalSize, Position, Size};
 
 #[derive(Debug, Serialize, Deserialize)]

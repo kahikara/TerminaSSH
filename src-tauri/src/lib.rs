@@ -41,9 +41,8 @@ use chrono::Utc;
 
 use crate::backup::{export_backup_bundle, import_backup_bundle};
 use crate::app_paths::{
-    cleanup_imported_key_files, ensure_unique_key_path, get_db_path, get_key_path, get_keys_dir,
-    get_vault_db_path, home_dir, maybe_relaunch_appimage_with_wayland_preload,
-    read_file_base64_if_exists, sanitize_key_file_stem,
+    get_db_path, get_key_path, get_vault_db_path, home_dir,
+    maybe_relaunch_appimage_with_wayland_preload,
 };
 use crate::external_commands::{
     copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,

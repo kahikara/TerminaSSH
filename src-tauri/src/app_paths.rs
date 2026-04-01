@@ -1,3 +1,4 @@
+use base64::Engine;
 use std::fs;
 use std::path::{Path, PathBuf};
 
