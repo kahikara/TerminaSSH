@@ -1,6 +1,7 @@
 mod window_state;
 mod window_commands;
 mod backup;
+mod external_commands;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
@@ -32,6 +33,9 @@ use chrono::Utc;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::backup::{export_backup_bundle, import_backup_bundle};
+use crate::external_commands::{
+    copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,
+};
 use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
 use crate::window_commands::{
     current_window_is_maximized, current_window_minimize, current_window_start_dragging,
@@ -4800,75 +4804,3 @@ pub fn run() {
         .expect("Fehler beim Starten");
 }
 
-#[tauri::command]
-fn open_external_url(_app: tauri::AppHandle, url: String) -> Result<(), String> {
-    tauri_plugin_opener::open_url(url, None::<String>).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn reveal_path_in_file_manager(path: String) -> Result<(), String> {
-    let raw = path.trim();
-    if raw.is_empty() {
-        return Err("Path is empty".to_string());
-    }
-
-    let target = PathBuf::from(raw);
-    if !target.exists() {
-        return Err(format!("Path not found: {}", raw));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let normalized = target.to_string_lossy().replace("/", "\\");
-        let mut cmd = Command::new("explorer");
-        if target.is_file() {
-            cmd.arg("/select,").arg(&normalized);
-        } else {
-            cmd.arg(&normalized);
-        }
-        cmd.spawn().map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let mut cmd = Command::new("open");
-        if target.is_file() {
-            cmd.arg("-R").arg(&target);
-        } else {
-            cmd.arg(&target);
-        }
-        cmd.spawn().map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    {
-        let open_target = if target.is_dir() {
-            target.clone()
-        } else {
-            target
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| target.clone())
-        };
-
-        Command::new("xdg-open")
-            .arg(open_target)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-fn copy_text_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
-    app.clipboard().write_text(text).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_tray_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
-    if let Some(tray) = app.tray_by_id("main-tray") {
-        tray.set_visible(visible).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
