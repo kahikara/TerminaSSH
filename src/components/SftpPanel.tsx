@@ -901,6 +901,8 @@ export default function SftpPanel({
       const linuxWindowMode = await invoke("get_linux_window_mode")
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
+      const useCustomEditorChrome = Boolean(linuxWindowMode?.wayland_undecorated) && !import.meta.env.DEV
+
       const win = new WebviewWindow(label, {
         title: `Termina SSH · Edit: ${file.name}`,
         url: editorUrl,
@@ -913,7 +915,7 @@ export default function SftpPanel({
         visible: true,
         focus: true,
         skipTaskbar: false,
-        decorations: !Boolean(linuxWindowMode?.wayland_undecorated)
+        decorations: !useCustomEditorChrome
       })
 
       if (editorWindowState.maximized) {

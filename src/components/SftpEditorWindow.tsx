@@ -336,7 +336,8 @@ export default function SftpEditorWindow() {
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
       isWaylandUndecorated = Boolean(linuxWindowMode?.wayland_undecorated)
-      setUseCustomWindowChrome(isWaylandUndecorated)
+      const useCustomChrome = isWaylandUndecorated && !import.meta.env.DEV
+      setUseCustomWindowChrome(useCustomChrome)
     } catch {
       setUseCustomWindowChrome(false)
     }

@@ -36,7 +36,8 @@ export function useLinuxWindowChrome() {
     invoke('get_linux_window_mode')
       .then((info) => {
         const mode = (info || {}) as LinuxWindowModeInfo
-        setUseCustomLinuxTitlebar(Boolean(mode.wayland_undecorated))
+        const useCustomChrome = Boolean(mode.wayland_undecorated) && !import.meta.env.DEV
+        setUseCustomLinuxTitlebar(useCustomChrome)
       })
       .catch(() => {
         setUseCustomLinuxTitlebar(false)
