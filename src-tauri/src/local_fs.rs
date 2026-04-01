@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-use crate::{FileItem, SftpReadFilePayload, home_dir};
+use crate::home_dir;
+use crate::sftp_commands::{FileItem, SftpReadFilePayload};
 
 pub(crate) fn normalize_local_path(path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
