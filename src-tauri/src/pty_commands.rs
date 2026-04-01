@@ -33,6 +33,12 @@ fn finish_session(app: &AppHandle, session_id: &str, sent: &Arc<AtomicBool>) {
     emit_session_exit_once(app, session_id, sent);
 }
 
+fn unregister_session_sender(state: &State<'_, SshState>, session_id: &str) {
+    if let Ok(mut txs) = state.txs.lock() {
+        txs.remove(session_id);
+    }
+}
+
 fn register_session_sender(
     state: &State<'_, SshState>,
     session_id: &str,
@@ -152,15 +158,22 @@ pub(crate) fn start_local_pty(
     app_handle: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
+    let (tx, rx) = channel::<SshMessage>();
+    register_session_sender(&state, &session_id, tx)?;
+
     let pty_system = native_pty_system();
-    let pair = pty_system
-        .openpty(PtySize {
-            rows: rows as u16,
-            cols: cols as u16,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("PTY Error: {}", e))?;
+    let pair = match pty_system.openpty(PtySize {
+        rows: rows as u16,
+        cols: cols as u16,
+        pixel_width: 0,
+        pixel_height: 0,
+    }) {
+        Ok(pair) => pair,
+        Err(e) => {
+            unregister_session_sender(&state, &session_id);
+            return Err(format!("PTY Error: {}", e));
+        }
+    };
 
     #[cfg(target_os = "windows")]
     let shell = std::env::var("TERMSSH_WINDOWS_SHELL")
@@ -212,23 +225,33 @@ pub(crate) fn start_local_pty(
         }
     }
 
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("Shell Start Fehler: {}", e))?;
+    let mut child = match pair.slave.spawn_command(cmd) {
+        Ok(child) => child,
+        Err(e) => {
+            unregister_session_sender(&state, &session_id);
+            return Err(format!("Shell Start Fehler: {}", e));
+        }
+    };
 
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| format!("Reader Fehler: {}", e))?;
+    let mut reader = match pair.master.try_clone_reader() {
+        Ok(reader) => reader,
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            unregister_session_sender(&state, &session_id);
+            return Err(format!("Reader Fehler: {}", e));
+        }
+    };
 
-    let mut writer = pair
-        .master
-        .take_writer()
-        .map_err(|e| format!("Writer Fehler: {}", e))?;
-
-    let (tx, rx) = channel::<SshMessage>();
-    register_session_sender(&state, &session_id, tx)?;
+    let mut writer = match pair.master.take_writer() {
+        Ok(writer) => writer,
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            unregister_session_sender(&state, &session_id);
+            return Err(format!("Writer Fehler: {}", e));
+        }
+    };
 
     let event_name = format!("term-output-{}", session_id);
     let app_for_reader = app_handle.clone();
@@ -303,9 +326,16 @@ pub(crate) fn start_quick_ssh(
     app_handle: AppHandle,
     state: State<'_, SshState>,
 ) -> Result<(), String> {
-    let sess = connect_quick_session(host, port, username, password, private_key, passphrase)?;
     let (tx, rx) = channel::<SshMessage>();
     register_session_sender(&state, &session_id, tx)?;
+
+    let sess = match connect_quick_session(host, port, username, password, private_key, passphrase) {
+        Ok(sess) => sess,
+        Err(err) => {
+            unregister_session_sender(&state, &session_id);
+            return Err(err);
+        }
+    };
 
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
@@ -417,9 +447,16 @@ pub(crate) fn start_ssh(
     state: State<'_, SshState>,
     vault_state: State<'_, VaultState>,
 ) -> Result<(), String> {
-    let sess = connect_ssh_session_with_password_override(id, password_override, &vault_state)?;
     let (tx, rx) = channel::<SshMessage>();
     register_session_sender(&state, &session_id, tx)?;
+
+    let sess = match connect_ssh_session_with_password_override(id, password_override, &vault_state) {
+        Ok(sess) => sess,
+        Err(err) => {
+            unregister_session_sender(&state, &session_id);
+            return Err(err);
+        }
+    };
     let event_name = format!("term-output-{}", session_id);
     let connect_event = format!("ssh-connected-{}", session_id);
     let _ = app_handle.emit(&connect_event, true);
