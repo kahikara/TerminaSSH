@@ -43,6 +43,31 @@ type StoredEditorWindowState = {
   maximized?: boolean
 }
 
+type EditorStateMessage = {
+  type: "editor-state"
+  label: string
+  fileName: string
+  remotePath: string
+  dirty: boolean
+}
+
+type EditorClosedMessage = {
+  type: "editor-closed"
+  label: string
+}
+
+type MainRequestCloseEditorsMessage = {
+  type: "main-request-close-editors"
+  force: boolean
+}
+
+function isMainRequestCloseEditorsMessage(value: unknown): value is MainRequestCloseEditorsMessage {
+  if (!value || typeof value !== "object") return false
+
+  const raw = value as Record<string, unknown>
+  return raw.type === "main-request-close-editors" && typeof raw.force === "boolean"
+}
+
 function readStoredEditorWindowState(): StoredEditorWindowState {
   try {
     const raw = localStorage.getItem(SFTP_EDITOR_WINDOW_STATE_KEY)
@@ -404,20 +429,24 @@ export default function SftpEditorWindow() {
   }
 
   function publishEditorState() {
-    channelRef.current?.postMessage({
+    const message: EditorStateMessage = {
       type: "editor-state",
       label: windowLabel,
       fileName,
       remotePath,
       dirty: dirtyRef.current
-    })
+    }
+
+    channelRef.current?.postMessage(message)
   }
 
   function publishEditorClosed() {
-    channelRef.current?.postMessage({
+    const message: EditorClosedMessage = {
       type: "editor-closed",
       label: windowLabel
-    })
+    }
+
+    channelRef.current?.postMessage(message)
   }
 
   function evaluateLargeFileNotice(text: string) {
@@ -854,8 +883,8 @@ export default function SftpEditorWindow() {
     channelRef.current = channel
 
     channel.onmessage = (event) => {
-      const msg = event.data || {}
-      if (msg.type !== "main-request-close-editors") return
+      const msg = event.data
+      if (!isMainRequestCloseEditorsMessage(msg)) return
 
       if (msg.force) {
         void reallyClose()

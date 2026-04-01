@@ -11,6 +11,50 @@ export type EditorWindowInfo = {
   dirty: boolean
 }
 
+type EditorStateMessage = {
+  type: "editor-state"
+  label: string
+  fileName?: string
+  remotePath?: string
+  dirty?: boolean
+}
+
+type EditorClosedMessage = {
+  type: "editor-closed"
+  label: string
+}
+
+type MainRequestCloseEditorsMessage = {
+  type: "main-request-close-editors"
+  force: boolean
+}
+
+type EditorSyncMessage =
+  | EditorStateMessage
+  | EditorClosedMessage
+  | MainRequestCloseEditorsMessage
+
+function isEditorSyncMessage(value: unknown): value is EditorSyncMessage {
+  if (!value || typeof value !== "object") return false
+
+  const raw = value as Record<string, unknown>
+  if (typeof raw.type !== "string") return false
+
+  if (raw.type === "editor-state") {
+    return typeof raw.label === "string"
+  }
+
+  if (raw.type === "editor-closed") {
+    return typeof raw.label === "string"
+  }
+
+  if (raw.type === "main-request-close-editors") {
+    return typeof raw.force === "boolean"
+  }
+
+  return false
+}
+
 type Args = {
   openTabs: AppTab[]
   closeToTray: boolean
@@ -99,12 +143,14 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
     channelRef.current = channel
 
     channel.onmessage = (event) => {
-      const msg = event.data || {}
+      const msg = event.data
 
-      if (msg.type === "editor-state" && msg.label) {
+      if (!isEditorSyncMessage(msg)) return
+
+      if (msg.type === "editor-state") {
         setEditorWindows((prev) => {
           const nextItem: EditorWindowInfo = {
-            label: String(msg.label),
+            label: msg.label,
             fileName: String(msg.fileName || ""),
             remotePath: String(msg.remotePath || ""),
             dirty: Boolean(msg.dirty)
@@ -116,7 +162,7 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
         return
       }
 
-      if (msg.type === "editor-closed" && msg.label) {
+      if (msg.type === "editor-closed") {
         setEditorWindows((prev) => {
           const next = prev.filter((item) => item.label !== msg.label)
 
