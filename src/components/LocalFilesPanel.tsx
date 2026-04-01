@@ -761,7 +761,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         e.preventDefault()
         e.stopPropagation()
 
-        if (menuItem || sortMenuOpen || rootsMenuOpen) {
+        if (menuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen || contextMenuItem) {
           clearTransientChrome()
           return
         }
@@ -777,6 +777,15 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         }
 
         onClose?.()
+        return
+      }
+
+      if (e.key === "Backspace" && hasLocalParentPath(path)) {
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        setSelectedItem("__parent__")
+        void load(getParentLocalPath(path))
         return
       }
 

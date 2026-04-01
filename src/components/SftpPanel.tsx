@@ -389,13 +389,15 @@ const menuButtonStyle: React.CSSProperties = {
   transition: "background 140ms ease"
 }
 
-function sftpEntryStyle(hovered: boolean): React.CSSProperties {
+function sftpEntryStyle(hovered: boolean, selected = false): React.CSSProperties {
   return {
     ...row,
     position: "relative",
-    background: hovered
-      ? "color-mix(in srgb, var(--bg-hover) 84%, transparent)"
-      : "transparent",
+    background: selected
+      ? "color-mix(in srgb, var(--accent) 12%, transparent)"
+      : hovered
+        ? "color-mix(in srgb, var(--bg-hover) 84%, transparent)"
+        : "transparent",
     transition: "background 120ms ease"
   }
 }
@@ -437,6 +439,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
   const [contextMenuItem, setContextMenuItem] = useState<string | null>(null)
   const [contextMenuStyle, setContextMenuStyle] = useState<React.CSSProperties | null>(null)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
+  const [selectedItem, setSelectedItem] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -450,6 +453,11 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     const filtered = showHidden ? files : files.filter((f) => !f.name.startsWith("."))
     return sortFiles(filtered, sortMode)
   }, [files, showHidden, sortMode])
+
+  const navigableEntries = useMemo(() => {
+    const entries = visibleFiles.map((f) => f.name)
+    return path !== "/" ? ["__parent__", ...entries] : entries
+  }, [path, visibleFiles])
 
   const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || browserMenuOpen)
 
@@ -476,8 +484,31 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
+    setSelectedItem(entry.name)
     setContextMenuItem(entry.name)
     setContextMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 156, entry.is_dir ? 118 : 190))
+  }
+
+  function activateEntry(entryName: string) {
+    if (entryName === "__parent__") {
+      const parent = path.split("/").slice(0, -2).join("/") || "/"
+      setSelectedItem("__parent__")
+      void load(parent)
+      return
+    }
+
+    const entry = visibleFiles.find((f) => f.name === entryName)
+    if (!entry) return
+
+    setSelectedItem(entry.name)
+
+    if (entry.is_dir) {
+      const next = path + (path.endsWith("/") ? "" : "/") + entry.name
+      void load(next)
+      return
+    }
+
+    void openEditor(entry)
   }
 
   async function load(p: string) {
@@ -895,6 +926,108 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     persistSftpPanelWidth(panelWidth)
   }, [panelWidth])
 
+  useEffect(() => {
+    if (!visible) return
+
+    if (!navigableEntries.length) {
+      setSelectedItem(null)
+      return
+    }
+
+    if (selectedItem && navigableEntries.includes(selectedItem)) return
+    setSelectedItem(navigableEntries[0])
+  }, [visible, navigableEntries, selectedItem])
+
+  useEffect(() => {
+    if (!visible || !selectedItem) return
+
+    const listEl = listRef.current
+    if (!listEl) return
+
+    const rows = Array.from(
+      listEl.querySelectorAll<HTMLElement>("[data-sftp-entry-key]")
+    )
+    const target = rows.find((row) => row.dataset.sftpEntryKey === selectedItem)
+    if (!target) return
+
+    const top = target.offsetTop
+    const bottom = top + target.offsetHeight
+    const viewTop = listEl.scrollTop
+    const viewBottom = viewTop + listEl.clientHeight
+
+    if (top < viewTop) {
+      listEl.scrollTop = top
+      return
+    }
+
+    if (bottom > viewBottom) {
+      listEl.scrollTop = bottom - listEl.clientHeight
+    }
+  }, [visible, selectedItem, path, visibleFiles])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      const isTyping = tag === "input" || tag === "textarea" || Boolean(target?.isContentEditable)
+
+      if (isTyping) return
+
+      if (e.key === "Escape") {
+        if (hasTransientMenuOpen) {
+          e.preventDefault()
+          e.stopPropagation()
+          clearTransientChrome()
+        }
+        return
+      }
+
+      if (e.key === "Backspace" && path !== "/") {
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        setSelectedItem("__parent__")
+        const parent = path.split("/").slice(0, -2).join("/") || "/"
+        void load(parent)
+        return
+      }
+
+      if (!navigableEntries.length) return
+
+      const current = selectedItem && navigableEntries.includes(selectedItem)
+        ? selectedItem
+        : navigableEntries[0]
+
+      const currentIndex = navigableEntries.indexOf(current)
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedItem(navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)])
+        return
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedItem(navigableEntries[Math.max(currentIndex - 1, 0)])
+        return
+      }
+
+      if (e.key === "Enter" && current) {
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        activateEntry(current)
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [visible, hasTransientMenuOpen, navigableEntries, selectedItem, path, visibleFiles])
+
   return (
     <div
       ref={panelRef}
@@ -1138,7 +1271,8 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       >
         {path !== "/" && (
           <div
-            style={sftpEntryStyle(hoveredItem === "__parent__")}
+            data-sftp-entry-key="__parent__"
+            style={sftpEntryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
             onClick={() => {
@@ -1147,8 +1281,9 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                 return
               }
 
+              setSelectedItem("__parent__")
               const parent = path.split("/").slice(0, -2).join("/") || "/"
-              load(parent)
+              void load(parent)
             }}
           >
             <ArrowLeft size={14} />
@@ -1189,7 +1324,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
           <div
             key={f.name}
             data-sftp-entry-key={f.name}
-            style={sftpEntryStyle(hoveredItem === f.name)}
+            style={sftpEntryStyle(hoveredItem === f.name, selectedItem === f.name)}
             onMouseEnter={() => setHoveredItem(f.name)}
             onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
             onContextMenu={(e) => {
@@ -1204,6 +1339,8 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                 return
               }
 
+              setSelectedItem(f.name)
+
               if (f.is_dir) {
                 const next = path + (path.endsWith("/") ? "" : "/") + f.name
                 void load(next)
@@ -1216,6 +1353,8 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                 clearTransientChrome()
                 return
               }
+
+              setSelectedItem(f.name)
 
               if (f.is_dir) {
                 const next = path + (path.endsWith("/") ? "" : "/") + f.name
