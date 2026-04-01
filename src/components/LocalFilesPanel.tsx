@@ -546,6 +546,44 @@ export default function LocalFilesPanel({
 
     return parts.join(", ")
   }, [lang, selectedEntryCount, selectedFileBytes])
+  const deleteFolderCount = useMemo(
+    () => deleteItems.filter((item) => item.is_dir).length,
+    [deleteItems]
+  )
+  const deleteFileCount = useMemo(
+    () => deleteItems.filter((item) => !item.is_dir).length,
+    [deleteItems]
+  )
+  const deleteFileBytes = useMemo(
+    () => deleteItems.reduce((sum, item) => sum + (item.is_dir ? 0 : item.size), 0),
+    [deleteItems]
+  )
+  const deleteSummaryPrimary = useMemo(() => {
+    if (deleteItems.length <= 1) return ""
+
+    return lang === "de"
+      ? `${deleteItems.length} ausgewählt`
+      : `${deleteItems.length} selected`
+  }, [deleteItems, lang])
+  const deleteSummarySecondary = useMemo(() => {
+    if (deleteItems.length <= 1) return ""
+
+    const parts: string[] = []
+
+    if (deleteFolderCount > 0) {
+      parts.push(lang === "de" ? `${deleteFolderCount} Ordner` : `${deleteFolderCount} folders`)
+    }
+
+    if (deleteFileCount > 0) {
+      parts.push(lang === "de" ? `${deleteFileCount} Dateien` : `${deleteFileCount} files`)
+    }
+
+    if (deleteFileBytes > 0) {
+      parts.push(formatBytes(deleteFileBytes))
+    }
+
+    return parts.join(", ")
+  }, [deleteItems, deleteFolderCount, deleteFileCount, deleteFileBytes, lang])
 
   function isItemSelected(itemName: string) {
     return selectedItems.includes(itemName)
@@ -2105,13 +2143,30 @@ export default function LocalFilesPanel({
         <div style={modalOverlay}>
           <div style={modalBox}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>{t("deleteTitle", lang)}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted, #94a3b8)", marginBottom: 12 }}>
-              {deleteItems.length === 1
-                ? t("deleteText", lang).replace("{name}", deleteItems[0].name)
-                : (lang === "de"
-                    ? `${deleteItems.length} ausgewählte Einträge werden gelöscht.`
-                    : `Delete ${deleteItems.length} selected entries.`)}
-            </div>
+            {deleteItems.length === 1 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted, #94a3b8)", marginBottom: 12 }}>
+                {t("deleteText", lang).replace("{name}", deleteItems[0].name)}
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+                  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))"
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-main, #e5e7eb)", marginBottom: 4 }}>
+                  {deleteSummaryPrimary}
+                </div>
+                {deleteSummarySecondary ? (
+                  <div style={{ fontSize: 12, color: "var(--text-muted, #94a3b8)" }}>
+                    {deleteSummarySecondary}
+                  </div>
+                ) : null}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
                 style={{ ...modalBtn, opacity: actionBusy ? 0.6 : 1, cursor: actionBusy ? "not-allowed" : "pointer" }}
