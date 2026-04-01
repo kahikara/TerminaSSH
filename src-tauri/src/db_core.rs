@@ -3,7 +3,7 @@ use rusqlite::{Connection, OptionalExtension};
 use std::time::Duration;
 
 use crate::app_paths::{get_db_path, get_vault_db_path};
-use crate::{DB_BUSY_TIMEOUT_SECS, DEFAULT_VAULT_UNLOCK_MODE, VAULT_SCHEMA_VERSION};
+use crate::DB_BUSY_TIMEOUT_SECS;
 
 pub(crate) fn open_db() -> Result<Connection, String> {
     let conn = Connection::open(get_db_path()).map_err(|e| e.to_string())?;

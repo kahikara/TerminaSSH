@@ -1,0 +1,707 @@
+use aes_gcm::{
+    aead::{rand_core::RngCore, Aead, KeyInit, OsRng},
+    Aes256Gcm, Nonce,
+};
+use argon2::{Algorithm, Argon2, Params, Version};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use rusqlite::{Connection, OptionalExtension};
+use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use tauri::State;
+
+use crate::app_paths::get_key_path;
+use crate::{
+    current_export_timestamp, ignore_duplicate_column_error, open_db, open_vault_db,
+};
+
+pub struct VaultState {
+    pub(crate) runtime: Mutex<VaultRuntimeState>,
+}
+
+pub struct VaultRuntimeState {
+    pub(crate) is_unlocked: bool,
+    pub(crate) unlock_mode: String,
+    pub(crate) session_dek: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VaultStatus {
+    pub(crate) is_initialized: bool,
+    pub(crate) is_protected: bool,
+    pub(crate) is_unlocked: bool,
+    pub(crate) unlock_mode: String,
+    pub(crate) has_legacy_master_key: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EnableVaultProtectionResult {
+    pub(crate) recovery_key: String,
+    pub(crate) migrated_secret_entries: usize,
+}
+
+pub(crate) const VAULT_DB_FILE_NAME: &str = "vault.db";
+pub(crate) const VAULT_SCHEMA_VERSION: i64 = 1;
+pub(crate) const DEFAULT_VAULT_UNLOCK_MODE: &str = "demand";
+pub(crate) const VAULT_SALT_LEN: usize = 16;
+pub(crate) const VAULT_KEY_LEN: usize = 32;
+const VAULT_NONCE_LEN: usize = 12;
+pub(crate) const VAULT_VALIDATION_TEXT: &[u8] = b"terminassh-vault-ok";
+
+pub(crate) fn init_vault_db() -> Result<(), String> {
+    let conn = open_vault_db()?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS meta (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            schema_version INTEGER NOT NULL,
+            is_protected INTEGER NOT NULL DEFAULT 0,
+            unlock_mode TEXT NOT NULL DEFAULT 'demand',
+            salt BLOB NOT NULL DEFAULT X'',
+            encrypted_dek BLOB NOT NULL DEFAULT X'',
+            local_dek BLOB NOT NULL DEFAULT X'',
+            recovery_encrypted_dek BLOB NOT NULL DEFAULT X'',
+            kek_validation BLOB NOT NULL DEFAULT X'',
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS secrets (
+            connection_id INTEGER NOT NULL,
+            secret_type TEXT NOT NULL,
+            encrypted_data BLOB NOT NULL DEFAULT X'',
+            nonce BLOB NOT NULL DEFAULT X'',
+            PRIMARY KEY (connection_id, secret_type)
+        );",
+    )
+    .map_err(|e| e.to_string())?;
+
+    ignore_duplicate_column_error(conn.execute(
+        "ALTER TABLE meta ADD COLUMN local_dek BLOB NOT NULL DEFAULT X''",
+        [],
+    ))?;
+
+    let meta_exists: Option<i64> = conn
+        .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    conn.execute_batch(
+        "PRAGMA foreign_keys = OFF;
+         CREATE TABLE IF NOT EXISTS secrets_new (
+             connection_id INTEGER NOT NULL,
+             secret_type TEXT NOT NULL,
+             encrypted_data BLOB NOT NULL DEFAULT X'',
+             nonce BLOB NOT NULL DEFAULT X'',
+             PRIMARY KEY (connection_id, secret_type)
+         );
+         INSERT OR REPLACE INTO secrets_new (connection_id, secret_type, encrypted_data, nonce)
+         SELECT connection_id, secret_type, encrypted_data, nonce FROM secrets;
+         DROP TABLE secrets;
+         ALTER TABLE secrets_new RENAME TO secrets;
+         PRAGMA foreign_keys = ON;",
+    )
+    .map_err(|e| e.to_string())?;
+
+    if meta_exists.is_none() {
+        let now = current_export_timestamp();
+        conn.execute(
+            "INSERT INTO meta (
+                id,
+                schema_version,
+                is_protected,
+                unlock_mode,
+                created_at,
+                updated_at
+            ) VALUES (1, ?1, 0, ?2, ?3, ?3)",
+            (&VAULT_SCHEMA_VERSION, &DEFAULT_VAULT_UNLOCK_MODE, &now),
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        let now = current_export_timestamp();
+        conn.execute(
+            "UPDATE meta
+             SET schema_version = ?1,
+                 unlock_mode = CASE
+                     WHEN TRIM(COALESCE(unlock_mode, '')) = '' THEN ?2
+                     ELSE unlock_mode
+                 END,
+                 updated_at = CASE
+                     WHEN TRIM(COALESCE(updated_at, '')) = '' THEN ?3
+                     ELSE updated_at
+                 END
+             WHERE id = 1",
+            (&VAULT_SCHEMA_VERSION, &DEFAULT_VAULT_UNLOCK_MODE, &now),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let is_protected: i32 = conn
+        .query_row(
+            "SELECT is_protected FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if is_protected == 0 {
+        let _ = ensure_unprotected_vault_dek(&conn)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn load_vault_status(
+    conn: &Connection,
+    runtime: &VaultRuntimeState,
+) -> Result<VaultStatus, String> {
+    let row: Option<(i32, String)> = conn
+        .query_row(
+            "SELECT is_protected, unlock_mode FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let (is_protected, unlock_mode) = row.unwrap_or((0, DEFAULT_VAULT_UNLOCK_MODE.to_string()));
+
+    let effective_unlock_mode = if unlock_mode.trim().is_empty() {
+        runtime.unlock_mode.clone()
+    } else {
+        unlock_mode
+    };
+
+    Ok(VaultStatus {
+        is_initialized: true,
+        is_protected: is_protected != 0,
+        is_unlocked: runtime.is_unlocked
+            && runtime
+                .session_dek
+                .as_ref()
+                .map(|value| !value.is_empty())
+                .unwrap_or(false),
+        unlock_mode: effective_unlock_mode,
+        has_legacy_master_key: Path::new(&get_key_path()).exists(),
+    })
+}
+
+pub(crate) fn normalize_vault_unlock_mode(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "startup" => "startup".to_string(),
+        "demand" => "demand".to_string(),
+        _ => DEFAULT_VAULT_UNLOCK_MODE.to_string(),
+    }
+}
+
+fn create_argon2() -> Result<Argon2<'static>, String> {
+    let params = Params::new(19_456, 3, 1, Some(VAULT_KEY_LEN))
+        .map_err(|e| format!("Argon2 params failed: {}", e))?;
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+}
+
+pub(crate) fn derive_vault_key_from_secret(
+    secret: &str,
+    salt: &[u8],
+) -> Result<[u8; VAULT_KEY_LEN], String> {
+    if secret.trim().is_empty() {
+        return Err("Secret is empty".to_string());
+    }
+    if salt.len() < VAULT_SALT_LEN {
+        return Err("Vault salt is invalid".to_string());
+    }
+
+    let argon2 = create_argon2()?;
+    let mut out = [0u8; VAULT_KEY_LEN];
+    argon2
+        .hash_password_into(secret.as_bytes(), salt, &mut out)
+        .map_err(|e| format!("Argon2 derive failed: {}", e))?;
+    Ok(out)
+}
+
+pub(crate) fn vault_encrypt_combined(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    if key.len() != VAULT_KEY_LEN {
+        return Err("Vault key length is invalid".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
+    let mut nonce_bytes = [0u8; VAULT_NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext)
+        .map_err(|e| e.to_string())?;
+
+    let mut combined = nonce_bytes.to_vec();
+    combined.extend_from_slice(&ciphertext);
+    Ok(combined)
+}
+
+pub(crate) fn vault_decrypt_combined(key: &[u8], combined: &[u8]) -> Result<Vec<u8>, String> {
+    if key.len() != VAULT_KEY_LEN {
+        return Err("Vault key length is invalid".to_string());
+    }
+    if combined.len() < VAULT_NONCE_LEN {
+        return Err("Vault payload is too short".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
+    let nonce = Nonce::from_slice(&combined[..VAULT_NONCE_LEN]);
+    cipher
+        .decrypt(nonce, &combined[VAULT_NONCE_LEN..])
+        .map_err(|_| "Vault decrypt failed".to_string())
+}
+
+fn vault_encrypt_secret_value(dek: &[u8], plaintext: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
+    if dek.len() != VAULT_KEY_LEN {
+        return Err("Vault DEK length is invalid".to_string());
+    }
+
+    let cipher = Aes256Gcm::new_from_slice(dek).map_err(|e| e.to_string())?;
+    let mut nonce_bytes = [0u8; VAULT_NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    Ok((ciphertext, nonce_bytes.to_vec()))
+}
+
+pub(crate) fn generate_recovery_key() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut bytes = [0u8; 20];
+    OsRng.fill_bytes(&mut bytes);
+
+    let mut parts: Vec<String> = Vec::new();
+    for chunk in bytes.chunks(4) {
+        let part: String = chunk
+            .iter()
+            .map(|byte| ALPHABET[(*byte as usize) % ALPHABET.len()] as char)
+            .collect();
+        parts.push(part);
+    }
+    parts.join("-")
+}
+
+pub(crate) fn upsert_vault_secret(
+    vault_conn: &Connection,
+    connection_id: i32,
+    secret_type: &str,
+    secret_value: &str,
+    dek: &[u8],
+) -> Result<(), String> {
+    if secret_value.is_empty() {
+        return Ok(());
+    }
+
+    let (encrypted_data, nonce) = vault_encrypt_secret_value(dek, secret_value)?;
+    vault_conn
+        .execute(
+            "INSERT INTO secrets (connection_id, secret_type, encrypted_data, nonce)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(connection_id, secret_type)
+             DO UPDATE SET encrypted_data = excluded.encrypted_data, nonce = excluded.nonce",
+            (&connection_id, &secret_type, &encrypted_data, &nonce),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn migrate_legacy_secrets_into_vault(
+    conn_db: &Connection,
+    vault_conn: &Connection,
+    dek: &[u8],
+) -> Result<usize, String> {
+    let mut stmt = conn_db
+        .prepare("SELECT id, password, passphrase FROM connections ORDER BY id ASC")
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut migrated = 0usize;
+
+    for item in iter {
+        let (connection_id, legacy_password, legacy_passphrase) =
+            item.map_err(|e| e.to_string())?;
+
+        if !legacy_password.trim().is_empty() {
+            let plain = decrypt_pw(&legacy_password)?;
+            if !plain.is_empty() {
+                upsert_vault_secret(vault_conn, connection_id, "password", &plain, dek)?;
+                migrated += 1;
+            }
+        }
+
+        if !legacy_passphrase.trim().is_empty() {
+            let plain = decrypt_pw(&legacy_passphrase)?;
+            if !plain.is_empty() {
+                upsert_vault_secret(vault_conn, connection_id, "passphrase", &plain, dek)?;
+                migrated += 1;
+            }
+        }
+    }
+
+    Ok(migrated)
+}
+
+fn read_legacy_master_key() -> Result<[u8; 32], String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Err("Legacy master.key not found".to_string());
+    }
+
+    let key_base64 = fs::read_to_string(&key_path).map_err(|e| e.to_string())?;
+    let key_bytes = STANDARD
+        .decode(key_base64.trim())
+        .map_err(|_| "Legacy master.key is invalid".to_string())?;
+
+    if key_bytes.len() != 32 {
+        return Err("Legacy master.key length is invalid".to_string());
+    }
+
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&key_bytes);
+    Ok(key)
+}
+
+pub(crate) fn delete_legacy_master_key() -> Result<(), String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Ok(());
+    }
+    wipe_and_remove_file(&key_path)
+}
+
+pub(crate) fn count_legacy_secret_entries(conn_db: &Connection) -> Result<usize, String> {
+    let counts: (Option<i64>, Option<i64>) = conn_db
+        .query_row(
+            "SELECT
+                SUM(CASE WHEN TRIM(COALESCE(password, '')) <> '' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN TRIM(COALESCE(passphrase, '')) <> '' THEN 1 ELSE 0 END)
+             FROM connections",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok((counts.0.unwrap_or(0) + counts.1.unwrap_or(0)) as usize)
+}
+
+fn clear_legacy_connection_secrets(conn_db: &Connection) -> Result<(), String> {
+    conn_db
+        .execute(
+            "UPDATE connections
+             SET password = '', passphrase = ''
+             WHERE TRIM(COALESCE(password, '')) <> ''
+                OR TRIM(COALESCE(passphrase, '')) <> ''",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub(crate) fn finalize_legacy_master_key_cleanup_with_dek(
+    conn_db: &Connection,
+    vault_conn: &Connection,
+    dek: &[u8],
+) -> Result<usize, String> {
+    let mut migrated = 0usize;
+
+    if count_legacy_secret_entries(conn_db)? > 0 {
+        migrated = migrate_legacy_secrets_into_vault(conn_db, vault_conn, dek)?;
+        clear_legacy_connection_secrets(conn_db)?;
+        let _ = conn_db.execute_batch("VACUUM;");
+    }
+
+    let key_path = PathBuf::from(get_key_path());
+    if key_path.exists() {
+        wipe_and_remove_file(&key_path)?;
+    }
+
+    Ok(migrated)
+}
+
+fn ensure_unprotected_vault_dek(vault_conn: &Connection) -> Result<Vec<u8>, String> {
+    let local_dek: Option<Vec<u8>> = vault_conn
+        .query_row(
+            "SELECT local_dek FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(value) = local_dek {
+        if value.len() == VAULT_KEY_LEN {
+            return Ok(value);
+        }
+    }
+
+    let mut dek = [0u8; VAULT_KEY_LEN];
+    OsRng.fill_bytes(&mut dek);
+    let now = current_export_timestamp();
+
+    vault_conn
+        .execute(
+            "UPDATE meta
+             SET local_dek = ?1,
+                 updated_at = ?2
+             WHERE id = 1",
+            (&dek.to_vec(), &now),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(dek.to_vec())
+}
+
+pub(crate) fn ensure_vault_runtime_ready(vault_state: &State<'_, VaultState>) -> Result<(), String> {
+    init_vault_db()?;
+    let conn_db = open_db()?;
+    let vault_conn = open_vault_db()?;
+
+    let row: (i32, String, Vec<u8>) = vault_conn
+        .query_row(
+            "SELECT is_protected, unlock_mode, local_dek
+             FROM meta
+             WHERE id = 1
+             LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let normalized_unlock_mode = normalize_vault_unlock_mode(&row.1);
+
+    if row.0 == 0 {
+        let dek = if row.2.len() == VAULT_KEY_LEN {
+            row.2.clone()
+        } else {
+            ensure_unprotected_vault_dek(&vault_conn)?
+        };
+
+        let legacy_secret_entries = count_legacy_secret_entries(&conn_db)?;
+        if legacy_secret_entries > 0 {
+            migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+            clear_legacy_connection_secrets(&conn_db)?;
+        }
+
+        if Path::new(&get_key_path()).exists() {
+            delete_legacy_master_key()?;
+        }
+
+        let mut runtime = vault_state
+            .runtime
+            .lock()
+            .map_err(|_| "Vault state lock failed".to_string())?;
+        runtime.is_unlocked = true;
+        runtime.unlock_mode = normalized_unlock_mode;
+        runtime.session_dek = Some(dek);
+        return Ok(());
+    }
+
+    if !row.2.is_empty() {
+        let now = current_export_timestamp();
+        vault_conn
+            .execute(
+                "UPDATE meta
+                 SET local_dek = X'',
+                     updated_at = ?1
+                 WHERE id = 1",
+                (&now,),
+            )
+            .map_err(|e| e.to_string())?;
+    }
+
+    let mut runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    runtime.unlock_mode = normalized_unlock_mode;
+
+    if !(runtime.is_unlocked
+        && runtime
+            .session_dek
+            .as_ref()
+            .map(|value| !value.is_empty())
+            .unwrap_or(false))
+    {
+        runtime.is_unlocked = false;
+        runtime.session_dek = None;
+    }
+
+    Ok(())
+}
+
+fn is_vault_protected(vault_conn: &Connection) -> Result<bool, String> {
+    let value: Option<i32> = vault_conn
+        .query_row(
+            "SELECT is_protected FROM meta WHERE id = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(value.unwrap_or(0) != 0)
+}
+
+fn get_runtime_vault_dek(vault_state: &State<'_, VaultState>) -> Result<Option<Vec<u8>>, String> {
+    let runtime = vault_state
+        .runtime
+        .lock()
+        .map_err(|_| "Vault state lock failed".to_string())?;
+    Ok(runtime.session_dek.clone())
+}
+
+pub(crate) fn require_runtime_vault_dek(
+    _vault_conn: &Connection,
+    vault_state: &State<'_, VaultState>,
+) -> Result<Vec<u8>, String> {
+    ensure_vault_runtime_ready(vault_state)?;
+
+    let dek = get_runtime_vault_dek(vault_state)?;
+    match dek {
+        Some(value) if !value.is_empty() => Ok(value),
+        _ => Err("Vault is locked".to_string()),
+    }
+}
+
+pub(crate) fn read_vault_secret_plaintext(
+    vault_conn: &Connection,
+    connection_id: i32,
+    secret_type: &str,
+    dek: &[u8],
+) -> Result<String, String> {
+    let row: Option<(Vec<u8>, Vec<u8>)> = vault_conn
+        .query_row(
+            "SELECT encrypted_data, nonce
+             FROM secrets
+             WHERE connection_id = ?1 AND secret_type = ?2
+             LIMIT 1",
+            (&connection_id, &secret_type),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let Some((encrypted_data, nonce)) = row else {
+        return Ok(String::new());
+    };
+
+    let mut combined = nonce;
+    combined.extend_from_slice(&encrypted_data);
+    let plain = vault_decrypt_combined(dek, &combined)?;
+    String::from_utf8(plain).map_err(|_| "Vault secret is not valid UTF 8".to_string())
+}
+
+pub(crate) fn delete_vault_secret(
+    vault_conn: &Connection,
+    connection_id: i32,
+    secret_type: &str,
+) -> Result<(), String> {
+    vault_conn
+        .execute(
+            "DELETE FROM secrets WHERE connection_id = ?1 AND secret_type = ?2",
+            (&connection_id, &secret_type),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn wipe_and_remove_file(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    let wipe_len = fs::metadata(path).map(|m| m.len()).unwrap_or(64).max(64) as usize;
+    let _ = fs::write(path, vec![0u8; wipe_len]);
+    fs::remove_file(path).map_err(|e| e.to_string())
+}
+
+pub(crate) fn migrate_legacy_master_key_to_vault() -> Result<(), String> {
+    let key_path = PathBuf::from(get_key_path());
+    if !key_path.exists() {
+        return Ok(());
+    }
+
+    init_vault_db()?;
+    let conn_db = open_db()?;
+    let legacy_secret_entries = count_legacy_secret_entries(&conn_db)?;
+
+    if legacy_secret_entries == 0 {
+        wipe_and_remove_file(&key_path)?;
+        return Ok(());
+    }
+
+    let vault_conn = open_vault_db()?;
+
+    if is_vault_protected(&vault_conn)? {
+        return Ok(());
+    }
+
+    let dek = ensure_unprotected_vault_dek(&vault_conn)?;
+    migrate_legacy_secrets_into_vault(&conn_db, &vault_conn, &dek)?;
+    clear_legacy_connection_secrets(&conn_db)?;
+    let _ = conn_db.execute_batch("VACUUM;");
+    wipe_and_remove_file(&key_path)?;
+    Ok(())
+}
+
+fn decrypt_pw(encoded: &str) -> Result<String, String> {
+    if encoded.is_empty() {
+        return Ok(String::new());
+    }
+    let combined = STANDARD.decode(encoded).map_err(|_| "Base64 Fehler")?;
+    if combined.len() < 12 {
+        return Err("Verschlüsselter Text ist zu kurz".to_string());
+    }
+    let key = read_legacy_master_key()?;
+    let cipher = Aes256Gcm::new(&key.into());
+    let nonce = Nonce::from_slice(&combined[..12]);
+    let plaintext = cipher
+        .decrypt(nonce, &combined[12..])
+        .map_err(|_| "Falscher Key")?;
+    String::from_utf8(plaintext).map_err(|_| "UTF8 Fehler".to_string())
+}
+
+pub(crate) mod decode_vault_with_secret {
+    pub(crate) fn derive_only(
+        secret: &str,
+        salt: &[u8],
+    ) -> Result<[u8; super::VAULT_KEY_LEN], String> {
+        super::derive_vault_key_from_secret(secret, salt)
+    }
+}
+
+pub(crate) fn decode_vault_with_secret(
+    secret: &str,
+    salt: &[u8],
+    encrypted_dek: &[u8],
+    kek_validation: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let key = derive_vault_key_from_secret(secret, salt)?;
+    let dek = vault_decrypt_combined(&key, encrypted_dek)?;
+    let validation = vault_decrypt_combined(&dek, kek_validation)?;
+    Ok((dek, validation))
+}
+
+pub(crate) fn decode_vault_with_recovery(
+    recovery_key: &str,
+    salt: &[u8],
+    recovery_encrypted_dek: &[u8],
+    kek_validation: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), String> {
+    decode_vault_with_secret(recovery_key, salt, recovery_encrypted_dek, kek_validation)
+}
