@@ -1,23 +1,24 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::{
-    SshState, VaultState, delete_vault_secret, init_vault_db, open_db, open_vault_db,
-    require_runtime_vault_dek, upsert_vault_secret,
+    SshState, VaultState, delete_vault_secret, ensure_connection_exists, init_vault_db, open_db,
+    open_vault_db, require_runtime_vault_dek, upsert_vault_secret,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct SshConnection {
-    name: String,
-    host: String,
-    port: u16,
-    username: String,
-    password: String,
-    private_key: String,
-    passphrase: String,
-    group_name: String,
+    pub(crate) name: String,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) username: String,
+    pub(crate) password: String,
+    pub(crate) private_key: String,
+    pub(crate) passphrase: String,
+    pub(crate) group_name: String,
 }
 
 #[derive(Debug, Serialize)]
