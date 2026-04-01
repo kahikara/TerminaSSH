@@ -1007,7 +1007,7 @@ export default function LocalFilesPanel({
     visible,
     renameItem,
     newFolderOpen,
-    deleteItem,
+    deleteItems,
     actionBusy,
     renameValid,
     newFolderValid,
