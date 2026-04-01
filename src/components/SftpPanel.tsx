@@ -1262,6 +1262,18 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
           clearTransientChrome()
           openBrowserContextMenu(e.clientX, e.clientY)
         }}
+        onClick={(e) => {
+          const target = e.target as HTMLElement | null
+          if (target?.closest("[data-sftp-entry-key]")) return
+          if (target?.closest("[data-sftp-context-menu]")) return
+
+          if (hasTransientMenuOpen) {
+            clearTransientChrome()
+            return
+          }
+
+          setSelectedItem(null)
+        }}
         style={{
           flex: 1,
           overflow: "auto",
@@ -1275,6 +1287,14 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
             style={sftpEntryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
+            onDoubleClick={() => {
+              if (hasTransientMenuOpen) {
+                clearTransientChrome()
+                return
+              }
+
+              activateEntry("__parent__")
+            }}
             onClick={() => {
               if (hasTransientMenuOpen) {
                 clearTransientChrome()
@@ -1282,8 +1302,6 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
               }
 
               setSelectedItem("__parent__")
-              const parent = path.split("/").slice(0, -2).join("/") || "/"
-              void load(parent)
             }}
           >
             <ArrowLeft size={14} />
@@ -1339,14 +1357,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                 return
               }
 
-              setSelectedItem(f.name)
-
-              if (f.is_dir) {
-                const next = path + (path.endsWith("/") ? "" : "/") + f.name
-                void load(next)
-              } else {
-                void openEditor(f)
-              }
+              activateEntry(f.name)
             }}
             onClick={() => {
               if (hasTransientMenuOpen) {
@@ -1355,11 +1366,6 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
               }
 
               setSelectedItem(f.name)
-
-              if (f.is_dir) {
-                const next = path + (path.endsWith("/") ? "" : "/") + f.name
-                void load(next)
-              }
             }}
           >
             {f.is_dir ? (

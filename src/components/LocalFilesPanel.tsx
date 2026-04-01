@@ -529,6 +529,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   }
 
   function activateEntry(entryName: string) {
+    setSelectedItem(entryName)
+
     if (entryName === "__parent__") {
       void load(getParentLocalPath(path))
       return
@@ -1397,6 +1399,18 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           clearTransientChrome()
           openBrowserContextMenu(e.clientX, e.clientY)
         }}
+        onClick={(e) => {
+          const target = e.target as HTMLElement | null
+          if (target?.closest("[data-local-entry-key]")) return
+          if (target?.closest("[data-local-context-menu]")) return
+
+          if (hasTransientMenuOpen) {
+            clearTransientChrome()
+            return
+          }
+
+          setSelectedItem(null)
+        }}
         style={{
           flex: 1,
           overflow: "auto",
@@ -1410,6 +1424,14 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             style={entryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
+            onDoubleClick={() => {
+              if (hasTransientMenuOpen) {
+                clearTransientChrome()
+                return
+              }
+
+              activateEntry("__parent__")
+            }}
             onClick={() => {
               if (hasTransientMenuOpen) {
                 clearTransientChrome()
@@ -1417,7 +1439,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               }
 
               setSelectedItem("__parent__")
-              void load(getParentLocalPath(path))
             }}
           >
             <ArrowLeft size={14} />
@@ -1473,12 +1494,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                 return
               }
 
-              setSelectedItem(f.name)
-              if (f.is_dir) {
-                void load(buildLocalPath(path, f.name))
-              } else {
-                void openEditor(f)
-              }
+              activateEntry(f.name)
             }}
             onClick={() => {
               if (hasTransientMenuOpen) {
@@ -1487,9 +1503,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               }
 
               setSelectedItem(f.name)
-              if (f.is_dir) {
-                void load(buildLocalPath(path, f.name))
-              }
             }}
           >
             {f.is_dir ? (
