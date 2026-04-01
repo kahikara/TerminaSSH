@@ -5,7 +5,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 use crate::{FileItem, SftpReadFilePayload, home_dir};
 
-fn normalize_local_path(path: &str) -> Result<PathBuf, String> {
+pub(crate) fn normalize_local_path(path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("Path is empty".to_string());

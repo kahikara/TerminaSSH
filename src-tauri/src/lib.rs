@@ -46,7 +46,7 @@ use crate::host_keys::{
 };
 use crate::local_fs::{
     get_local_home_dir, get_local_roots, local_delete, local_list_dir, local_mkdir,
-    local_read_file, local_rename, local_write_file,
+    local_read_file, local_rename, local_write_file, normalize_local_path,
 };
 use crate::snippets::{add_snippet, delete_snippet, get_snippets, update_snippet};
 use crate::status_bar::get_status_bar_info;
