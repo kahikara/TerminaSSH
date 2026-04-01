@@ -4,6 +4,7 @@ mod backup;
 mod external_commands;
 mod status_bar;
 mod host_keys;
+mod snippets;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use rusqlite::{Connection, OptionalExtension};
@@ -42,6 +43,7 @@ use crate::host_keys::{
     format_known_host_name, get_known_hosts_path, host_key_type_label, probe_host_key,
     read_known_hosts_file, remove_known_host_entry_with_ssh_keygen, run_ssh_keygen,
 };
+use crate::snippets::{add_snippet, delete_snippet, get_snippets, update_snippet};
 use crate::status_bar::get_status_bar_info;
 use crate::window_state::{is_wayland_session, restore_main_window_state, save_main_window_state};
 use crate::window_commands::{
@@ -92,13 +94,6 @@ pub struct SftpProgress {
     speed: f64,
     current_file: String,
 }
-#[derive(Debug, Serialize)]
-pub struct SnippetItem {
-    id: i32,
-    name: String,
-    command: String,
-}
-
 #[derive(Debug, Serialize)]
 pub struct SshKeyItem {
     id: i32,
@@ -1969,81 +1964,6 @@ fn read_clipboard(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn get_snippets() -> Result<Vec<SnippetItem>, String> {
-    let conn = open_db()?;
-    let mut stmt = conn
-        .prepare("SELECT id, name, command FROM snippets ORDER BY name COLLATE NOCASE ASC")
-        .map_err(|e| e.to_string())?;
-    let iter = stmt
-        .query_map([], |row| {
-            Ok(SnippetItem {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                command: row.get(2)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-    let mut res = Vec::new();
-    for item in iter {
-        res.push(item.map_err(|e| e.to_string())?);
-    }
-    Ok(res)
-}
-#[tauri::command]
-fn add_snippet(name: String, command: String, app: AppHandle) -> Result<String, String> {
-    let name = normalize_snippet_name(&name);
-    validate_snippet(&name, &command)?;
-
-    let conn = open_db()?;
-    conn.execute(
-        "INSERT INTO snippets (name, command) VALUES (?1, ?2)",
-        (&name, &command),
-    )
-    .map_err(|e| e.to_string())?;
-    let _ = app.emit("snippets-updated", ());
-    Ok("Snippet saved".to_string())
-}
-#[tauri::command]
-fn update_snippet(
-    id: i32,
-    name: String,
-    command: String,
-    app: AppHandle,
-) -> Result<String, String> {
-    let name = normalize_snippet_name(&name);
-    validate_snippet(&name, &command)?;
-
-    let conn = open_db()?;
-    let updated = conn
-        .execute(
-            "UPDATE snippets SET name = ?1, command = ?2 WHERE id = ?3",
-            (&name, &command, &id),
-        )
-        .map_err(|e| e.to_string())?;
-
-    if updated == 0 {
-        return Err("Snippet not found".to_string());
-    }
-
-    let _ = app.emit("snippets-updated", ());
-    Ok("Snippet updated".to_string())
-}
-#[tauri::command]
-fn delete_snippet(id: i32, app: AppHandle) -> Result<String, String> {
-    let conn = open_db()?;
-    let deleted = conn
-        .execute("DELETE FROM snippets WHERE id = ?1", [&id])
-        .map_err(|e| e.to_string())?;
-
-    if deleted == 0 {
-        return Err("Snippet not found".to_string());
-    }
-
-    let _ = app.emit("snippets-updated", ());
-    Ok("Snippet deleted".to_string())
-}
-
-#[tauri::command]
 fn get_connections() -> Result<Vec<ConnectionItem>, String> {
     init_vault_db()?;
     let conn = open_db()?;
@@ -2267,10 +2187,6 @@ fn ensure_connection_identity_unique(
     } else {
         Ok(())
     }
-}
-
-fn normalize_snippet_name(name: &str) -> String {
-    name.trim().to_string()
 }
 
 pub(crate) fn validate_snippet(name: &str, command: &str) -> Result<(), String> {
