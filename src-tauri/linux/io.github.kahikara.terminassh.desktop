@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Termina SSH
+Comment=A modern SSH workspace built with Tauri
+Exec=termina-ssh %U
+Icon=termina-ssh
+Terminal=false
+Categories=Utility;Development;Network;
+StartupWMClass=termina-ssh
+X-GNOME-WMClass=termina-ssh
+MimeType=x-scheme-handler/ssh;
