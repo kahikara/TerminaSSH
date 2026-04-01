@@ -469,7 +469,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [errorText, setErrorText] = useState("")
   const [successText, setSuccessText] = useState("")
   const [actionBusy, setActionBusy] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<string | null>(null)
+  const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [activeItem, setActiveItem] = useState<string | null>(null)
   const [localRoots, setLocalRoots] = useState<string[]>([])
 
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -498,6 +499,46 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
   const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen)
 
+  function isItemSelected(itemName: string) {
+    return selectedItems.includes(itemName)
+  }
+
+  function selectSingleItem(itemName: string | null) {
+    setSelectedItems(itemName ? [itemName] : [])
+    setActiveItem(itemName)
+  }
+
+  function toggleItemSelection(itemName: string) {
+    const exists = selectedItems.includes(itemName)
+
+    if (!exists) {
+      setSelectedItems([...selectedItems, itemName])
+      setActiveItem(itemName)
+      return
+    }
+
+    const next = selectedItems.filter((item) => item !== itemName)
+    if (next.length === 0) {
+      selectSingleItem(itemName)
+      return
+    }
+
+    setSelectedItems(next)
+    setActiveItem(next.includes(activeItem || "") ? activeItem : next[0])
+  }
+
+  function selectAllItems() {
+    const nextItems = visibleFiles.map((file) => file.name)
+    if (!nextItems.length) {
+      selectSingleItem(null)
+      return
+    }
+
+    const nextActive = activeItem && nextItems.includes(activeItem) ? activeItem : nextItems[0]
+    setSelectedItems(nextItems)
+    setActiveItem(nextActive)
+  }
+
   function clearTransientChrome() {
     setMenuItem(null)
     setMenuStyle(null)
@@ -523,21 +564,26 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     const panelRect = panelRef.current?.getBoundingClientRect()
     if (!panelRect) return
 
-    setSelectedItem(entry.name)
+    selectSingleItem(entry.name)
     setContextMenuItem(entry.name)
     setContextMenuStyle(getPanelContextMenuPosition(panelRect, clientX, clientY, 156, entry.is_dir ? 118 : 154))
   }
 
   function activateEntry(entryName: string) {
-    setSelectedItem(entryName)
-
     if (entryName === "__parent__") {
+      selectSingleItem("__parent__")
       void load(getParentLocalPath(path))
       return
     }
 
     const entry = visibleFiles.find((f) => f.name === entryName)
     if (!entry) return
+
+    if (!isItemSelected(entry.name)) {
+      selectSingleItem(entry.name)
+    } else {
+      setActiveItem(entry.name)
+    }
 
     if (entry.is_dir) {
       void load(buildLocalPath(path, entry.name))
@@ -611,7 +657,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     setActionBusy(false)
     clearTransientChrome()
     setHoveredItem(null)
-    setSelectedItem(null)
+    selectSingleItem(null)
     setRenameItem(null)
     setRenameValue("")
     setNewFolderOpen(false)
@@ -625,16 +671,23 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (!visible) return
 
     if (!navigableEntries.length) {
-      setSelectedItem(null)
+      selectSingleItem(null)
       return
     }
 
-    if (selectedItem && navigableEntries.includes(selectedItem)) return
-    setSelectedItem(navigableEntries[0])
-  }, [visible, navigableEntries, selectedItem])
+    if (activeItem && navigableEntries.includes(activeItem)) {
+      setSelectedItems((prev) => {
+        const filtered = prev.filter((item) => navigableEntries.includes(item))
+        return filtered.includes(activeItem) ? filtered : [activeItem, ...filtered]
+      })
+      return
+    }
+
+    selectSingleItem(navigableEntries[0])
+  }, [visible, navigableEntries, activeItem])
 
   useEffect(() => {
-    if (!visible || !selectedItem) return
+    if (!visible || !activeItem) return
 
     const listEl = listRef.current
     if (!listEl) return
@@ -642,7 +695,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     const rows = Array.from(
       listEl.querySelectorAll<HTMLElement>("[data-local-entry-key]")
     )
-    const target = rows.find((row) => row.dataset.localEntryKey === selectedItem)
+    const target = rows.find((row) => row.dataset.localEntryKey === activeItem)
     if (!target) return
 
     const top = target.offsetTop
@@ -658,7 +711,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (bottom > viewBottom) {
       listEl.scrollTop = bottom - listEl.clientHeight
     }
-  }, [visible, selectedItem, path, visibleFiles])
+  }, [visible, activeItem, path, visibleFiles])
 
   useEffect(() => {
     persistPanelWidth(panelWidth)
@@ -786,30 +839,40 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         e.preventDefault()
         e.stopPropagation()
         clearTransientChrome()
-        setSelectedItem("__parent__")
+        selectSingleItem("__parent__")
         void load(getParentLocalPath(path))
         return
       }
 
       if (!navigableEntries.length) return
 
-      const current = selectedItem && navigableEntries.includes(selectedItem)
-        ? selectedItem
+      const mod = e.ctrlKey || e.metaKey
+
+      const current = activeItem && navigableEntries.includes(activeItem)
+        ? activeItem
         : navigableEntries[0]
 
       const currentIndex = navigableEntries.indexOf(current)
 
+      if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        selectAllItems()
+        return
+      }
+
       if (e.key === "ArrowDown") {
         e.preventDefault()
         e.stopPropagation()
-        setSelectedItem(navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)])
+        selectSingleItem(navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)])
         return
       }
 
       if (e.key === "ArrowUp") {
         e.preventDefault()
         e.stopPropagation()
-        setSelectedItem(navigableEntries[Math.max(currentIndex - 1, 0)])
+        selectSingleItem(navigableEntries[Math.max(currentIndex - 1, 0)])
         return
       }
 
@@ -859,7 +922,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     errorText,
     successText,
     navigableEntries,
-    selectedItem,
+    activeItem,
+    selectedItems,
     visibleFiles,
     lang,
     onClose
@@ -1409,7 +1473,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             return
           }
 
-          setSelectedItem(null)
+          selectSingleItem(null)
         }}
         style={{
           flex: 1,
@@ -1421,7 +1485,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
         {hasLocalParentPath(path) && (
           <div
             data-local-entry-key="__parent__"
-            style={entryStyle(hoveredItem === "__parent__", selectedItem === "__parent__")}
+            style={entryStyle(hoveredItem === "__parent__", isItemSelected("__parent__"))}
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
             onDoubleClick={() => {
@@ -1438,7 +1502,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                 return
               }
 
-              setSelectedItem("__parent__")
+              selectSingleItem("__parent__")
             }}
           >
             <ArrowLeft size={14} />
@@ -1479,7 +1543,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           <div
             key={f.name}
             data-local-entry-key={f.name}
-            style={entryStyle(hoveredItem === f.name, selectedItem === f.name)}
+            style={entryStyle(hoveredItem === f.name, isItemSelected(f.name))}
             onMouseEnter={() => setHoveredItem(f.name)}
             onMouseLeave={() => setHoveredItem((current) => current === f.name ? null : current)}
             onContextMenu={(e) => {
@@ -1496,13 +1560,18 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
               activateEntry(f.name)
             }}
-            onClick={() => {
+            onClick={(e) => {
               if (hasTransientMenuOpen) {
                 clearTransientChrome()
                 return
               }
 
-              setSelectedItem(f.name)
+              if (e.ctrlKey || e.metaKey) {
+                toggleItemSelection(f.name)
+                return
+              }
+
+              selectSingleItem(f.name)
             }}
           >
             {f.is_dir ? (
@@ -1538,7 +1607,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
                   return
                 }
 
-                setSelectedItem(f.name)
+                selectSingleItem(f.name)
 
                 const listEl = listRef.current
                 const buttonEl = e.currentTarget as HTMLButtonElement
