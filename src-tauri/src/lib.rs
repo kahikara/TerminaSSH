@@ -4,6 +4,7 @@ mod backup;
 mod external_commands;
 mod status_bar;
 mod host_keys;
+mod connection_test;
 mod snippets;
 mod system_commands;
 mod local_fs;
@@ -42,8 +43,11 @@ use crate::external_commands::{
     copy_text_to_clipboard, open_external_url, reveal_path_in_file_manager, set_tray_visible,
 };
 use crate::connections::{
-    SshConnection, delete_connection, get_connections, normalize_connection_fields,
-    save_connection, set_connection_password, update_connection, validate_connection,
+    delete_connection, get_connections, save_connection, set_connection_password,
+    update_connection,
+};
+use crate::connection_test::{
+    check_host_key, test_connection, trust_host_key, ConnectionTestResult,
 };
 use crate::pty_commands::{
     close_session, resize_pty, start_local_pty, start_quick_ssh, start_ssh, write_to_pty,
@@ -56,11 +60,7 @@ use crate::ssh_keys::{
     delete_ssh_key, generate_ssh_key, get_managed_keys_dir, get_ssh_keys,
     save_ssh_key,
 };
-use crate::host_keys::{
-    HostKeyCheckInfo, check_known_host_status_for_session, ensure_known_host_match_for_session,
-    format_known_host_name, get_known_hosts_path, host_key_type_label, probe_host_key,
-    read_known_hosts_file, remove_known_host_entry_with_ssh_keygen,
-};
+use crate::host_keys::ensure_known_host_match_for_session;
 use crate::local_fs::{
     get_local_home_dir, get_local_roots, local_delete, local_list_dir, local_mkdir,
     local_read_file, local_rename, local_write_file,
@@ -79,17 +79,6 @@ use crate::window_commands::{
     window_close_main, window_is_maximized, window_minimize, window_start_dragging,
     window_toggle_maximize,
 };
-
-#[derive(Debug, Serialize)]
-pub struct ConnectionTestResult {
-    success: bool,
-    auth_ok: bool,
-    sftp_ok: bool,
-    host_key_status: String,
-    key_type: String,
-    fingerprint: String,
-    message: String,
-}
 
 #[derive(Debug, Serialize)]
 pub struct LinuxWindowModeInfo {
@@ -1944,140 +1933,6 @@ pub(crate) fn connect_ssh_session_with_password_override(
 
 pub(crate) fn connect_ssh_session(id: i32, vault_state: &State<'_, VaultState>) -> Result<Session, String> {
     connect_ssh_session_with_password_override(id, None, vault_state)
-}
-
-#[tauri::command]
-fn test_connection(
-    mut connection: SshConnection,
-    check_sftp: Option<bool>,
-) -> Result<ConnectionTestResult, String> {
-    normalize_connection_fields(&mut connection);
-    validate_connection(&connection)?;
-
-    let host = connection.host.clone();
-    let port = connection.port;
-    let username = connection.username.clone();
-
-    let (sess, key, key_type, fingerprint) = probe_host_key(&host, port)?;
-    let host_key_status = check_known_host_status_for_session(&sess, &host, port, &key)?;
-    let key_type_label = host_key_type_label(key_type);
-
-    if host_key_status != "match" {
-        let message = match host_key_status.as_str() {
-            "not_found" => "Host key is not trusted yet".to_string(),
-            "mismatch" => "Stored host key does not match the current server".to_string(),
-            _ => "Host key verification failed".to_string(),
-        };
-
-        return Ok(ConnectionTestResult {
-            success: false,
-            auth_ok: false,
-            sftp_ok: false,
-            host_key_status,
-            key_type: key_type_label,
-            fingerprint,
-            message,
-        });
-    }
-
-    let auth_ok = authenticate_session(
-        &sess,
-        &connection.username,
-        &connection.password,
-        &connection.private_key,
-        &connection.passphrase,
-    );
-
-    if !auth_ok {
-        return Ok(ConnectionTestResult {
-            success: false,
-            auth_ok: false,
-            sftp_ok: false,
-            host_key_status,
-            key_type: key_type_label,
-            fingerprint,
-            message: format!("Authentication failed for {}", username),
-        });
-    }
-
-    let wants_sftp = check_sftp.unwrap_or(true);
-    let sftp_ok = if wants_sftp {
-        sess.sftp().is_ok()
-    } else {
-        false
-    };
-
-    if wants_sftp && !sftp_ok {
-        return Ok(ConnectionTestResult {
-            success: false,
-            auth_ok: true,
-            sftp_ok: false,
-            host_key_status,
-            key_type: key_type_label,
-            fingerprint,
-            message: "SSH login succeeded, but SFTP could not be opened".to_string(),
-        });
-    }
-
-    Ok(ConnectionTestResult {
-        success: true,
-        auth_ok: true,
-        sftp_ok,
-        host_key_status,
-        key_type: key_type_label,
-        fingerprint,
-        message: "Connection test succeeded".to_string(),
-    })
-}
-
-#[tauri::command]
-fn check_host_key(host: String, port: u16) -> Result<HostKeyCheckInfo, String> {
-    let (sess, key, key_type, fingerprint) = probe_host_key(&host, port)?;
-    let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
-    let known_hosts_path = get_known_hosts_path()?;
-    read_known_hosts_file(&mut known_hosts, &known_hosts_path)?;
-
-    let status = match known_hosts.check_port(&host, port, &key) {
-        CheckResult::Match => "match",
-        CheckResult::NotFound => "not_found",
-        CheckResult::Mismatch => "mismatch",
-        CheckResult::Failure => "failure",
-    }
-    .to_string();
-
-    Ok(HostKeyCheckInfo {
-        host: host.clone(),
-        port,
-        display_host: format_known_host_name(&host, port),
-        key_type: host_key_type_label(key_type),
-        fingerprint,
-        status,
-        known_hosts_path: known_hosts_path.to_string_lossy().to_string(),
-    })
-}
-
-#[tauri::command]
-fn trust_host_key(host: String, port: u16) -> Result<(), String> {
-    let (sess, key, key_type, _) = probe_host_key(&host, port)?;
-    let known_hosts_path = get_known_hosts_path()?;
-
-    remove_known_host_entry_with_ssh_keygen(&host, port, &known_hosts_path);
-
-    let mut known_hosts = sess.known_hosts().map_err(|e| e.to_string())?;
-    read_known_hosts_file(&mut known_hosts, &known_hosts_path)?;
-
-    let host_name = format_known_host_name(&host, port);
-    let key_format: KnownHostKeyFormat = key_type.into();
-
-    known_hosts
-        .add(&host_name, &key, "", key_format)
-        .map_err(|e| e.to_string())?;
-
-    known_hosts
-        .write_file(&known_hosts_path, KnownHostFileKind::OpenSSH)
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
