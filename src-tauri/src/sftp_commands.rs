@@ -77,6 +77,39 @@ fn map_sftp_path_error(err: ssh2::Error, action: &str, path: &str) -> String {
     }
 }
 
+fn delete_remote_path_recursive(sftp: &ssh2::Sftp, path: &Path) -> Result<(), String> {
+    let display = path.to_string_lossy().to_string();
+    let stat = sftp
+        .stat(path)
+        .map_err(|e| map_sftp_path_error(e, "Delete target", &display))?;
+
+    if stat.is_dir() {
+        let entries = sftp
+            .readdir(path)
+            .map_err(|e| map_sftp_path_error(e, "List directory", &display))?;
+
+        for (entry_path, _) in entries {
+            let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+
+            if name == "." || name == ".." {
+                continue;
+            }
+
+            delete_remote_path_recursive(sftp, &entry_path)?;
+        }
+
+        sftp.rmdir(path)
+            .map_err(|e| map_sftp_path_error(e, "Delete folder", &display))?;
+    } else {
+        sftp.unlink(path)
+            .map_err(|e| map_sftp_path_error(e, "Delete file", &display))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) fn sftp_list_dir(
     id: i32,
@@ -145,16 +178,7 @@ pub(crate) fn sftp_delete(
     let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id, &vault_state)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
-    let stat = sftp
-        .stat(Path::new(&path))
-        .map_err(|e| map_sftp_path_error(e, "Delete target", &path))?;
-    if stat.is_dir() {
-        sftp.rmdir(Path::new(&path))
-            .map_err(|e| map_sftp_path_error(e, "Delete folder", &path))?;
-    } else {
-        sftp.unlink(Path::new(&path))
-            .map_err(|e| map_sftp_path_error(e, "Delete file", &path))?;
-    }
+    delete_remote_path_recursive(&sftp, Path::new(&path))?;
     Ok("Deleted".to_string())
 }
 
