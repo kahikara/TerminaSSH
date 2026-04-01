@@ -7,8 +7,8 @@ use tauri::{AppHandle, Emitter, State};
 use crate::app_state::SshState;
 use crate::db_core::{ensure_connection_exists, open_db, open_vault_db};
 use crate::vault_core::{
-    delete_vault_secret, init_vault_db, require_runtime_vault_dek, upsert_vault_secret,
-    VaultState,
+    delete_vault_secret, init_vault_db, read_vault_secret_plaintext, require_runtime_vault_dek,
+    upsert_vault_secret, VaultState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,6 +33,102 @@ pub(crate) struct ConnectionItem {
     private_key: String,
     group_name: String,
     has_password: bool,
+}
+
+struct ConnectionSnapshot {
+    name: String,
+    host: String,
+    port: u16,
+    username: String,
+    legacy_password: String,
+    private_key: String,
+    legacy_passphrase: String,
+    group_name: String,
+    vault_password: String,
+    vault_passphrase: String,
+}
+
+fn load_connection_snapshot(
+    conn: &Connection,
+    vault_conn: &Connection,
+    id: i32,
+    dek: &[u8],
+) -> Result<ConnectionSnapshot, String> {
+    let row = conn
+        .query_row(
+            "SELECT name, host, port, username, password, private_key, passphrase, group_name
+             FROM connections
+             WHERE id = ?1
+             LIMIT 1",
+            [&id],
+            |row| {
+                Ok(ConnectionSnapshot {
+                    name: row.get(0)?,
+                    host: row.get(1)?,
+                    port: row.get(2)?,
+                    username: row.get(3)?,
+                    legacy_password: row.get(4)?,
+                    private_key: row.get(5)?,
+                    legacy_passphrase: row.get(6)?,
+                    group_name: row.get(7)?,
+                    vault_password: String::new(),
+                    vault_passphrase: String::new(),
+                })
+            },
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "Connection not found".to_string(),
+            _ => e.to_string(),
+        })?;
+
+    let vault_password = read_vault_secret_plaintext(vault_conn, id, "password", dek)?;
+    let vault_passphrase = read_vault_secret_plaintext(vault_conn, id, "passphrase", dek)?;
+
+    Ok(ConnectionSnapshot {
+        vault_password,
+        vault_passphrase,
+        ..row
+    })
+}
+
+fn restore_connection_snapshot(
+    conn: &Connection,
+    vault_conn: &Connection,
+    id: i32,
+    snapshot: &ConnectionSnapshot,
+    dek: &[u8],
+) -> Result<(), String> {
+    conn.execute(
+        "UPDATE connections
+         SET name = ?1, host = ?2, port = ?3, username = ?4, password = ?5, private_key = ?6, passphrase = ?7, group_name = ?8
+         WHERE id = ?9",
+        (
+            &snapshot.name,
+            &snapshot.host,
+            &snapshot.port,
+            &snapshot.username,
+            &snapshot.legacy_password,
+            &snapshot.private_key,
+            &snapshot.legacy_passphrase,
+            &snapshot.group_name,
+            &id,
+        ),
+    )
+    .map_err(|e| e.to_string())?;
+
+    if snapshot.vault_password.is_empty() {
+        delete_vault_secret(vault_conn, id, "password")?;
+    } else {
+        upsert_vault_secret(vault_conn, id, "password", &snapshot.vault_password, dek)?;
+    }
+
+    if snapshot.vault_passphrase.is_empty() {
+        delete_vault_secret(vault_conn, id, "passphrase")?;
+    } else {
+        upsert_vault_secret(vault_conn, id, "passphrase", &snapshot.vault_passphrase, dek)?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -242,37 +338,49 @@ pub(crate) fn update_connection(
 
     let vault_conn = open_vault_db()?;
     let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let snapshot = load_connection_snapshot(&conn, &vault_conn, id, &dek)?;
 
-    let updated = conn.execute(
-        "UPDATE connections
-         SET name = ?1, host = ?2, port = ?3, username = ?4, password = '', private_key = ?5, passphrase = '', group_name = ?6
-         WHERE id = ?7",
-        (
-            &connection.name,
-            &connection.host,
-            &connection.port,
-            &connection.username,
-            &connection.private_key,
-            &connection.group_name,
-            &id,
-        ),
-    )
-    .map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        let updated = conn.execute(
+            "UPDATE connections
+             SET name = ?1, host = ?2, port = ?3, username = ?4, password = '', private_key = ?5, passphrase = '', group_name = ?6
+             WHERE id = ?7",
+            (
+                &connection.name,
+                &connection.host,
+                &connection.port,
+                &connection.username,
+                &connection.private_key,
+                &connection.group_name,
+                &id,
+            ),
+        )
+        .map_err(|e| e.to_string())?;
 
-    if updated == 0 {
-        return Err("Connection not found".to_string());
-    }
+        if updated == 0 {
+            return Err("Connection not found".to_string());
+        }
 
-    if clear_password {
-        delete_vault_secret(&vault_conn, id, "password")?;
-    } else if !connection.password.is_empty() {
-        upsert_vault_secret(&vault_conn, id, "password", &connection.password, &dek)?;
-    }
+        if clear_password {
+            delete_vault_secret(&vault_conn, id, "password")?;
+        } else if !connection.password.is_empty() {
+            upsert_vault_secret(&vault_conn, id, "password", &connection.password, &dek)?;
+        }
 
-    if clear_passphrase {
-        delete_vault_secret(&vault_conn, id, "passphrase")?;
-    } else if !connection.passphrase.is_empty() {
-        upsert_vault_secret(&vault_conn, id, "passphrase", &connection.passphrase, &dek)?;
+        if clear_passphrase {
+            delete_vault_secret(&vault_conn, id, "passphrase")?;
+        } else if !connection.passphrase.is_empty() {
+            upsert_vault_secret(&vault_conn, id, "passphrase", &connection.passphrase, &dek)?;
+        }
+
+        Ok(())
+    })();
+
+    if let Err(err) = result {
+        return match restore_connection_snapshot(&conn, &vault_conn, id, &snapshot, &dek) {
+            Ok(()) => Err(err),
+            Err(rollback_err) => Err(format!("{} Rollback failed: {}", err, rollback_err)),
+        };
     }
 
     let _ = old_name;
@@ -293,14 +401,43 @@ pub(crate) fn set_connection_password(
 
     let vault_conn = open_vault_db()?;
     let dek = require_runtime_vault_dek(&vault_conn, &vault_state)?;
+    let previous_snapshot = load_connection_snapshot(&conn, &vault_conn, id, &dek)?;
 
-    conn.execute("UPDATE connections SET password = '' WHERE id = ?1", [&id])
-        .map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        conn.execute("UPDATE connections SET password = '' WHERE id = ?1", [&id])
+            .map_err(|e| e.to_string())?;
 
-    if password.is_empty() {
-        delete_vault_secret(&vault_conn, id, "password")?;
-    } else {
-        upsert_vault_secret(&vault_conn, id, "password", &password, &dek)?;
+        if password.is_empty() {
+            delete_vault_secret(&vault_conn, id, "password")?;
+        } else {
+            upsert_vault_secret(&vault_conn, id, "password", &password, &dek)?;
+        }
+
+        Ok(())
+    })();
+
+    if let Err(err) = result {
+        conn.execute(
+            "UPDATE connections SET password = ?1 WHERE id = ?2",
+            (&previous_snapshot.legacy_password, &id),
+        )
+        .map_err(|rollback_err| format!("{} Rollback failed: {}", err, rollback_err))?;
+
+        if previous_snapshot.vault_password.is_empty() {
+            delete_vault_secret(&vault_conn, id, "password")
+                .map_err(|rollback_err| format!("{} Rollback failed: {}", err, rollback_err))?;
+        } else {
+            upsert_vault_secret(
+                &vault_conn,
+                id,
+                "password",
+                &previous_snapshot.vault_password,
+                &dek,
+            )
+            .map_err(|rollback_err| format!("{} Rollback failed: {}", err, rollback_err))?;
+        }
+
+        return Err(err);
     }
 
     let _ = app.emit("connection-saved", ());
