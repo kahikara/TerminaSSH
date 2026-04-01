@@ -298,6 +298,17 @@ function getPaneLabel(server: TerminalServer | null | undefined, lang = "en") {
   return `${user}@${host}`
 }
 
+function readStoredSidePanelWidth(key: string, fallback: number) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
 export default function TerminalPane(props: TerminalPaneProps) {
   const server = props.server
   const sessionId = props.sessionId
@@ -608,6 +619,19 @@ export default function TerminalPane(props: TerminalPaneProps) {
     showStatusBarLoad && statusMetrics.load ? { kind: "load", value: statusMetrics.load } : null,
     showStatusBarRam && statusMetrics.ram ? { kind: "ram", value: statusMetrics.ram } : null
   ].filter(Boolean) as { kind: "load" | "ram"; value: string }[]
+
+  const openRightPanelInset =
+    showSftp
+      ? readStoredSidePanelWidth("termina_sftp_panel_width", 352)
+      : showLocalFiles
+        ? readStoredSidePanelWidth("termina_local_files_panel_width", 352)
+        : showTunnels
+          ? readStoredSidePanelWidth("termina_tunnel_panel_width", 352)
+          : showSnippets
+            ? readStoredSidePanelWidth("termina_snippets_panel_width", 352)
+            : showNotes
+              ? 352
+              : 0
 
   const closePane = useCallback((targetSessionId: string) => {
     const currentPaneIds = paneIdsRef.current
@@ -1342,6 +1366,7 @@ export default function TerminalPane(props: TerminalPaneProps) {
           activeTunnelLabel={activeTunnelLabel}
           sessionDuration={sessionDuration}
           statusBarRightItems={statusBarRightItems}
+          rightInset={openRightPanelInset}
         />
       )}
 

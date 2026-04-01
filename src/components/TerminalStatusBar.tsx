@@ -11,6 +11,7 @@ type Props = {
   activeTunnelLabel: string
   sessionDuration: string
   statusBarRightItems: StatusBarItem[]
+  rightInset?: number
 }
 
 export default function TerminalStatusBar({
@@ -18,7 +19,8 @@ export default function TerminalStatusBar({
   showStatusBarTunnel,
   activeTunnelLabel,
   sessionDuration,
-  statusBarRightItems
+  statusBarRightItems,
+  rightInset = 0
 }: Props) {
   return (
     <div
@@ -86,7 +88,9 @@ export default function TerminalStatusBar({
           gap: 14,
           whiteSpace: "nowrap",
           overflow: "hidden",
-          textOverflow: "ellipsis"
+          textOverflow: "ellipsis",
+          paddingRight: rightInset > 0 ? rightInset + 12 : 0,
+          transition: "padding-right 220ms ease"
         }}
       >
         {statusBarRightItems.map((item) => (

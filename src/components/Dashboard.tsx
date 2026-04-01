@@ -96,33 +96,6 @@ export default function Dashboard({
           </p>
         </div>
 
-        <button
-          onClick={() =>
-            openTerminal({
-              id: "local",
-              isLocal: true,
-              name: "Local Terminal",
-              username: "local",
-              host: "localhost"
-            })
-          }
-          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] hover:bg-[var(--bg-hover)] transition-all px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-app)]"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] shrink-0">
-              <Terminal size={18} className="text-[var(--accent)]" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[13px] font-bold text-[var(--text-main)]">
-                {t("localTerminal", lang)}
-              </div>
-              <div className="text-xs text-[var(--text-muted)]">
-                localhost
-              </div>
-            </div>
-          </div>
-        </button>
-
         {showQuickConnect && (
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] overflow-hidden">
             <div className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border-subtle)]">
