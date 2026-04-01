@@ -1650,13 +1650,29 @@ export default function LocalFilesPanel({
                       e.stopPropagation()
 
                       if (breadcrumbMenuParts.length > 0) {
-                        clearTransientChrome()
+                        setBreadcrumbMenuParts([])
+                        setBreadcrumbMenuStyle(null)
                         return
                       }
 
                       const hiddenParts = part.hiddenParts || []
+                      if (!hiddenParts.length) return
+
                       const panelEl = panelRef.current
                       const buttonEl = e.currentTarget as HTMLButtonElement
+
+                      setMenuItem(null)
+                      setMenuStyle(null)
+                      setContextMenuItem(null)
+                      setContextMenuStyle(null)
+                      setSortMenuOpen(false)
+                      setSortMenuStyle(null)
+                      setRootsMenuOpen(false)
+                      setRootsMenuStyle(null)
+                      setBrowserMenuOpen(false)
+                      setBrowserMenuStyle(null)
+                      setSelectionMenuOpen(false)
+                      setSelectionMenuStyle(null)
 
                       if (panelEl && buttonEl) {
                         const panelRect = panelEl.getBoundingClientRect()
@@ -1666,7 +1682,6 @@ export default function LocalFilesPanel({
                         setBreadcrumbMenuStyle(null)
                       }
 
-                      clearTransientChrome()
                       setBreadcrumbMenuParts(hiddenParts)
                     }}
                     style={{
