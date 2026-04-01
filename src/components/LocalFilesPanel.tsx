@@ -189,6 +189,18 @@ function pathParts(path: string) {
   return out
 }
 
+function compactBreadcrumbParts(parts: { label: string; full: string }[]) {
+  if (parts.length <= 4) {
+    return parts.map((part) => ({ ...part, collapsed: false }))
+  }
+
+  return [
+    { ...parts[0], collapsed: false },
+    { label: "…", full: "", collapsed: true },
+    ...parts.slice(-2).map((part) => ({ ...part, collapsed: false }))
+  ]
+}
+
 function getParentLocalPath(path: string) {
   const parts = pathParts(path)
   if (parts.length <= 1) return parts[0]?.full || "/"
@@ -331,8 +343,8 @@ const panelStyle: React.CSSProperties = {
 }
 
 const headerStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  minHeight: 52,
+  padding: "6px 10px",
+  minHeight: 46,
   borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
   display: "flex",
   alignItems: "center",
@@ -344,9 +356,9 @@ const iconBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 34,
-  height: 34,
-  borderRadius: 10,
+  width: 32,
+  height: 32,
+  borderRadius: 8,
   border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
   background: "color-mix(in srgb, var(--bg-app) 68%, var(--bg-sidebar))",
   color: "var(--text-muted, #94a3b8)",
@@ -358,7 +370,8 @@ const row: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "9px 12px",
+  minHeight: 34,
+  padding: "0 10px",
   cursor: "pointer",
   fontSize: 12,
   color: "var(--text-main, #e5e7eb)",
@@ -416,20 +429,12 @@ function entryStyle(hovered: boolean, selected = false): React.CSSProperties {
   return {
     ...row,
     position: "relative",
-    borderRadius: 12,
-    border: selected
-      ? "1px solid color-mix(in srgb, var(--accent) 38%, var(--border-subtle))"
-      : hovered
-        ? "1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle))"
-        : "1px solid transparent",
     background: selected
-      ? "color-mix(in srgb, var(--accent) 16%, transparent)"
+      ? "color-mix(in srgb, var(--accent) 12%, transparent)"
       : hovered
-        ? "color-mix(in srgb, var(--bg-hover) 72%, transparent)"
+        ? "color-mix(in srgb, var(--bg-hover) 84%, transparent)"
         : "transparent",
-    borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 68%, transparent)",
-    margin: 0,
-    transition: "background 140ms ease, border-color 140ms ease"
+    transition: "background 120ms ease"
   }
 }
 
@@ -463,7 +468,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   const [deleteItem, setDeleteItem] = useState<FileItem | null>(null)
   const [errorText, setErrorText] = useState("")
   const [successText, setSuccessText] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [localRoots, setLocalRoots] = useState<string[]>([])
@@ -491,6 +495,8 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     const entries = visibleFiles.map((f) => f.name)
     return hasLocalParentPath(path) ? ["__parent__", ...entries] : entries
   }, [path, visibleFiles])
+
+  const hasTransientMenuOpen = Boolean(menuItem || contextMenuItem || sortMenuOpen || rootsMenuOpen || browserMenuOpen)
 
   function clearTransientChrome() {
     setMenuItem(null)
@@ -547,7 +553,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
   async function load(nextPath: string) {
     const seq = loadSeqRef.current + 1
     loadSeqRef.current = seq
-    setIsLoading(true)
     setSuccessText("")
 
     try {
@@ -564,7 +569,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
       setSuccessText("")
     } finally {
       if (loadSeqRef.current === seq) {
-        setIsLoading(false)
       }
     }
   }
@@ -602,7 +606,6 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
     if (visible) return
 
     loadSeqRef.current += 1
-    setIsLoading(false)
     setActionBusy(false)
     clearTransientChrome()
     setHoveredItem(null)
@@ -1313,7 +1316,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
       <div
         style={{
-          padding: "10px 12px",
+          padding: "8px 10px",
           fontSize: 11,
           color: "var(--text-muted, #94a3b8)",
           borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
@@ -1324,41 +1327,52 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 5,
             overflowX: "auto",
             minWidth: 0
           }}
         >
-          {pathParts(path).map((part, i, arr) => (
-            <React.Fragment key={part.full}>
-              <button
-                onClick={() => load(part.full)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--text-muted, #94a3b8)",
-                  cursor: "pointer",
-                  padding: 0,
-                  fontSize: 11,
-                  whiteSpace: "nowrap",
-                  maxWidth: 180,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis"
-                }}
-              >
-                <span>{part.label}</span>
-              </button>
-              {i < arr.length - 1 && <ChevronRight size={12} />}
+          {compactBreadcrumbParts(pathParts(path)).map((part, i, arr) => (
+            <React.Fragment key={part.collapsed ? `collapsed-${i}` : part.full}>
+              {part.collapsed ? (
+                <span
+                  style={{
+                    color: "var(--text-muted, #94a3b8)",
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0
+                  }}
+                >
+                  {part.label}
+                </span>
+              ) : (
+                <button
+                  onClick={() => load(part.full)}
+                  title={part.full}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    border: "none",
+                    background: "transparent",
+                    color: i === arr.length - 1 ? "var(--text-main, #e5e7eb)" : "var(--text-muted, #94a3b8)",
+                    cursor: "pointer",
+                    padding: 0,
+                    fontSize: 12,
+                    fontWeight: i === arr.length - 1 ? 600 : 500,
+                    whiteSpace: "nowrap",
+                    maxWidth: i === arr.length - 1 ? 220 : 140,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    flexShrink: i === arr.length - 1 ? 0 : 1
+                  }}
+                >
+                  <span>{part.label}</span>
+                </button>
+              )}
+              {i < arr.length - 1 && <ChevronRight size={11} />}
             </React.Fragment>
           ))}
-        </div>
-
-        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11 }}>
-          <span>{isLoading ? (lang === "de" ? "Lade…" : "Loading…") : `${visibleFiles.length} ${t("visibleCount", lang)}`}</span>
-          <span>{showHidden ? t("hiddenFilesIncluded", lang) : t("hiddenFilesFiltered", lang)}</span>
         </div>
       </div>
 
@@ -1388,6 +1402,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
             onMouseEnter={() => setHoveredItem("__parent__")}
             onMouseLeave={() => setHoveredItem((current) => current === "__parent__" ? null : current)}
             onClick={() => {
+              if (hasTransientMenuOpen) {
+                clearTransientChrome()
+                return
+              }
+
               setSelectedItem("__parent__")
               void load(getParentLocalPath(path))
             }}
@@ -1440,6 +1459,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               openEntryContextMenu(f, e.clientX, e.clientY)
             }}
             onDoubleClick={() => {
+              if (hasTransientMenuOpen) {
+                clearTransientChrome()
+                return
+              }
+
               setSelectedItem(f.name)
               if (f.is_dir) {
                 void load(buildLocalPath(path, f.name))
@@ -1448,6 +1472,11 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
               }
             }}
             onClick={() => {
+              if (hasTransientMenuOpen) {
+                clearTransientChrome()
+                return
+              }
+
               setSelectedItem(f.name)
               if (f.is_dir) {
                 void load(buildLocalPath(path, f.name))
@@ -1502,7 +1531,7 @@ export default function LocalFilesPanel({ visible, onClose, lang = "de" }: Local
 
                 setMenuItem(f.name)
               }}
-              style={iconBtn}
+              style={{ ...iconBtn, display: "none" }}
               title={t("actions", lang)}
             >
               <MoreHorizontal size={14} />
