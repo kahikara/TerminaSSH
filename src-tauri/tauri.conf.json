@@ -35,9 +35,6 @@
     ],
     "macOS": {
       "signingIdentity": "-"
-    },
-    "linux": {
-      "desktopTemplate": "linux/io.github.kahikara.terminassh.desktop"
     }
   }
 }
