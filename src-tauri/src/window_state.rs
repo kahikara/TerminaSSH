@@ -78,7 +78,7 @@ pub(crate) fn save_main_window_state(window: &tauri::WebviewWindow) -> Result<()
 
     state.maximized = maximized;
 
-    if !is_wayland_session() {
+    if !is_wayland_session() && !maximized {
         let position = window.outer_position().map_err(|e| e.to_string())?;
         let size = window.inner_size().map_err(|e| e.to_string())?;
         state.x = position.x;
