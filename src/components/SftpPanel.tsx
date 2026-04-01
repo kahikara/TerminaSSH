@@ -441,6 +441,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [activeItem, setActiveItem] = useState<string | null>(null)
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null)
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -466,9 +467,37 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     return selectedItems.includes(itemName)
   }
 
+  function isNavigableItem(itemName: string | null) {
+    return Boolean(itemName && navigableEntries.includes(itemName))
+  }
+
   function selectSingleItem(itemName: string | null) {
     setSelectedItems(itemName ? [itemName] : [])
     setActiveItem(itemName)
+    setSelectionAnchor(itemName)
+  }
+
+  function selectRangeToItem(itemName: string) {
+    const anchor = isNavigableItem(selectionAnchor)
+      ? selectionAnchor
+      : isNavigableItem(activeItem)
+        ? activeItem
+        : itemName
+
+    const startIndex = navigableEntries.indexOf(anchor || itemName)
+    const endIndex = navigableEntries.indexOf(itemName)
+
+    if (startIndex === -1 || endIndex === -1) {
+      selectSingleItem(itemName)
+      return
+    }
+
+    const from = Math.min(startIndex, endIndex)
+    const to = Math.max(startIndex, endIndex)
+
+    setSelectedItems(navigableEntries.slice(from, to + 1))
+    setActiveItem(itemName)
+    setSelectionAnchor(anchor || itemName)
   }
 
   function toggleItemSelection(itemName: string) {
@@ -477,17 +506,14 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     if (!exists) {
       setSelectedItems([...selectedItems, itemName])
       setActiveItem(itemName)
+      setSelectionAnchor(itemName)
       return
     }
 
     const next = selectedItems.filter((item) => item !== itemName)
-    if (next.length === 0) {
-      selectSingleItem(itemName)
-      return
-    }
-
     setSelectedItems(next)
-    setActiveItem(next.includes(activeItem || "") ? activeItem : next[0])
+    setActiveItem(next.length ? (next.includes(activeItem || "") ? activeItem : next[next.length - 1]) : null)
+    setSelectionAnchor(itemName)
   }
 
   function selectAllItems() {
@@ -500,6 +526,7 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
     const nextActive = activeItem && nextItems.includes(activeItem) ? activeItem : nextItems[0]
     setSelectedItems(nextItems)
     setActiveItem(nextActive)
+    setSelectionAnchor(nextActive)
   }
 
   function clearTransientChrome() {
@@ -1055,6 +1082,8 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
         : navigableEntries[0]
 
       const currentIndex = navigableEntries.indexOf(current)
+      const nextDown = navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)]
+      const nextUp = navigableEntries[Math.max(currentIndex - 1, 0)]
 
       if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault()
@@ -1067,14 +1096,22 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
       if (e.key === "ArrowDown") {
         e.preventDefault()
         e.stopPropagation()
-        selectSingleItem(navigableEntries[Math.min(currentIndex + 1, navigableEntries.length - 1)])
+        if (e.shiftKey) {
+          selectRangeToItem(nextDown)
+        } else {
+          selectSingleItem(nextDown)
+        }
         return
       }
 
       if (e.key === "ArrowUp") {
         e.preventDefault()
         e.stopPropagation()
-        selectSingleItem(navigableEntries[Math.max(currentIndex - 1, 0)])
+        if (e.shiftKey) {
+          selectRangeToItem(nextUp)
+        } else {
+          selectSingleItem(nextUp)
+        }
         return
       }
 
@@ -1357,9 +1394,19 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
 
               activateEntry("__parent__")
             }}
-            onClick={() => {
+            onClick={(e) => {
               if (hasTransientMenuOpen) {
                 clearTransientChrome()
+                return
+              }
+
+              if (e.shiftKey) {
+                selectRangeToItem("__parent__")
+                return
+              }
+
+              if (e.ctrlKey || e.metaKey) {
+                toggleItemSelection("__parent__")
                 return
               }
 
@@ -1427,6 +1474,11 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                 return
               }
 
+              if (e.shiftKey) {
+                selectRangeToItem(f.name)
+                return
+              }
+
               if (e.ctrlKey || e.metaKey) {
                 toggleItemSelection(f.name)
                 return
@@ -1467,6 +1519,8 @@ export default function SftpPanel({ server, visible, onClose, lang = "de" }: any
                   setMenuStyle(null)
                   return
                 }
+
+                selectSingleItem(f.name)
 
                 const listEl = listRef.current
                 const buttonEl = e.currentTarget as HTMLButtonElement
