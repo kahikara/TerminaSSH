@@ -329,11 +329,14 @@ export default function SftpEditorWindow() {
   }
 
   async function syncWindowChromeState() {
+    let isWaylandUndecorated = false
+
     try {
       const linuxWindowMode = await invoke("get_linux_window_mode")
         .catch(() => ({ wayland_undecorated: false })) as { wayland_undecorated?: boolean }
 
-      setUseCustomWindowChrome(Boolean(linuxWindowMode?.wayland_undecorated))
+      isWaylandUndecorated = Boolean(linuxWindowMode?.wayland_undecorated)
+      setUseCustomWindowChrome(isWaylandUndecorated)
     } catch {
       setUseCustomWindowChrome(false)
     }
@@ -343,7 +346,7 @@ export default function SftpEditorWindow() {
       setIsWindowMaximized(Boolean(maximized))
       persistEditorWindowState({ maximized: Boolean(maximized) })
 
-      if (!maximized) {
+      if (!isWaylandUndecorated && !maximized) {
         persistEditorWindowState({
           width: window.innerWidth,
           height: window.innerHeight
@@ -820,6 +823,9 @@ export default function SftpEditorWindow() {
 
   useEffect(() => {
     applyTheme()
+    void invoke("current_window_apply_default_icon").catch((e) => {
+      console.error("editor icon apply failed", e)
+    })
     void loadFile(true)
   }, [])
 

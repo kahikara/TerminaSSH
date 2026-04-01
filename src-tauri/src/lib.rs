@@ -5579,6 +5579,17 @@ fn current_window_start_dragging(window: tauri::WebviewWindow) -> Result<(), Str
 }
 
 #[tauri::command]
+fn current_window_apply_default_icon(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<(), String> {
+    if let Some(icon) = app.default_window_icon().cloned() {
+        window.set_icon(icon).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn get_status_bar_info(
     server_id: i32,
     vault_state: State<'_, VaultState>,
@@ -5726,6 +5737,7 @@ pub fn run() {
             current_window_toggle_maximize,
             current_window_is_maximized,
             current_window_start_dragging,
+            current_window_apply_default_icon,
             save_window_state_all,
             window_close_main,
             get_status_bar_info,
