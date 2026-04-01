@@ -1224,6 +1224,13 @@ export default function SftpPanel({
           e.stopPropagation()
           setRenameItem(null)
           setRenameValue("")
+          return
+        }
+
+        if (e.key === "Enter" && renameValue.trim()) {
+          e.preventDefault()
+          e.stopPropagation()
+          void doRename()
         }
         return
       }
@@ -1234,6 +1241,13 @@ export default function SftpPanel({
           e.stopPropagation()
           setNewFolderOpen(false)
           setNewFolderValue("")
+          return
+        }
+
+        if (e.key === "Enter" && newFolderValue.trim()) {
+          e.preventDefault()
+          e.stopPropagation()
+          void doNewFolder()
         }
         return
       }
@@ -1243,6 +1257,13 @@ export default function SftpPanel({
           e.preventDefault()
           e.stopPropagation()
           setDeleteItems([])
+          return
+        }
+
+        if (e.key === "Enter") {
+          e.preventDefault()
+          e.stopPropagation()
+          void doDelete()
         }
         return
       }
@@ -1327,6 +1348,18 @@ export default function SftpPanel({
         return
       }
 
+      if (e.key === "F2" && current && current !== "__parent__") {
+        const entry = visibleFiles.find((f) => f.name === current)
+        if (!entry) return
+
+        e.preventDefault()
+        e.stopPropagation()
+        clearTransientChrome()
+        setRenameItem(entry)
+        setRenameValue(entry.name)
+        return
+      }
+
       if (e.key === "Delete" && selectedVisibleEntries.length > 0) {
         e.preventDefault()
         e.stopPropagation()
@@ -1337,7 +1370,7 @@ export default function SftpPanel({
 
     window.addEventListener("keydown", onKeyDown, true)
     return () => window.removeEventListener("keydown", onKeyDown, true)
-  }, [visible, hasTransientMenuOpen, conflict.open, renameItem, newFolderOpen, deleteItems.length, navigableEntries, activeItem, selectedItems, path, visibleFiles, onClose])
+  }, [visible, hasTransientMenuOpen, conflict.open, renameItem, renameValue, newFolderOpen, newFolderValue, deleteItems, navigableEntries, activeItem, selectedItems, path, visibleFiles, onClose])
 
   return (
     <div
