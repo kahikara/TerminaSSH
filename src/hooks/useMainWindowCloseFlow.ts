@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
+import type { AppTab } from "../lib/appTypes"
 
 export type EditorWindowInfo = {
   label: string
@@ -11,7 +12,7 @@ export type EditorWindowInfo = {
 }
 
 type Args = {
-  openTabs: any[]
+  openTabs: AppTab[]
   closeToTray: boolean
 }
 
@@ -24,7 +25,7 @@ export function useMainWindowCloseFlow({ openTabs, closeToTray }: Args) {
   const channelRef = useRef<BroadcastChannel | null>(null)
   const mainClosingRef = useRef(false)
   const mainWaitingForEditorsRef = useRef(false)
-  const openTabsRef = useRef<any[]>(openTabs)
+  const openTabsRef = useRef<AppTab[]>(openTabs)
   const editorWindowsRef = useRef<EditorWindowInfo[]>([])
   const mainCloseDialogBusyRef = useRef(false)
   const closeToTrayRef = useRef(closeToTray)
