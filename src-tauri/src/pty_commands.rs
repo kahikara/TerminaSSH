@@ -1,5 +1,5 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use ssh2::Session;
+use ssh2::{ErrorCode, Session};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -148,6 +148,20 @@ fn connect_quick_session(
     Ok(sess)
 }
 
+
+
+
+fn is_ssh_would_block(err: &ssh2::Error) -> bool {
+    matches!(err.code(), ErrorCode::Session(code) if code == -37)
+        || err
+            .message()
+            .to_ascii_lowercase()
+            .contains("would block")
+        || err
+            .message()
+            .to_ascii_lowercase()
+            .contains("eagain")
+}
 
 
 #[tauri::command]
@@ -396,7 +410,20 @@ pub(crate) fn start_quick_ssh(
                         .emit(&event_name, String::from_utf8_lossy(&buf[..n]).to_string());
                 }
                 Ok(_) => {}
-                Err(_) => {}
+                Err(err) if is_ssh_would_block(&err) => {}
+                Err(err) => {
+                    let _ = app_handle.emit(
+                        &event_name,
+                        format!(
+                            "\r\n\x1b[1;31m[Verbindung verloren: {}]\x1b[0m\r\n",
+                            err
+                        ),
+                    );
+                    let _ = app_handle.emit(&connect_event, false);
+                    finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                    let _ = channel.close();
+                    return;
+                }
             }
 
             loop {
@@ -514,7 +541,20 @@ pub(crate) fn start_ssh(
                         .emit(&event_name, String::from_utf8_lossy(&buf[..n]).to_string());
                 }
                 Ok(_) => {}
-                Err(_) => {}
+                Err(err) if is_ssh_would_block(&err) => {}
+                Err(err) => {
+                    let _ = app_handle.emit(
+                        &event_name,
+                        format!(
+                            "\r\n\x1b[1;31m[Verbindung verloren: {}]\x1b[0m\r\n",
+                            err
+                        ),
+                    );
+                    let _ = app_handle.emit(&connect_event, false);
+                    finish_session(&app_handle, &session_id_for_exit, &exit_sent_loop);
+                    let _ = channel.close();
+                    return;
+                }
             }
             loop {
                 match rx.try_recv() {
