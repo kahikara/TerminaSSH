@@ -1,5 +1,5 @@
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use ssh2::{ErrorCode, Session};
+use ssh2::Session;
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -151,16 +151,11 @@ fn connect_quick_session(
 
 
 
-fn is_ssh_would_block(err: &ssh2::Error) -> bool {
-    matches!(err.code(), ErrorCode::Session(code) if code == -37)
-        || err
-            .message()
-            .to_ascii_lowercase()
-            .contains("would block")
-        || err
-            .message()
-            .to_ascii_lowercase()
-            .contains("eagain")
+fn is_ssh_would_block(err: &std::io::Error) -> bool {
+    matches!(
+        err.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+    )
 }
 
 
