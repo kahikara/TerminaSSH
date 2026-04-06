@@ -1,150 +1,129 @@
-# 🚀 Termina SSH
+# Termina SSH
 
-A modern, fast, and practical SSH workspace for power users, sysadmins, and developers.  
-Built with **Tauri**, **Rust**, and **React**.
+Termina SSH is a modern desktop SSH client focused on speed, clarity, and everyday workflow.
+
+Built with Tauri, Rust, and React, it combines terminal sessions, SFTP, editing, tunnels, backups, and local workflows in a compact interface that stays practical across Linux, macOS, and Windows.
 
 <p align="center">
   <img src="homepage/screenshots/termina-main-blurred.png" width="850" alt="Termina SSH Main">
 </p>
 
-## ✨ Why Termina SSH
+## Overview
 
-Termina SSH was built with a clear goal:  
-make everyday SSH work feel fast, focused, and pleasant without turning the app into an overloaded enterprise monster.
+Termina SSH is designed for people who spend real time in terminals and want a native desktop app that feels fast, calm, and reliable.
 
-It aims to stay lightweight, functional, and native feeling across platforms while still covering the features that matter in real workflows.
+The goal is simple. Keep the workflow focused, avoid unnecessary complexity, and cover the features that matter in daily use.
 
-## 🔥 Highlights
+## What it includes
 
-* 🛡 **Local first and privacy focused**  
-  Your connections, notes, and settings stay with you. Backups can be exported locally and encrypted before leaving your machine.
-
-* 💾 **Cross platform backup and restore**  
-  Import and export your configuration across systems. Notes are included in the backup bundle and restore cleanly across platforms.
-
-* 🖥 **Multi platform desktop app**  
-  Built for **Linux**, **macOS**, and **Windows** with native builds and installers.
-
-* 💻 **Local and remote terminal workflow**  
-  Use Termina SSH not only for remote servers, but also as a clean local terminal workspace.
-
-* ↔️ **Split terminal workflow**  
-  Work with multiple terminals side by side and switch between focused single pane and split based workflows.
-
-* 📂 **Integrated SFTP browser and remote editor**  
-  Browse remote files, upload content, edit remote files directly inside the app, and stay in one workflow.
-
-* 🧠 **Session focused workflow**  
-  Tabs, recent connections, quick access, split panes, and a layout built around actually getting work done.
-
-* 🔑 **SSH key and auth friendly**  
-  Works with common SSH authentication flows and is designed to stay practical instead of getting in your way.
-
-* 🧩 **Built in snippets and tunnels**  
-  Keep useful commands close and manage SSH tunnels directly from the UI.
-
-* 🎨 **Clean UI with theme support**  
-  Termina SSH includes multiple themes and customization options while keeping the interface compact and focused.
-
-* ⚙ **Tray and background behavior**  
-  Runs quietly in the background when needed without feeling heavy.
-
-## 📸 Screenshots
-
-<p align="center">
-  <img src="homepage/screenshots/termina-settings-blurred.png" width="48%" title="Settings and Backup">
-  &nbsp;
-  <img src="homepage/screenshots/termina-terminal-sftp-blurred.png" width="48%" title="Terminal and SFTP">
-</p>
-
-<p align="center">
-  <img src="homepage/screenshots/termina-editor-blurred.png" width="48%" title="Integrated Editor">
-  <br>
-  <em>Integrated editor, settings, backup, and SFTP workflow</em>
-</p>
-
-## ✅ Current feature set
-
-* SSH connections with saved profiles
+* Saved SSH connections
 * Local terminal
 * Tab based workflow
 * Split terminal workflow
 * Quick Connect
-* SFTP browser
-* Remote file editing
+* Integrated SFTP browser
+* Remote and local file editing
 * Snippets
 * SSH tunnels
-* Encrypted backup export
-* Backup restore across platforms
-* Notes included in backups
-* Import and export summary dialogs
-* Copy path and open folder actions in export dialogs
+* Notes
+* Backup export and restore
+* Optional encrypted backups
 * Theme support
 * System tray support
-* Cross platform release builds
 
-## 🛠 Tech Stack
+## Screenshots
 
-* **Frontend:** React, Vite, TypeScript, TailwindCSS
-* **Backend:** Rust, Tauri v2
-* **Terminal Engine:** xterm.js
-* **Storage:** local app data plus exportable backup bundles
-* **Security:** optional encrypted local backup export
+<p align="center">
+  <img src="homepage/screenshots/termina-settings-blurred.png" width="48%" alt="Settings and Backup">
+  &nbsp;
+  <img src="homepage/screenshots/termina-terminal-sftp-blurred.png" width="48%" alt="Terminal and SFTP">
+</p>
 
-## 📦 Installation
+<p align="center">
+  <img src="homepage/screenshots/termina-editor-blurred.png" width="48%" alt="Integrated Editor">
+</p>
 
-Prebuilt binaries are available in **[Releases](../../releases)**.
+## Highlights
 
-### Current release assets
+### Focused terminal workflow
+
+Termina SSH supports both local and remote sessions, tab based work, split panes, and quick access patterns that keep the interface efficient without feeling crowded.
+
+### Integrated file workflow
+
+The built in SFTP browser and editor make it possible to browse, upload, edit, and save files without jumping between multiple tools.
+
+### Portable backups
+
+Settings, connections, notes, snippets, keys, and tunnels can be exported and restored across systems. Encrypted backup export is available when you want additional protection.
+
+### Native desktop feel
+
+The app is built for Linux, macOS, and Windows with a focus on responsive interaction, clean layout, and platform appropriate behavior.
+
+## Technology
+
+* Frontend: React, Vite, TypeScript, Tailwind CSS
+* Backend: Rust, Tauri v2
+* Terminal engine: xterm.js
+* Storage: local app data with exportable backup bundles
+
+## Installation
+
+Prebuilt binaries are available in [Releases](../../releases).
+
+Current release assets include:
 
 * Linux: `.deb`, `.rpm`, `.AppImage`
 * Windows: `setup.exe`
 * macOS: `.dmg`
 
-Release artifacts are built through GitHub Actions for more reproducible cross platform packaging.
-
-## 💻 Development
-
-Want to build Termina SSH from source or contribute?
+## Development
 
 ### Prerequisites
 
-1. [Node.js](https://nodejs.org/)
-2. [Rust and Cargo](https://rustup.rs/)
-3. Tauri system dependencies for your platform  
-   See the official [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+* Node.js
+* Rust and Cargo
+* Tauri system dependencies for your platform
+
+See the official Tauri prerequisites here:
+
+https://v2.tauri.app/start/prerequisites/
 
 ### Clone and run
 
-    git clone https://github.com/kahikara/TerminaSSH.git TerminaSSH
-    cd TerminaSSH
-    npm install
-    npm run tauri dev
+```bash
+git clone https://github.com/kahikara/TerminaSSH.git TerminaSSH
+cd TerminaSSH
+npm install
+npm run tauri dev
+```
 
 ### Build
 
-    npm run tauri build
+```bash
+npm run tauri build
+```
 
-The generated release artifacts will be located in:
+Release artifacts are generated in:
 
-    src-tauri/target/release/bundle/
+```text
+src-tauri/target/release/bundle/
+```
 
-## 🗺 Roadmap direction
+## Project direction
 
-Planned polish and future improvements include:
+The current focus is continued polish across the core workflow:
 
-* improved connection UX
-* richer theme customization
-* smarter tunnel handling for heavier workloads
-* continued SFTP and editor polish
-* continued cross platform polish and packaging improvements
+* terminal and session UX
+* SFTP and editor polish
+* tunnel reliability
+* cross platform refinement
+* packaging quality
 
-## ☕ Support the Project
+## Support
 
-If you enjoy using Termina SSH and want to support its continued development, a coffee is always appreciated.
+If you want to support development, you can do so here:
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ming83)
+https://ko-fi.com/ming83
 
----
-
-Built with ❤ for people who live in terminals.
