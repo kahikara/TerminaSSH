@@ -177,12 +177,12 @@ function getBackupModeLabel(lang: string, mode: BackupMode): string {
   if (lang === "de") {
     return mode === "encrypted"
       ? "Verschlüsseltes Backup mit Passwort"
-      : "JSON Backup ohne Passwort"
+      : "Unverschlüsseltes JSON Backup mit sensiblen Daten im Klartext"
   }
 
   return mode === "encrypted"
     ? "Encrypted backup with password"
-    : "JSON backup without password"
+    : "Unencrypted JSON backup with plaintext secrets"
 }
 
 function showExportSummaryDialog(
@@ -597,17 +597,52 @@ export async function handleExportPlainConfig({
   ui,
   lang
 }: Pick<BackupDeps, "settings" | "showToast" | "showDialog" | "ui" | "lang">) {
-  try {
-    const path = await saveBackupFile(false)
-    if (!path) return
+  const description =
+    lang === "de"
+      ? [
+          "Dieses Backup wird unverschlüsselt gespeichert.",
+          "",
+          "Es kann sensible Daten im Klartext enthalten:",
+          "• Verbindungs Passwörter",
+          "• Key Passphrases",
+          "• Portable Private Keys",
+          "",
+          "Nutze wenn möglich den verschlüsselten Export."
+        ].join("
+")
+      : [
+          "This backup will be stored without encryption.",
+          "",
+          "It may contain plaintext sensitive data:",
+          "• Connection passwords",
+          "• Key passphrases",
+          "• Portable private keys",
+          "",
+          "Use the encrypted export whenever possible."
+        ].join("
+")
 
-    const exportPayload = await buildExportPayload(settings)
-    await writeTextFile(path, exportPayload)
-    showToast(ui.exported)
-    showExportSummaryDialog(showDialog, showToast, lang, String(path), exportPayload, false)
-  } catch (e: any) {
-    showToast(`Backup export failed: ${String(e)}`, true)
-  }
+  showDialog({
+    type: "confirm",
+    title: lang === "de" ? "Unverschlüsseltes Backup exportieren?" : "Export unencrypted backup?",
+    description,
+    confirmLabel: lang === "de" ? "Trotzdem exportieren" : "Export anyway",
+    cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",
+    onCancel: () => {},
+    onConfirm: async () => {
+      try {
+        const path = await saveBackupFile(false)
+        if (!path) return
+
+        const exportPayload = await buildExportPayload(settings)
+        await writeTextFile(path, exportPayload)
+        showToast(ui.exported)
+        showExportSummaryDialog(showDialog, showToast, lang, String(path), exportPayload, false)
+      } catch (e: any) {
+        showToast(`Backup export failed: ${String(e)}`, true)
+      }
+    }
+  })
 }
 
 export function handleExportEncryptedConfig({

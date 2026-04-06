@@ -33,6 +33,10 @@ pub(crate) struct SftpProgress {
     current_file: String,
 }
 
+
+const SFTP_FILE_READ_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
+const SFTP_FILE_WRITE_LIMIT_BYTES: usize = 16 * 1024 * 1024;
+
 fn register_transfer_session(
     state: &State<'_, SshState>,
     session_id: &str,
@@ -191,12 +195,51 @@ pub(crate) fn sftp_read_file(
     let path = normalize_remote_path(&path)?;
     let sess = connect_ssh_session(id, &vault_state)?;
     let sftp = sess.sftp().map_err(|e| format!("SFTP Fehler: {}", e))?;
+    let file_path = Path::new(&path);
+
+    let stat = sftp
+        .stat(file_path)
+        .map_err(|e| map_sftp_path_error(e, "Read file", &path))?;
+
+    if stat.is_dir() {
+        return Err(format!("Read file failed for {}: Path is a directory", path));
+    }
+
+    if let Some(size) = stat.size {
+        if size > SFTP_FILE_READ_LIMIT_BYTES {
+            return Err(format!(
+                "Read file denied for {}: file is larger than {} MiB",
+                path,
+                SFTP_FILE_READ_LIMIT_BYTES / 1024 / 1024
+            ));
+        }
+    }
+
     let mut file = sftp
-        .open(Path::new(&path))
+        .open(file_path)
         .map_err(|e| map_sftp_path_error(e, "Read file", &path))?;
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf)
-        .map_err(|e| format!("Read failed for {}: {}", path, e))?;
+    let mut chunk = [0u8; 8192];
+
+    loop {
+        let n = file
+            .read(&mut chunk)
+            .map_err(|e| format!("Read failed for {}: {}", path, e))?;
+        if n == 0 {
+            break;
+        }
+
+        buf.extend_from_slice(&chunk[..n]);
+
+        if buf.len() > SFTP_FILE_READ_LIMIT_BYTES as usize {
+            return Err(format!(
+                "Read file denied for {}: file exceeded the {} MiB safety limit",
+                path,
+                SFTP_FILE_READ_LIMIT_BYTES / 1024 / 1024
+            ));
+        }
+    }
+
     Ok(SftpReadFilePayload {
         content_base64: STANDARD.encode(&buf),
     })
@@ -215,6 +258,15 @@ pub(crate) fn sftp_write_file(
     let bytes = STANDARD
         .decode(content_base64.as_bytes())
         .map_err(|e| format!("Invalid base64 content: {}", e))?;
+
+    if bytes.len() > SFTP_FILE_WRITE_LIMIT_BYTES {
+        return Err(format!(
+            "Write file denied for {}: content is larger than {} MiB",
+            path,
+            SFTP_FILE_WRITE_LIMIT_BYTES / 1024 / 1024
+        ));
+    }
+
     let mut file = sftp
         .create(Path::new(&path))
         .map_err(|e| map_sftp_path_error(e, "Write file", &path))?;

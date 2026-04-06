@@ -1,6 +1,6 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::net::TcpListener;
+use std::net::{IpAddr, TcpListener};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
@@ -73,6 +73,32 @@ fn normalize_tunnel_fields(tunnel: &mut SshTunnel) {
     tunnel.name = tunnel.name.trim().to_string();
     tunnel.remote_host = tunnel.remote_host.trim().to_string();
     tunnel.bind_host = tunnel.bind_host.trim().to_string();
+}
+
+
+fn normalize_bind_host_value(bind_host: &str) -> String {
+    let trimmed = bind_host.trim();
+    if trimmed.is_empty() {
+        "127.0.0.1".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn ensure_loopback_bind_host(bind_host: &str) -> Result<(), String> {
+    let normalized = normalize_bind_host_value(bind_host);
+
+    if normalized.eq_ignore_ascii_case("localhost") {
+        return Ok(());
+    }
+
+    if let Ok(addr) = normalized.parse::<IpAddr>() {
+        if addr.is_loopback() {
+            return Ok(());
+        }
+    }
+
+    Err("Only loopback tunnel bind addresses are allowed. Use 127.0.0.1, ::1, or localhost.".to_string())
 }
 
 fn ensure_tunnel_route_is_unique(
@@ -202,12 +228,8 @@ pub(crate) fn save_tunnel(mut tunnel: SshTunnel) -> Result<String, String> {
     if tunnel.local_port == 0 || tunnel.remote_port == 0 {
         return Err("Ports must be greater than 0".to_string());
     }
-
-    let bind_host = if tunnel.bind_host.is_empty() {
-        "127.0.0.1".to_string()
-    } else {
-        tunnel.bind_host.clone()
-    };
+    let bind_host = normalize_bind_host_value(&tunnel.bind_host);
+    ensure_loopback_bind_host(&bind_host)?;
 
     let conn = open_db()?;
     ensure_connection_exists(&conn, tunnel.server_id)?;
@@ -262,12 +284,8 @@ pub(crate) fn update_tunnel(
             return Err("Stop the tunnel before editing it".to_string());
         }
     }
-
-    let bind_host = if tunnel.bind_host.is_empty() {
-        "127.0.0.1".to_string()
-    } else {
-        tunnel.bind_host.clone()
-    };
+    let bind_host = normalize_bind_host_value(&tunnel.bind_host);
+    ensure_loopback_bind_host(&bind_host)?;
 
     let conn = open_db()?;
     ensure_connection_exists(&conn, tunnel.server_id)?;
@@ -396,12 +414,8 @@ pub(crate) fn start_tunnel(
     ensure_connection_exists(&conn, tunnel.server_id)?;
     let tunnel_runtime_details =
         load_connection_runtime_details(tunnel.server_id, None, &vault_state)?;
-
-    let bind_host = if tunnel.bind_host.trim().is_empty() {
-        "127.0.0.1".to_string()
-    } else {
-        tunnel.bind_host.trim().to_string()
-    };
+    let bind_host = normalize_bind_host_value(&tunnel.bind_host);
+    ensure_loopback_bind_host(&bind_host)?;
     ensure_tunnel_bind_target_is_unique(&conn, &bind_host, tunnel.local_port, Some(id))?;
     let bind_addr = format!("{}:{}", bind_host, tunnel.local_port);
     let listener = TcpListener::bind(&bind_addr)
