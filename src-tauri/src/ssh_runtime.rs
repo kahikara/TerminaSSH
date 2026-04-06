@@ -109,14 +109,27 @@ pub(crate) fn authenticate_session(
     private_key: &str,
     passphrase: &str,
 ) -> bool {
+    let trimmed_password = password.trim();
+    let trimmed_private_key = private_key.trim();
+    let has_explicit_password = !trimmed_password.is_empty();
+    let has_explicit_private_key = !trimmed_private_key.is_empty();
+
     let pass = if passphrase.is_empty() {
         None
     } else {
         Some(passphrase)
     };
 
-    if try_auth_with_private_key(sess, username, private_key, pass) {
+    if has_explicit_private_key && try_auth_with_private_key(sess, username, trimmed_private_key, pass) {
         return true;
+    }
+
+    if has_explicit_password && sess.userauth_password(username, password).is_ok() {
+        return true;
+    }
+
+    if has_explicit_private_key || has_explicit_password {
+        return false;
     }
 
     if sess.userauth_agent(username).is_ok() {
@@ -124,10 +137,6 @@ pub(crate) fn authenticate_session(
     }
 
     if try_auth_with_default_keys(sess, username) {
-        return true;
-    }
-
-    if !password.is_empty() && sess.userauth_password(username, password).is_ok() {
         return true;
     }
 
