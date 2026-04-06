@@ -7,9 +7,11 @@
     <style>
       :root {
         --bg: #09090b;
-        --panel: rgba(255, 255, 255, 0.04);
-        --panel-strong: rgba(255, 255, 255, 0.06);
-        --border: rgba(255, 255, 255, 0.1);
+        --panel: rgba(255, 255, 255, 0.035);
+        --panel-strong: rgba(255, 255, 255, 0.055);
+        --panel-elevated: rgba(18, 18, 22, 0.82);
+        --border: rgba(255, 255, 255, 0.09);
+        --border-strong: rgba(255, 255, 255, 0.14);
         --text: #f4f4f5;
         --muted: #a1a1aa;
         --muted-2: #71717a;
@@ -18,6 +20,8 @@
         --cyan: #22d3ee;
         --lime: #84cc16;
         --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+        --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.24);
+        --shadow-panel: 0 18px 40px rgba(0, 0, 0, 0.24);
         --radius-xl: 24px;
         --radius-lg: 20px;
         --radius-md: 14px;
@@ -58,13 +62,13 @@
         align-items: center;
         justify-content: space-between;
         gap: 16px;
-        padding: 12px 16px;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 16px;
-        background: rgba(12, 12, 14, 0.84);
-        backdrop-filter: blur(16px);
+        padding: 14px 18px;
+        border: 1px solid var(--border-strong);
+        border-radius: 18px;
+        background: rgba(12, 12, 15, 0.78);
+        backdrop-filter: blur(18px);
         box-shadow:
-          0 14px 32px rgba(0, 0, 0, 0.28),
+          0 18px 36px rgba(0, 0, 0, 0.26),
           inset 0 1px 0 rgba(255, 255, 255, 0.04);
       }
 
@@ -131,7 +135,7 @@
       }
 
       .hero {
-        padding: 42px 0 30px;
+        padding: 46px 0 34px;
         text-align: center;
       }
 
@@ -141,17 +145,17 @@
       }
 
       .hero h1 {
-        margin: 0;
-        font-size: clamp(34px, 6vw, 72px);
-        line-height: 1.05;
-        letter-spacing: -0.04em;
+        margin: 14px 0 0;
+        font-size: clamp(36px, 6vw, 68px);
+        line-height: 1.02;
+        letter-spacing: -0.045em;
       }
 
       .hero p {
         width: min(100%, 720px);
         margin: 16px auto 0;
         font-size: 16px;
-        line-height: 1.7;
+        line-height: 1.72;
         color: #d4d4d8;
       }
 
@@ -208,9 +212,9 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
-        height: 40px;
+        height: 42px;
         padding: 0 16px;
-        border-radius: 12px;
+        border-radius: 13px;
         border: 1px solid transparent;
         font-size: 14px;
         font-weight: 600;
@@ -302,13 +306,16 @@
       .card {
         border: 1px solid var(--border);
         border-radius: var(--radius-xl);
-        background: rgba(255, 255, 255, 0.04);
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.028));
+        box-shadow:
+          var(--shadow-panel),
+          inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(14px);
       }
 
       .carousel-card {
         overflow: hidden;
-        background: rgba(24, 24, 27, 0.7);
+        background: rgba(20, 20, 24, 0.72);
       }
 
       .carousel-stage {
@@ -319,6 +326,7 @@
         border-radius: 28px;
         overflow: hidden;
         touch-action: pan-y;
+        background: radial-gradient(circle at top, rgba(34, 211, 238, 0.06), transparent 32%), rgba(10, 10, 12, 0.72);
       }
 
       .slides {
@@ -348,10 +356,10 @@
         height: 100%;
         align-items: center;
         justify-content: center;
-        padding: 8px;
+        padding: 22px;
         background:
-          radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 30%),
-          radial-gradient(circle at bottom, rgba(132, 204, 22, 0.06), transparent 28%);
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.06), transparent 30%),
+          radial-gradient(circle at bottom, rgba(132, 204, 22, 0.04), transparent 28%);
       }
 
       .screenshot-inner {
@@ -360,12 +368,14 @@
         height: 100%;
         align-items: center;
         justify-content: center;
-        padding: 6px;
+        padding: 18px;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 24px;
-        background: rgba(0, 0, 0, 0.1);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.12));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.03),
+          0 10px 30px rgba(0, 0, 0, 0.18);
       }
 
       .screenshot-inner img {
@@ -373,9 +383,9 @@
         width: 100%;
         height: 100%;
         border-radius: 18px;
-        object-fit: cover;
-        object-position: center top;
-        box-shadow: var(--shadow);
+        object-fit: contain;
+        object-position: center center;
+        box-shadow: var(--shadow-soft);
       }
 
       .carousel-arrow {
@@ -412,10 +422,10 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 10px 14px;
+        gap: 14px;
+        padding: 14px 16px;
         border-top: 1px solid var(--border);
-        background: rgba(9, 9, 11, 0.7);
+        background: rgba(9, 9, 11, 0.62);
       }
 
       .carousel-title {
@@ -482,22 +492,25 @@
 
       .feature-card {
         min-height: 176px;
-        padding: 18px;
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        background: rgba(9, 9, 11, 0.7);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.085);
+        border-radius: 20px;
+        background: rgba(15, 15, 19, 0.74);
+        box-shadow:
+          0 14px 34px rgba(0, 0, 0, 0.18),
+          inset 0 1px 0 rgba(255, 255, 255, 0.025);
       }
 
       .feature-icon {
         display: inline-flex;
-        width: 38px;
-        height: 38px;
+        width: 40px;
+        height: 40px;
         align-items: center;
         justify-content: center;
-        border-radius: 11px;
-        background: rgba(255, 255, 255, 0.1);
-        margin-bottom: 10px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 12px;
       }
 
       .feature-title {
@@ -548,7 +561,8 @@
       }
 
       .faq-card {
-        padding: 18px;
+        padding: 20px;
+        border-radius: 20px;
       }
 
       .faq-title {
@@ -573,8 +587,9 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        padding: 16px 18px;
+        gap: 18px;
+        padding: 20px 22px;
+        border-radius: 22px;
       }
 
       .footer {
@@ -582,9 +597,9 @@
         align-items: center;
         justify-content: space-between;
         gap: 18px;
-        padding: 24px 0;
-        margin-top: 12px;
-        border-top: 1px solid var(--border);
+        padding: 28px 0 22px;
+        margin-top: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
         color: var(--muted);
         font-size: 12px;
       }
@@ -701,9 +716,9 @@
       <main>
         <section class="hero">
           <div class="hero-inner">
-            <div class="hero-kicker">Version 1.1.0 is live</div>
-            <h1>A modern desktop home for your SSH workflow</h1>
-            <p>Termina SSH brings local terminals, split views, SFTP, editing, notes, snippets, and tunnels into one focused desktop workflow.</p>
+            <div class="hero-kicker">Version 1.1.0</div>
+            <h1>Termina SSH</h1>
+            <p>A focused desktop SSH workspace with local terminals, split views, SFTP, editing, notes, snippets, and tunnels in one place.</p>
             <div class="button-row">
               <a class="btn btn-primary" href="https://github.com/kahikara/TerminaSSH/releases" target="_blank" rel="noreferrer">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
