@@ -38,8 +38,8 @@ export default function SettingsBackupCards({
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    minHeight: 140,
+    gap: 8,
+    minHeight: 124,
     opacity: busy ? 0.6 : 1
   }
 
@@ -57,13 +57,13 @@ export default function SettingsBackupCards({
         style={buttonStyle}
       >
         <Save size={26} style={{ color: "var(--accent)" }} />
-        <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
-          {lang === "de" ? "JSON Backup ohne Passwort" : "JSON backup without password"}
+        <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
+          {lang === "de" ? "JSON Backup" : "JSON backup"}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
           {lang === "de"
-            ? "Speichert das Backup als lesbare JSON Datei ohne Passwortschutz."
-            : "Saves the backup as a readable JSON file without password protection."}
+            ? "Lesbare Datei ohne Passwort."
+            : "Readable file without password."}
         </div>
       </button>
 
@@ -74,12 +74,12 @@ export default function SettingsBackupCards({
       >
         <Database size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
-          {lang === "de" ? "Verschlüsseltes Backup mit Passwort" : "Encrypted backup with password"}
+          {lang === "de" ? "Geschütztes Backup" : "Encrypted backup"}
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
           {lang === "de"
-            ? "Schützt das Backup mit AES 256 und Passwort."
-            : "Protects the backup with AES 256 and a password."}
+            ? "Mit Passwort geschützt."
+            : "Protected with a password."}
         </div>
       </button>
 
@@ -94,8 +94,8 @@ export default function SettingsBackupCards({
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
           {lang === "de"
-            ? "Importiert JSON Backups ohne Passwort oder verschlüsselte Backups mit Passwort."
-            : "Imports JSON backups without password or encrypted backups with password."}
+            ? "Backup Datei importieren."
+            : "Import a backup file."}
         </div>
       </button>
     </div>
