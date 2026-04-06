@@ -600,29 +600,19 @@ export async function handleExportPlainConfig({
   const description =
     lang === "de"
       ? [
-          "Dieses Backup wird unverschlüsselt gespeichert.",
+          "Ungeschütztes Backup.",
           "",
-          "Es kann sensible Daten im Klartext enthalten:",
-          "• Verbindungs Passwörter",
-          "• Key Passphrases",
-          "• Portable Private Keys",
-          "",
-          "Nutze wenn möglich den verschlüsselten Export."
+          "Kann Passwörter und Schlüssel im Klartext enthalten."
         ].join("\n")
       : [
-          "This backup will be stored without encryption.",
+          "Unencrypted backup.",
           "",
-          "It may contain plaintext sensitive data:",
-          "• Connection passwords",
-          "• Key passphrases",
-          "• Portable private keys",
-          "",
-          "Use the encrypted export whenever possible."
+          "May contain plaintext passwords and keys."
         ].join("\n")
 
   showDialog({
     type: "confirm",
-    title: lang === "de" ? "Unverschlüsseltes Backup exportieren?" : "Export unencrypted backup?",
+    title: lang === "de" ? "Ungeschütztes Backup exportieren?" : "Export unencrypted backup?",
     description,
     confirmLabel: lang === "de" ? "Trotzdem exportieren" : "Export anyway",
     cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",

@@ -576,12 +576,12 @@ export default function SettingsSecuritySection({
             }}
           >
             <div className="text-[12px] font-semibold text-[var(--text-main)]">
-              {lang === "de" ? "Hinweis zum ungeschützten Vault" : "About the unprotected vault"}
+              {lang === "de" ? "Ungeschützter Vault" : "Unprotected vault"}
             </div>
             <div className="text-[12px] leading-[1.5] text-[var(--text-muted)] mt-1">
               {lang === "de"
-                ? "Ohne Master Passwort startet der Vault automatisch entsperrt. Das ist praktisch, schützt aber nicht zuverlässig gegen lokalen Zugriff auf deinen Benutzeraccount oder deine Dateien."
-                : "Without a master password, the vault unlocks automatically on startup. This is convenient, but it does not reliably protect against local access to your user account or files."}
+                ? "Bequem, aber kein Schutz gegen lokalen Dateizugriff."
+                : "Convenient, but not protection against local file access."}
             </div>
           </div>
         ) : null}
@@ -614,8 +614,8 @@ export default function SettingsSecuritySection({
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
                   {lang === "de"
-                    ? "Komfort ohne Passwort oder echter Schutz mit Master Passwort."
-                    : "Choose between convenience without a password and real protection with a master password."}
+                    ? "Ohne Passwort bequem, mit Passwort geschützt."
+                    : "Convenience without a password or protection with one."}
                 </div>
               </div>
 
@@ -637,8 +637,8 @@ export default function SettingsSecuritySection({
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Öffnen oder wieder sperren."
-                      : "Open or lock the vault."}
+                      ? "Öffnen oder sperren."
+                      : "Unlock or lock the vault."}
                   </div>
                 </div>
 
@@ -670,8 +670,8 @@ export default function SettingsSecuritySection({
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Ändere dein aktuelles Passwort."
-                      : "Change your current password."}
+                      ? "Master Passwort ändern."
+                      : "Change the master password."}
                   </div>
                 </div>
 
@@ -692,8 +692,8 @@ export default function SettingsSecuritySection({
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Erzeuge einen neuen Backup Key."
-                      : "Create a new backup key."}
+                      ? "Neuen Recovery Key erzeugen."
+                      : "Generate a new recovery key."}
                   </div>
                 </div>
 
@@ -714,8 +714,8 @@ export default function SettingsSecuritySection({
                   </div>
                   <div className="text-[12px] text-[var(--text-muted)] mt-1">
                     {lang === "de"
-                      ? "Zurück zum normalen Vault ohne Passwortschutz."
-                      : "Go back to the normal vault without password protection."}
+                      ? "Vault wieder ohne Passwortschutz nutzen."
+                      : "Use the vault again without password protection."}
                   </div>
                 </div>
 
