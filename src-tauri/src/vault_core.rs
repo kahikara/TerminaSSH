@@ -61,6 +61,68 @@ pub(crate) const VAULT_KEY_LEN: usize = 32;
 const VAULT_NONCE_LEN: usize = 12;
 pub(crate) const VAULT_VALIDATION_TEXT: &[u8] = b"terminassh-vault-ok";
 
+
+fn rebuild_vault_secrets_table(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch("PRAGMA foreign_keys = OFF;")
+        .map_err(|e| e.to_string())?;
+
+    let rebuild_result = conn.execute_batch(
+        "BEGIN IMMEDIATE;
+         DROP TABLE IF EXISTS secrets_new;
+         CREATE TABLE secrets_new (
+             connection_id INTEGER NOT NULL,
+             secret_type TEXT NOT NULL,
+             encrypted_data BLOB NOT NULL DEFAULT X'',
+             nonce BLOB NOT NULL DEFAULT X'',
+             PRIMARY KEY (connection_id, secret_type)
+         );
+         INSERT OR REPLACE INTO secrets_new (connection_id, secret_type, encrypted_data, nonce)
+         SELECT connection_id, secret_type, encrypted_data, nonce FROM secrets;
+         DROP TABLE secrets;
+         ALTER TABLE secrets_new RENAME TO secrets;
+         COMMIT;",
+    );
+
+    let reenable_result = conn.execute_batch("PRAGMA foreign_keys = ON;");
+
+    if let Err(err) = rebuild_result {
+        let _ = conn.execute_batch("ROLLBACK;");
+        let _ = reenable_result;
+        return Err(err.to_string());
+    }
+
+    reenable_result.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn ensure_vault_secrets_table(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(secrets)")
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?;
+
+    let mut column_names = Vec::new();
+    for item in iter {
+        column_names.push(item.map_err(|e| e.to_string())?);
+    }
+
+    let expected = ["connection_id", "secret_type", "encrypted_data", "nonce"];
+    let schema_matches = column_names.len() == expected.len()
+        && column_names
+            .iter()
+            .map(|value| value.as_str())
+            .eq(expected.iter().copied());
+
+    if schema_matches {
+        return Ok(());
+    }
+
+    rebuild_vault_secrets_table(conn)
+}
+
 pub(crate) fn init_vault_db() -> Result<(), String> {
     let conn = open_vault_db()?;
 
@@ -98,23 +160,7 @@ pub(crate) fn init_vault_db() -> Result<(), String> {
         .query_row("SELECT id FROM meta WHERE id = 1 LIMIT 1", [], |row| row.get(0))
         .optional()
         .map_err(|e| e.to_string())?;
-
-    conn.execute_batch(
-        "PRAGMA foreign_keys = OFF;
-         CREATE TABLE IF NOT EXISTS secrets_new (
-             connection_id INTEGER NOT NULL,
-             secret_type TEXT NOT NULL,
-             encrypted_data BLOB NOT NULL DEFAULT X'',
-             nonce BLOB NOT NULL DEFAULT X'',
-             PRIMARY KEY (connection_id, secret_type)
-         );
-         INSERT OR REPLACE INTO secrets_new (connection_id, secret_type, encrypted_data, nonce)
-         SELECT connection_id, secret_type, encrypted_data, nonce FROM secrets;
-         DROP TABLE secrets;
-         ALTER TABLE secrets_new RENAME TO secrets;
-         PRAGMA foreign_keys = ON;",
-    )
-    .map_err(|e| e.to_string())?;
+    ensure_vault_secrets_table(&conn)?;
 
     if meta_exists.is_none() {
         let now = current_export_timestamp();
