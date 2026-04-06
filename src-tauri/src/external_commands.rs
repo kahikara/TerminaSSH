@@ -3,9 +3,26 @@ use std::process::Command;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+
+fn is_allowed_external_url(url: &str) -> bool {
+    let normalized = url.trim().to_ascii_lowercase();
+    normalized.starts_with("https://")
+        || normalized.starts_with("http://")
+        || normalized.starts_with("mailto:")
+}
+
 #[tauri::command]
 pub(crate) fn open_external_url(_app: AppHandle, url: String) -> Result<(), String> {
-    tauri_plugin_opener::open_url(url, None::<String>).map_err(|e| e.to_string())
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("URL is empty".to_string());
+    }
+
+    if !is_allowed_external_url(trimmed) {
+        return Err("Only http, https, and mailto links are allowed".to_string());
+    }
+
+    tauri_plugin_opener::open_url(trimmed, None::<String>).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

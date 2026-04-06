@@ -564,6 +564,28 @@ export default function SettingsSecuritySection({
           </div>
         </div>
 
+
+        {!isProtected ? (
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 12,
+              border: "1px solid color-mix(in srgb, var(--warning) 24%, var(--border-subtle))",
+              background: "color-mix(in srgb, var(--warning) 8%, var(--bg-app))",
+              padding: 12
+            }}
+          >
+            <div className="text-[12px] font-semibold text-[var(--text-main)]">
+              {lang === "de" ? "Hinweis zum ungeschützten Vault" : "About the unprotected vault"}
+            </div>
+            <div className="text-[12px] leading-[1.5] text-[var(--text-muted)] mt-1">
+              {lang === "de"
+                ? "Ohne Master Passwort startet der Vault automatisch entsperrt. Das ist praktisch, schützt aber nicht zuverlässig gegen lokalen Zugriff auf deinen Benutzeraccount oder deine Dateien."
+                : "Without a master password, the vault unlocks automatically on startup. This is convenient, but it does not reliably protect against local access to your user account or files."}
+            </div>
+          </div>
+        ) : null}
+
         {vaultStatus?.has_legacy_master_key ? (
           <div
             style={{
@@ -592,8 +614,8 @@ export default function SettingsSecuritySection({
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
                   {lang === "de"
-                    ? "Optionaler Zusatz für deinen Vault."
-                    : "Optional extra protection for your vault."}
+                    ? "Komfort ohne Passwort oder echter Schutz mit Master Passwort."
+                    : "Choose between convenience without a password and real protection with a master password."}
                 </div>
               </div>
 
