@@ -44,7 +44,7 @@ export default function LinuxTitlebar({
           onError={(e) => { e.currentTarget.style.display = 'none' }}
         />
         <span className="text-[11px] font-semibold text-[var(--text-main)] truncate">
-          Termina SSH{appVersion ? ` v${appVersion}` : ''}
+          Termina SSH
         </span>
       </div>
 
