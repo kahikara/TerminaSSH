@@ -5,7 +5,7 @@ Termina SSH is a modern desktop SSH client focused on speed, clarity, and everyd
 Built with Tauri, Rust, and React, it combines terminal sessions, SFTP, editing, tunnels, backups, and local workflows in a compact interface that stays practical across Linux, macOS, and Windows.
 
 <p align="center">
-  <img src="homepage/screenshots/termina-main-blurred.png" width="850" alt="Termina SSH Main">
+  <img src="homepage/screenshots/main.png" width="850" alt="Termina SSH Overview">
 </p>
 
 ## Overview
@@ -34,13 +34,15 @@ The goal is simple. Keep the workflow focused, avoid unnecessary complexity, and
 ## Screenshots
 
 <p align="center">
-  <img src="homepage/screenshots/termina-settings-blurred.png" width="48%" alt="Settings and Backup">
+  <img src="homepage/screenshots/split.png" width="48%" alt="Split Terminal Workflow">
   &nbsp;
-  <img src="homepage/screenshots/termina-terminal-sftp-blurred.png" width="48%" alt="Terminal and SFTP">
+  <img src="homepage/screenshots/sftp_editor.png" width="48%" alt="SFTP and Editor">
 </p>
 
 <p align="center">
-  <img src="homepage/screenshots/termina-editor-blurred.png" width="48%" alt="Integrated Editor">
+  <img src="homepage/screenshots/local_browser.png" width="48%" alt="Local File Browser">
+  &nbsp;
+  <img src="homepage/screenshots/settings_backup.png" width="48%" alt="Settings and Backup">
 </p>
 
 ## Highlights
@@ -126,4 +128,3 @@ The current focus is continued polish across the core workflow:
 If you want to support development, you can do so here:
 
 https://ko-fi.com/ming83
-

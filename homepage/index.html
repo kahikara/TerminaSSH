@@ -341,6 +341,18 @@
         transform: scale(1.045);
       }
 
+      .shot-split {
+        transform: scale(1.04);
+      }
+
+      .shot-local-browser {
+        transform: scale(1.02);
+      }
+
+      .shot-settings-backup {
+        transform: scale(1.03);
+      }
+
       .carousel-arrow {
         position: absolute;
         top: 50%;
@@ -814,31 +826,38 @@
       const screenshotSlides = [
         {
           key: "main",
-          title: "Main window",
-          subtitle: "Connections, quick connect, and recent activity",
-          image: withBase("screenshots/termina-main-blurred.png"),
+          title: "App overview",
+          subtitle: "Sidebar, dashboard, tabs, and active sessions in one workspace",
+          image: withBase("screenshots/main.png"),
           imageClass: "shot-main",
         },
         {
-          key: "editor",
-          title: "Editor",
-          subtitle: "Remote editing with search, replace, and save controls",
-          image: withBase("screenshots/termina-editor-blurred.png"),
+          key: "split",
+          title: "Split terminal workflow",
+          subtitle: "Multiple sessions side by side in a focused terminal layout",
+          image: withBase("screenshots/split.png"),
+          imageClass: "shot-split",
+        },
+        {
+          key: "sftp_editor",
+          title: "SFTP and editor",
+          subtitle: "Browse remote files and edit them directly inside the app",
+          image: withBase("screenshots/sftp_editor.png"),
           imageClass: "shot-editor",
         },
         {
-          key: "sftp",
-          title: "Terminal and SFTP",
-          subtitle: "Terminal work and file browsing side by side",
-          image: withBase("screenshots/termina-terminal-sftp-blurred.png"),
-          imageClass: "shot-sftp",
+          key: "local_browser",
+          title: "Local file browser",
+          subtitle: "Work with local files and editing in the same desktop workflow",
+          image: withBase("screenshots/local_browser.png"),
+          imageClass: "shot-local-browser",
         },
         {
-          key: "settings",
-          title: "Settings",
-          subtitle: "Theme, tools, and behavior in one clean settings panel",
-          image: withBase("screenshots/termina-settings-blurred.png"),
-          imageClass: "shot-settings",
+          key: "settings_backup",
+          title: "Settings and backup",
+          subtitle: "App configuration, backup, and security tools in one place",
+          image: withBase("screenshots/settings_backup.png"),
+          imageClass: "shot-settings-backup",
         },
       ];
 
