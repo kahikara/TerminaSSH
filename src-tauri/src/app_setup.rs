@@ -7,6 +7,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, WindowEvent};
 
+#[cfg(target_os = "linux")]
 use crate::app_paths::maybe_relaunch_appimage_with_wayland_preload;
 use crate::db_core::init_db;
 use crate::vault_core::{

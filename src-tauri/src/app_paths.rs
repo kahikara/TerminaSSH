@@ -52,9 +52,6 @@ pub(crate) fn maybe_relaunch_appimage_with_wayland_preload() {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn maybe_relaunch_appimage_with_wayland_preload() {}
-
 pub(crate) fn home_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
         return Some(PathBuf::from(home));

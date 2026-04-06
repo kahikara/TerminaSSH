@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import { ChevronDown, ChevronRight, Folder, Plus, Search, Server, SquarePen, Terminal as TermIcon, X, Zap } from 'lucide-react'
 import { t } from '../lib/i18n'
@@ -90,6 +91,34 @@ export default function SidebarConnectionsPanel({
   onRemoveEmptyFolder,
   localTerminalConnection
 }: SidebarConnectionsPanelProps) {
+  const clickTimerRef = useRef<number | null>(null)
+
+  const clearClickTimer = () => {
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+  }
+
+  const handleConnectionClick = (
+    server: ConnectionItem,
+    options?: { forceNewTab?: boolean; openInSplit?: boolean }
+  ) => {
+    clearClickTimer()
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null
+      onOpenConnection(server, options)
+    }, 220)
+  }
+
+  const handleConnectionDoubleClick = (
+    server: ConnectionItem,
+    options?: { forceNewTab?: boolean; openInSplit?: boolean }
+  ) => {
+    clearClickTimer()
+    onOpenConnection(server, options)
+  }
+
   return (
     <div>
       <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
@@ -173,8 +202,8 @@ export default function SidebarConnectionsPanel({
               <button
                 key={`${conn.id || conn.name || 'item'}_${idx}`}
                 onContextMenu={(e) => onOpenSidebarContextMenu(e, localItem ? localTerminalConnection : conn, localItem)}
-                onClick={() => onOpenConnection(localItem ? localTerminalConnection : conn)}
-                onDoubleClick={() => onOpenConnection(localItem ? localTerminalConnection : conn, { forceNewTab: true })}
+                onClick={() => handleConnectionClick(localItem ? localTerminalConnection : conn)}
+                onDoubleClick={() => handleConnectionDoubleClick(localItem ? localTerminalConnection : conn, { forceNewTab: true })}
                 title={localItem ? t('localTerminal', lang) : conn.name}
                 className={`group/item flex items-center justify-center w-full h-9 rounded-xl border transition-all ${
                   active
@@ -226,8 +255,8 @@ export default function SidebarConnectionsPanel({
               >
                 <button
                   onContextMenu={(e) => onOpenSidebarContextMenu(e, conn)}
-                  onClick={() => onOpenConnection(conn)}
-                  onDoubleClick={() => onOpenConnection(conn, { forceNewTab: true })}
+                  onClick={() => handleConnectionClick(conn)}
+                  onDoubleClick={() => handleConnectionDoubleClick(conn, { forceNewTab: true })}
                   className={`flex items-center flex-1 min-w-0 text-left py-1 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-hover)] ${
                     active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                   }`}
@@ -298,8 +327,8 @@ export default function SidebarConnectionsPanel({
                         >
                           <button
                             onContextMenu={(e) => onOpenSidebarContextMenu(e, conn)}
-                            onClick={() => onOpenConnection(conn)}
-                            onDoubleClick={() => onOpenConnection(conn, { forceNewTab: true })}
+                            onClick={() => handleConnectionClick(conn)}
+                            onDoubleClick={() => handleConnectionDoubleClick(conn, { forceNewTab: true })}
                             className={`flex items-center flex-1 min-w-0 text-left px-1 py-1 rounded-xl ${
                               active ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                             }`}
