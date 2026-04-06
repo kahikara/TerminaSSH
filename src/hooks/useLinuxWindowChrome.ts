@@ -5,14 +5,9 @@ type LinuxWindowModeInfo = {
   wayland_undecorated?: boolean
 }
 
-type AppMetaInfo = {
-  app_version?: string
-}
-
 export function useLinuxWindowChrome() {
   const [useCustomLinuxTitlebar, setUseCustomLinuxTitlebar] = useState(false)
   const [isWindowMaximized, setIsWindowMaximized] = useState(false)
-  const [appVersion, setAppVersion] = useState('')
 
   const startWindowDrag = useCallback(() => {
     void invoke('window_start_dragging').catch(() => {})
@@ -42,14 +37,6 @@ export function useLinuxWindowChrome() {
         setUseCustomLinuxTitlebar(false)
       })
 
-    invoke('get_app_meta')
-      .then((info) => {
-        const meta = (info || {}) as AppMetaInfo
-        setAppVersion(String(meta.app_version || ''))
-      })
-      .catch(() => {
-        setAppVersion('')
-      })
   }, [])
 
   useEffect(() => {
@@ -108,7 +95,6 @@ export function useLinuxWindowChrome() {
   return {
     useCustomLinuxTitlebar,
     isWindowMaximized,
-    appVersion,
     startWindowDrag,
     toggleWindowMaximize,
     minimizeWindow,

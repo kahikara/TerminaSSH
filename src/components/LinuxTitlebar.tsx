@@ -2,7 +2,6 @@ import { Minus, Square, X } from 'lucide-react'
 
 type LinuxTitlebarProps = {
   lang: string
-  appVersion: string
   isWindowMaximized: boolean
   onStartDrag: () => void
   onToggleMaximize: () => void
@@ -12,7 +11,6 @@ type LinuxTitlebarProps = {
 
 export default function LinuxTitlebar({
   lang,
-  appVersion,
   isWindowMaximized,
   onStartDrag,
   onToggleMaximize,

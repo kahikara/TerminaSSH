@@ -221,7 +221,6 @@ export default function App() {
   const {
     useCustomLinuxTitlebar,
     isWindowMaximized,
-    appVersion,
     startWindowDrag,
     toggleWindowMaximize,
     minimizeWindow,
@@ -500,7 +499,6 @@ export default function App() {
       {useCustomLinuxTitlebar && (
         <LinuxTitlebar
           lang={settings.lang}
-          appVersion={appVersion}
           isWindowMaximized={isWindowMaximized}
           onStartDrag={startWindowDrag}
           onToggleMaximize={toggleWindowMaximize}
