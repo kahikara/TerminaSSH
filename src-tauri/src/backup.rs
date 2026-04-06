@@ -14,6 +14,7 @@ use crate::app_paths::{
 };
 use crate::db_core::{current_export_timestamp, open_db, open_vault_db, validate_snippet};
 use crate::ssh_keys::{fingerprint_for_pubkey_path, read_public_key_for_path};
+use crate::tunnels::{ensure_loopback_bind_host, normalize_bind_host_value};
 use crate::ssh_runtime::load_connection_runtime_details;
 use crate::vault_core::{
     delete_vault_secret, init_vault_db, require_runtime_vault_dek, upsert_vault_secret,
@@ -766,11 +767,15 @@ pub(crate) fn import_backup_bundle(
             continue;
         }
 
-        let bind_host = if bind_host.is_empty() {
-            "127.0.0.1".to_string()
-        } else {
-            bind_host
-        };
+        let bind_host = normalize_bind_host_value(&bind_host);
+
+        if ensure_loopback_bind_host(&bind_host).is_err() {
+            warnings.push(format!(
+                "Tunnel '{}' was skipped because its bind host is not loopback only.",
+                name
+            ));
+            continue;
+        }
 
         let primary_map_key = format!(
             "{}|{}|{}|{}|{}",

@@ -76,7 +76,7 @@ fn normalize_tunnel_fields(tunnel: &mut SshTunnel) {
 }
 
 
-fn normalize_bind_host_value(bind_host: &str) -> String {
+pub(crate) fn normalize_bind_host_value(bind_host: &str) -> String {
     let trimmed = bind_host.trim();
     if trimmed.is_empty() {
         "127.0.0.1".to_string()
@@ -85,7 +85,7 @@ fn normalize_bind_host_value(bind_host: &str) -> String {
     }
 }
 
-fn ensure_loopback_bind_host(bind_host: &str) -> Result<(), String> {
+pub(crate) fn ensure_loopback_bind_host(bind_host: &str) -> Result<(), String> {
     let normalized = normalize_bind_host_value(bind_host);
 
     if normalized.eq_ignore_ascii_case("localhost") {
