@@ -600,21 +600,21 @@ export async function handleExportPlainConfig({
   const description =
     lang === "de"
       ? [
-          "Ungeschütztes Backup.",
+          "Backup ohne Passwort.",
           "",
           "Kann Passwörter und Schlüssel im Klartext enthalten."
         ].join("\n")
       : [
-          "Unencrypted backup.",
+          "Backup without password.",
           "",
-          "May contain plaintext passwords and keys."
+          "May contain passwords and keys in plain text."
         ].join("\n")
 
   showDialog({
     type: "confirm",
-    title: lang === "de" ? "Ungeschütztes Backup exportieren?" : "Export unencrypted backup?",
+    title: lang === "de" ? "Backup ohne Passwort exportieren?" : "Export backup without password?",
     description,
-    confirmLabel: lang === "de" ? "Trotzdem exportieren" : "Export anyway",
+    confirmLabel: lang === "de" ? "Exportieren" : "Export",
     cancelLabel: lang === "de" ? "Abbrechen" : "Cancel",
     onCancel: () => {},
     onConfirm: async () => {
