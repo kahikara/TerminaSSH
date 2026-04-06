@@ -73,10 +73,10 @@ export default function SettingsBackupCards({
         style={buttonStyle}
       >
         <Database size={26} style={{ color: "var(--accent)" }} />
-        <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
           {lang === "de" ? "Geschütztes Backup" : "Encrypted backup"}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
           {lang === "de"
             ? "Mit Passwort geschützt."
             : "Protected with a password."}
@@ -89,10 +89,10 @@ export default function SettingsBackupCards({
         style={buttonStyle}
       >
         <DownloadIcon size={26} style={{ color: "var(--accent)" }} />
-        <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
           {importLabel}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
           {lang === "de"
             ? "Backup Datei importieren."
             : "Import a backup file."}

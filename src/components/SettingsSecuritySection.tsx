@@ -68,6 +68,21 @@ const toolButtonStyle: CSSProperties = {
   minWidth: 108
 }
 
+const subtleBadgeStyle: CSSProperties = {
+  minHeight: 20,
+  padding: "0 8px",
+  borderRadius: 999,
+  border: "1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent)",
+  background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
+  color: "var(--text-muted)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.02em"
+}
+
 export default function SettingsSecuritySection({
   lang,
   ui,
@@ -609,8 +624,13 @@ export default function SettingsSecuritySection({
           {!isProtected ? (
             <div style={compactRowStyle}>
               <div style={{ minWidth: 0 }}>
-                <div className="text-[12px] font-semibold text-[var(--text-main)]">
-                  {lang === "de" ? "Passwortschutz" : "Password protection"}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div className="text-[12px] font-semibold text-[var(--text-main)]">
+                    {lang === "de" ? "Passwortschutz" : "Password protection"}
+                  </div>
+                  <span style={subtleBadgeStyle}>
+                    {lang === "de" ? "Optional" : "Optional"}
+                  </span>
                 </div>
                 <div className="text-[12px] text-[var(--text-muted)] mt-1">
                   {lang === "de"
