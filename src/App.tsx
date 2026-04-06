@@ -228,6 +228,17 @@ export default function App() {
     closeMainWindow
   } = useLinuxWindowChrome()
 
+  const isMacPlatform = useMemo(() => {
+    const nav = navigator as Navigator & {
+      userAgentData?: { platform?: string }
+    }
+
+    const platform = String(nav.userAgentData?.platform || navigator.platform || '')
+    const userAgent = String(navigator.userAgent || '')
+
+    return /mac/i.test(platform) || /mac os/i.test(userAgent)
+  }, [])
+
 
   const {
     loadServers,
@@ -471,6 +482,15 @@ export default function App() {
           : undefined
       }}
     >
+      {!useCustomLinuxTitlebar && isMacPlatform && (
+        <div
+          className="pointer-events-none absolute left-0 right-0 top-0 z-[295] h-px"
+          style={{
+            background: 'color-mix(in srgb, var(--border-subtle) 88%, rgba(255,255,255,0.10))'
+          }}
+        />
+      )}
+
       <GlobalDialog dialog={dialog} onClose={() => setDialog((prev) => ({ ...prev, isOpen: false }))} />
 
       {startupVaultGateState !== 'open' && (
