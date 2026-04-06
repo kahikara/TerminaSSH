@@ -70,8 +70,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NO_STRIP: ${{ matrix.no_strip }}
         with:
-          tagName: v1.0.4
-          releaseName: Termina SSH v1.0.4
+          tagName: v1.1.0
+          releaseName: Termina SSH v1.1.0
           releaseBody: |
             Draft release for testing.
 
