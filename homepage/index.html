@@ -370,41 +370,12 @@
 
       .screenshot-inner img {
         display: block;
-        max-width: 100%;
-        max-height: 100%;
+        width: 100%;
+        height: 100%;
         border-radius: 18px;
-        object-fit: contain;
-        object-position: center;
+        object-fit: cover;
+        object-position: center top;
         box-shadow: var(--shadow);
-        transform-origin: center center;
-      }
-
-      .shot-main {
-        transform: scale(1.08);
-      }
-
-      .shot-editor {
-        transform: scale(1);
-      }
-
-      .shot-sftp {
-        transform: scale(1.06);
-      }
-
-      .shot-settings {
-        transform: scale(1.045);
-      }
-
-      .shot-split {
-        transform: scale(1.04);
-      }
-
-      .shot-local-browser {
-        transform: scale(1.02);
-      }
-
-      .shot-settings-backup {
-        transform: scale(1.03);
       }
 
       .carousel-arrow {
@@ -889,35 +860,30 @@
           title: "App overview",
           subtitle: "Sidebar, dashboard, tabs, and active sessions in one workspace",
           image: withBase("screenshots/main.png"),
-          imageClass: "shot-main",
         },
         {
           key: "split",
           title: "Split terminal workflow",
           subtitle: "Multiple sessions side by side in a focused terminal layout",
           image: withBase("screenshots/split.png"),
-          imageClass: "shot-split",
         },
         {
           key: "sftp_editor",
           title: "SFTP and editor",
           subtitle: "Browse remote files and edit them directly inside the app",
           image: withBase("screenshots/sftp_editor.png"),
-          imageClass: "shot-editor",
         },
         {
           key: "local_browser",
           title: "Local file browser",
           subtitle: "Work with local files and editing in the same desktop workflow",
           image: withBase("screenshots/local_browser.png"),
-          imageClass: "shot-local-browser",
         },
         {
           key: "settings_backup",
           title: "Settings and backup",
           subtitle: "App configuration, backup, and security tools in one place",
           image: withBase("screenshots/settings_backup.png"),
-          imageClass: "shot-settings-backup",
         },
       ];
 
@@ -1042,7 +1008,7 @@
               <div class="slide ${index === currentScreenshot ? "active" : ""}" data-index="${index}">
                 <div class="screenshot-shell">
                   <div class="screenshot-inner">
-                    <img class="${slide.imageClass || ""}" src="${slide.image}" alt="${slide.title}" />
+                    <img src="${slide.image}" alt="${slide.title}" />
                   </div>
                 </div>
               </div>
