@@ -608,8 +608,7 @@ export async function handleExportPlainConfig({
           "• Portable Private Keys",
           "",
           "Nutze wenn möglich den verschlüsselten Export."
-        ].join("
-")
+        ].join("\n")
       : [
           "This backup will be stored without encryption.",
           "",
@@ -619,8 +618,7 @@ export async function handleExportPlainConfig({
           "• Portable private keys",
           "",
           "Use the encrypted export whenever possible."
-        ].join("
-")
+        ].join("\n")
 
   showDialog({
     type: "confirm",
