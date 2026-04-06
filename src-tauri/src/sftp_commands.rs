@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::local_fs::normalize_local_path;
+use crate::local_fs::{ensure_local_path_allowed, normalize_local_path};
 use crate::ssh_runtime::{
     connect_runtime_details, connect_ssh_session, load_connection_runtime_details,
 };
@@ -374,6 +374,7 @@ pub(crate) async fn sftp_upload(
     vault_state: State<'_, VaultState>,
 ) -> Result<String, String> {
     let local_path = normalize_local_path(&local_path)?;
+    ensure_local_path_allowed(&local_path, "Upload source")?;
     if !local_path.exists() {
         return Err(format!("Path not found: {}", local_path.to_string_lossy()));
     }
@@ -501,9 +502,11 @@ pub(crate) async fn sftp_download(
 ) -> Result<String, String> {
     let remote_path = normalize_remote_path(&remote_path)?;
     let local_path = normalize_local_path(&local_path)?;
+    ensure_local_path_allowed(&local_path, "Download target")?;
 
     if let Some(parent) = local_path.parent() {
         if !parent.as_os_str().is_empty() {
+            ensure_local_path_allowed(parent, "Download target")?;
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
     }

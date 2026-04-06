@@ -60,7 +60,7 @@ fn allowed_local_roots() -> Vec<PathBuf> {
     roots
 }
 
-fn ensure_local_path_allowed(path: &Path, action: &str) -> Result<(), String> {
+pub(crate) fn ensure_local_path_allowed(path: &Path, action: &str) -> Result<(), String> {
     if local_fs_is_unrestricted() {
         return Ok(());
     }
