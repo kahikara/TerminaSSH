@@ -32,8 +32,7 @@ fn setup_main_window(app: &tauri::AppHandle) {
             let _ = window.set_decorations(true);
         }
 
-        let version = app.package_info().version.to_string();
-        let _ = window.set_title(&format!("Termina SSH v{}", version));
+        let _ = window.set_title("Termina SSH");
         let _ = restore_main_window_state(&window);
 
         if !is_wayland_session() {

@@ -2,6 +2,7 @@ import { Heart, MonitorCog, Copy, Coffee } from "lucide-react"
 
 type Props = {
   ui: any
+  appVersion: string
   showToast: (msg: string, isErr?: boolean) => void
   openExternalLink: (url: string) => Promise<boolean>
   copyToClipboard: (text: string) => Promise<boolean>
@@ -11,6 +12,7 @@ type Props = {
 
 export default function SettingsAboutCard({
   ui,
+  appVersion,
   showToast,
   openExternalLink,
   copyToClipboard,
@@ -50,7 +52,9 @@ export default function SettingsAboutCard({
           </span>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-main)" }}>{ui.projectTitle}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>{ui.versionLabel}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+              {appVersion ? `Version ${appVersion}` : ui.versionLabel}
+            </div>
           </div>
         </div>
 
