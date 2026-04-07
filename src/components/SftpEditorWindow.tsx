@@ -1296,33 +1296,23 @@ export default function SftpEditorWindow() {
         </div>
 
         {useCustomWindowChrome && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 8 }}>
             <button
+              data-window-control="true"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
                 void invoke("current_window_minimize").catch((e) => {
                   console.error("editor minimize failed", e)
                 })
               }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
-                color: "var(--text-muted, #94a3b8)",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
+              className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
               title={lang === "de" ? "Minimieren" : "Minimize"}
             >
               <Minus size={11} />
             </button>
 
             <button
+              data-window-control="true"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
                 void (async () => {
@@ -1335,42 +1325,19 @@ export default function SftpEditorWindow() {
                   }
                 })()
               }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
-                color: "var(--text-muted, #94a3b8)",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
+              className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
               title={isWindowMaximized
                 ? (lang === "de" ? "Wiederherstellen" : "Restore")
                 : (lang === "de" ? "Maximieren" : "Maximize")}
             >
-              <Square size={9.5} />
+              <Square size={9.5} className={isWindowMaximized ? "scale-90" : ""} />
             </button>
 
             <button
+              data-window-control="true"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={requestClose}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 22,
-                height: 22,
-                borderRadius: 4,
-                border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-                background: "color-mix(in srgb, var(--bg-app) 82%, var(--bg-sidebar))",
-                color: "var(--text-muted, #94a3b8)",
-                cursor: "pointer",
-                flexShrink: 0
-              }}
+              className="flex items-center justify-center w-[22px] h-[22px] rounded-[4px] border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))] text-[var(--text-muted)] hover:bg-[var(--danger)] hover:text-white transition-colors shrink-0"
               title={lang === "de" ? "Schließen" : "Close"}
             >
               <X size={11} />
