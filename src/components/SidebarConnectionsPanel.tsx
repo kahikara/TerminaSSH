@@ -121,12 +121,7 @@ export default function SidebarConnectionsPanel({
 
   return (
     <div>
-      <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-        {!isSidebarCollapsed && (
-          <h3 className="text-[11px] uppercase tracking-[0.08em] font-bold text-[var(--text-muted)] w-full py-1">
-            {t('connections', lang)}
-          </h3>
-        )}
+      <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-end'}`}>
         <div className="flex gap-1">
           {!isSidebarCollapsed && (
             <button
