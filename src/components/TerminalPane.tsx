@@ -889,60 +889,62 @@ export default function TerminalPane(props: TerminalPaneProps) {
           background: "color-mix(in srgb, var(--bg-sidebar) 94%, var(--bg-app))"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "var(--text-main, #cfcfcf)",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}
-          >
-            {isLocalServer(activePaneServer) ? t("localSession", settings?.lang || "en") : `${activePaneServer?.username || ""}@${activePaneServer?.host || ""}`}
-          </div>
-
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
           {!isLocalServer(activePaneServer) && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                height: 24,
-                padding: "0 8px",
-                borderRadius: 999,
-                border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 76%, transparent)",
-                background: "color-mix(in srgb, var(--bg-app) 76%, var(--bg-sidebar))",
-                fontSize: "11px",
-                color: pingMs === "timeout" ? "var(--danger, #ef4444)" : "var(--text-muted, #94a3b8)",
-                whiteSpace: "nowrap",
-                flexShrink: 0
-              }}
-              title={t("pingRefreshHint", settings?.lang || "en")}
-            >
-              <span
+            <>
+              <div
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "999px",
-                  display: "inline-block",
-                  background:
-                    pingMs === "timeout"
-                      ? "var(--danger, #ef4444)"
-                      : Number(pingMs) < 80
-                        ? "var(--success, #22c55e)"
-                        : Number(pingMs) < 150
-                          ? "var(--warning, #f59e0b)"
-                          : "var(--danger, #ef4444)"
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "var(--text-main, #cfcfcf)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis"
                 }}
-              />
-              <span>{pingMs === "timeout" ? t("timeout", settings?.lang || "en") : `${pingMs} ms`}</span>
-            </div>
+              >
+                {`${activePaneServer?.username || ""}@${activePaneServer?.host || ""}`}
+              </div>
+
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 24,
+                  padding: "0 8px",
+                  borderRadius: 999,
+                  border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 76%, transparent)",
+                  background: "color-mix(in srgb, var(--bg-app) 76%, var(--bg-sidebar))",
+                  fontSize: "11px",
+                  color: pingMs === "timeout" ? "var(--danger, #ef4444)" : "var(--text-muted, #94a3b8)",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0
+                }}
+                title={t("pingRefreshHint", settings?.lang || "en")}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "999px",
+                    display: "inline-block",
+                    background:
+                      pingMs === "timeout"
+                        ? "var(--danger, #ef4444)"
+                        : Number(pingMs) < 80
+                          ? "var(--success, #22c55e)"
+                          : Number(pingMs) < 150
+                            ? "var(--warning, #f59e0b)"
+                            : "var(--danger, #ef4444)"
+                  }}
+                />
+                <span>{pingMs === "timeout" ? t("timeout", settings?.lang || "en") : `${pingMs} ms`}</span>
+              </div>
+            </>
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
           {showSearchBtn && (
             <button
               onClick={toggleSearchBar}
