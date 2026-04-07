@@ -433,6 +433,31 @@ export default function SftpEditorWindow() {
     }, 0)
   }
 
+
+  function replaceEditorSelection(nextText: string) {
+    const ta = textareaRef.current
+    if (!ta) return
+
+    const start = ta.selectionStart ?? 0
+    const end = ta.selectionEnd ?? 0
+
+    const next =
+      contentRef.current.slice(0, start) +
+      nextText +
+      contentRef.current.slice(end)
+
+    setEditorContent(next)
+
+    setTimeout(() => {
+      const pos = start + nextText.length
+      ta.focus()
+      ta.setSelectionRange(pos, pos)
+      updateCursor()
+      syncGutterScroll()
+      evaluateLargeFileNotice(next)
+    }, 0)
+  }
+
   async function pasteFromClipboard() {
     const clip = await readText()
     if (!clip) return
@@ -858,6 +883,52 @@ export default function SftpEditorWindow() {
 
     if (action === "close") {
       await reallyClose()
+    }
+  }
+
+
+  async function handleEditorInputMenuAction(action: "copy" | "paste" | "cut" | "selectAll") {
+    const target = inputMenu.target
+    const ta = textareaRef.current
+
+    if (!target || !ta || target !== ta) {
+      await runInputMenuAction(action)
+      return
+    }
+
+    try {
+      ta.focus()
+
+      if (action === "selectAll") {
+        ta.select()
+        return
+      }
+
+      if (action === "copy") {
+        await copySelectedText()
+        return
+      }
+
+      if (action === "paste") {
+        await pasteFromClipboard()
+        return
+      }
+
+      if (action === "cut") {
+        if (editorReadOnlyReason) return
+
+        const start = ta.selectionStart ?? 0
+        const end = ta.selectionEnd ?? 0
+        if (end <= start) return
+
+        const selected = contentRef.current.slice(start, end)
+        if (!selected) return
+
+        await writeText(selected)
+        replaceEditorSelection("")
+      }
+    } finally {
+      closeInputMenu()
     }
   }
 
@@ -1700,7 +1771,7 @@ export default function SftpEditorWindow() {
       <InputContextMenu
         inputMenu={inputMenu}
         lang={lang}
-        onAction={runInputMenuAction}
+        onAction={handleEditorInputMenuAction}
         extraActions={[
           {
             key: "editor-search",
