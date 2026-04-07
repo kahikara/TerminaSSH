@@ -38,7 +38,7 @@ export default function LinuxTitlebar({
         <img
           src="/app-icon.svg"
           alt="logo"
-          className="w-4 h-4 object-contain shrink-0"
+          className="w-[18px] h-[18px] object-contain shrink-0"
           onError={(e) => { e.currentTarget.style.display = 'none' }}
         />
         <span className="text-[11px] font-semibold text-[var(--text-main)] truncate">
