@@ -211,6 +211,10 @@ function getLineColAtIndex(text: string, index: number) {
   return { line, col }
 }
 
+function normalizeEditorPasteText(text: string) {
+  return String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -408,18 +412,19 @@ export default function SftpEditorWindow() {
     const clip = await invoke("read_clipboard") as string
     if (!clip) return
 
+    const normalized = normalizeEditorPasteText(clip)
     const start = ta.selectionStart ?? 0
     const end = ta.selectionEnd ?? 0
 
     const next =
       contentRef.current.slice(0, start) +
-      clip +
+      normalized +
       contentRef.current.slice(end)
 
     setEditorContent(next)
 
     setTimeout(() => {
-      const pos = start + clip.length
+      const pos = start + normalized.length
       ta.focus()
       ta.setSelectionRange(pos, pos)
       updateCursor()
