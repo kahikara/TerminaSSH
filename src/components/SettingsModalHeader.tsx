@@ -19,8 +19,8 @@ export default function SettingsModalHeader({
   return (
     <div
       style={{
-        height: 54,
-        padding: "0 14px",
+        height: 48,
+        padding: "0 12px",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -30,7 +30,7 @@ export default function SettingsModalHeader({
       }}
     >
       <div>
-        <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>
+        <div style={{ fontSize: 14, lineHeight: 1.1, fontWeight: 700, color: "var(--text-main)" }}>
           {title}
         </div>
         {subtitle.trim().length > 0 && (

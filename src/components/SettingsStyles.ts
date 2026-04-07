@@ -13,9 +13,9 @@ boxShadow: "0 18px 60px rgba(0,0,0,0.38)"
 }
 
 export const iconButton: React.CSSProperties = {
-width: 34,
-height: 34,
-borderRadius: 10,
+width: 32,
+height: 32,
+borderRadius: 9,
 display: "inline-flex",
 alignItems: "center",
 justifyContent: "center",
