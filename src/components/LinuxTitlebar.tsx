@@ -19,7 +19,7 @@ export default function LinuxTitlebar({
 }: LinuxTitlebarProps) {
   return (
     <div
-      className="absolute top-0 left-0 right-0 z-[300] h-[30px] flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] px-2 select-none"
+      className="absolute top-0 left-0 right-0 z-[300] h-[30px] flex items-center justify-between border-b border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-sidebar)_96%,var(--bg-app))] pl-2 pr-1 select-none"
       onDoubleClick={(e) => {
         const target = e.target as HTMLElement | null
         if (target?.closest('[data-window-control="true"]')) return
