@@ -298,6 +298,10 @@ export function destroyTerminal(sessionId: string) {
   delete terminalStore[sessionId]
 }
 
+function normalizeTerminalPasteText(text: string) {
+  return String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+}
+
 export async function copyTerminalSelection(
   term: Terminal,
   showToast?: (msg: string, isErr?: boolean) => void,
@@ -328,7 +332,16 @@ export async function pasteTerminalClipboard(
   try {
     const text = await readText()
     if (!text) return
-    await invoke("write_to_pty", { sessionId, input: text })
+
+    const normalized = normalizeTerminalPasteText(text)
+    const termWithPaste = term as Terminal & { paste?: (data: string) => void }
+
+    if (typeof termWithPaste.paste === "function") {
+      termWithPaste.paste(normalized)
+    } else {
+      await invoke("write_to_pty", { sessionId, input: normalized })
+    }
+
     try { term.focus() } catch {}
     showToast?.(t("pastedFromClipboard", lang))
   } catch (e: any) {
