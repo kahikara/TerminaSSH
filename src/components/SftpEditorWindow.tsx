@@ -1746,8 +1746,7 @@ export default function SftpEditorWindow() {
             onClick: () => {
               closeInputMenu()
               openSearchOnly()
-            },
-            separatorBefore: true
+            }
           },
           {
             key: "editor-replace",

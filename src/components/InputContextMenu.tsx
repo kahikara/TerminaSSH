@@ -20,17 +20,31 @@ type Props = {
 export default function InputContextMenu({ inputMenu, lang, onAction, extraActions = [] }: Props) {
   if (!inputMenu.open) return null
 
+  const itemClass =
+    "w-full px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+
+  const dividerClass =
+    "h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]"
+
   return (
     <div
       data-input-context-menu="true"
-      className="fixed z-[320] w-[176px] rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-2xl overflow-hidden"
+      className="fixed z-[320] w-[164px] rounded-lg border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-xl overflow-hidden"
       style={{ left: inputMenu.x, top: inputMenu.y }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("cut")}
+        className={itemClass}
+      >
+        {lang === "de" ? "Ausschneiden" : "Cut"}
+      </button>
+
+      <button
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onAction("copy")}
-        className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+        className={itemClass}
       >
         {lang === "de" ? "Kopieren" : "Copy"}
       </button>
@@ -38,37 +52,19 @@ export default function InputContextMenu({ inputMenu, lang, onAction, extraActio
       <button
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => onAction("paste")}
-        className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
+        className={itemClass}
       >
         {lang === "de" ? "Einfügen" : "Paste"}
       </button>
 
-      <button
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => onAction("cut")}
-        className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-      >
-        {lang === "de" ? "Ausschneiden" : "Cut"}
-      </button>
-
-      <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
-
-      <button
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => onAction("selectAll")}
-        className="w-full px-3 py-2.5 text-left text-[13px] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-      >
-        {lang === "de" ? "Alles auswählen" : "Select all"}
-      </button>
-
       {extraActions.length > 0 && (
         <>
-          <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
+          <div className={dividerClass} />
 
           {extraActions.map((action) => (
             <React.Fragment key={action.key}>
               {action.separatorBefore && (
-                <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
+                <div className={dividerClass} />
               )}
 
               <button
@@ -78,7 +74,7 @@ export default function InputContextMenu({ inputMenu, lang, onAction, extraActio
                   void action.onClick()
                 }}
                 disabled={action.disabled}
-                className="w-full px-3 py-2.5 text-left text-[13px] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className={itemClass}
                 style={{
                   color: action.danger ? "var(--danger, #ef4444)" : "var(--text-main)"
                 }}
@@ -89,6 +85,16 @@ export default function InputContextMenu({ inputMenu, lang, onAction, extraActio
           ))}
         </>
       )}
+
+      <div className={dividerClass} />
+
+      <button
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => onAction("selectAll")}
+        className={itemClass}
+      >
+        {lang === "de" ? "Alles auswählen" : "Select all"}
+      </button>
     </div>
   )
 }
