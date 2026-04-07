@@ -1237,7 +1237,7 @@ export default function SftpEditorWindow() {
         style={{
           minHeight: 30,
           height: 30,
-          padding: "0 10px",
+          padding: "0 4px 0 8px",
           borderBottom: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
           display: "flex",
           alignItems: "center",
@@ -1296,7 +1296,7 @@ export default function SftpEditorWindow() {
         </div>
 
         {useCustomWindowChrome && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <button
               data-window-control="true"
               onMouseDown={(e) => e.stopPropagation()}
