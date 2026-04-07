@@ -512,6 +512,7 @@ export default function App() {
         width={sidebarWidth}
         useCustomLinuxTitlebar={useCustomLinuxTitlebar}
         lang={settings.lang}
+        onGoHome={() => setActiveTabId(null)}
         onOpenSettings={openSettingsModal}
         onToggleCollapse={toggleSidebarCollapse}
         onStartResize={startSidebarResize}
@@ -538,7 +539,6 @@ export default function App() {
           }}
           onOpenNewConnection={openNewConnectionModal}
           onOpenQuickConnect={openQuickConnect}
-          onGoHome={() => setActiveTabId(null)}
           onOpenConnection={(server, options) => {
             void openTerminal(server, options)
           }}
