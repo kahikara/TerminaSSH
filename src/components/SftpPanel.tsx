@@ -246,10 +246,10 @@ function getSmallMenuPosition(buttonRect: DOMRect, listRect: DOMRect): React.CSS
     right: 0,
     width: menuWidth,
     minWidth: menuWidth,
-    borderRadius: 10,
-    border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+    borderRadius: 8,
+    border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
     background: "color-mix(in srgb, var(--bg-app) 92%, black)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+    boxShadow: "0 12px 28px rgba(0,0,0,0.32)",
     overflow: "hidden",
     zIndex: 35
   }
@@ -281,10 +281,10 @@ function getBreadcrumbMenuPosition(
     width: menuWidth,
     minWidth: menuWidth,
     maxHeight: 220,
-    borderRadius: 10,
-    border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+    borderRadius: 8,
+    border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
     background: "color-mix(in srgb, var(--bg-app) 92%, black)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+    boxShadow: "0 12px 28px rgba(0,0,0,0.32)",
     overflowX: "hidden",
     overflowY: "auto",
     zIndex: 90
@@ -309,10 +309,10 @@ function getMenuPosition(buttonRect: DOMRect, listRect: DOMRect): React.CSSPrope
     right: 0,
     width: menuWidth,
     minWidth: menuWidth,
-    borderRadius: 10,
-    border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-    background: "var(--bg-app, #020617)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+    borderRadius: 8,
+    border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+    background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+    boxShadow: "0 12px 28px rgba(0,0,0,0.32)",
     overflow: "hidden",
     zIndex: 35
   }
@@ -334,10 +334,10 @@ function getPanelContextMenuPosition(
     top,
     width,
     minWidth: width,
-    borderRadius: 10,
-    border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-    background: "var(--bg-app, #020617)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+    borderRadius: 8,
+    border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+    background: "color-mix(in srgb, var(--bg-app) 92%, black)",
+    boxShadow: "0 12px 28px rgba(0,0,0,0.32)",
     overflow: "hidden",
     zIndex: 80
   }
@@ -432,13 +432,15 @@ const modalBtn: React.CSSProperties = {
 const menuButtonStyle: React.CSSProperties = {
   width: "100%",
   textAlign: "left",
-  padding: "10px 12px",
+  padding: "9px 12px",
   border: "none",
   background: "transparent",
   color: "var(--text-main, #e5e7eb)",
   cursor: "pointer",
   fontSize: 12,
-  transition: "background 140ms ease"
+  fontWeight: 500,
+  lineHeight: 1.15,
+  transition: "background 140ms ease, color 140ms ease"
 }
 
 function sftpEntryStyle(hovered: boolean, selected = false): React.CSSProperties {
