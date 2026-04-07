@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager"
 import { RotateCcw, Save, X, Search, Replace, List, Minus, Square } from "lucide-react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { t } from "../lib/i18n"
@@ -401,18 +402,17 @@ export default function SftpEditorWindow() {
     const selected = contentRef.current.slice(start, end)
     if (!selected) return
 
-    await invoke("write_clipboard", { text: selected })
+    await writeText(selected)
   }
 
-  async function pasteFromClipboard() {
+  function insertPastedText(rawText: string) {
     const ta = textareaRef.current
     if (!ta) return
     if (editorReadOnlyReason) return
 
-    const clip = await invoke("read_clipboard") as string
-    if (!clip) return
+    const normalized = normalizeEditorPasteText(rawText)
+    if (!normalized) return
 
-    const normalized = normalizeEditorPasteText(clip)
     const start = ta.selectionStart ?? 0
     const end = ta.selectionEnd ?? 0
 
@@ -431,6 +431,12 @@ export default function SftpEditorWindow() {
       syncGutterScroll()
       evaluateLargeFileNotice(next)
     }, 0)
+  }
+
+  async function pasteFromClipboard() {
+    const clip = await readText()
+    if (!clip) return
+    insertPastedText(clip)
   }
 
   function publishEditorState() {
@@ -983,6 +989,13 @@ export default function SftpEditorWindow() {
         return
       }
 
+      if (mod && key === "v") {
+        e.preventDefault()
+        e.stopPropagation()
+        void pasteFromClipboard().catch(console.error)
+        return
+      }
+
       if (mod && e.shiftKey && key === "v") {
         e.preventDefault()
         e.stopPropagation()
@@ -1515,6 +1528,13 @@ export default function SftpEditorWindow() {
               wrap="off"
               readOnly={Boolean(editorReadOnlyReason)}
               value={content}
+              onPaste={(e) => {
+                if (editorReadOnlyReason) return
+                const pasted = e.clipboardData?.getData("text")
+                if (typeof pasted !== "string" || pasted.length === 0) return
+                e.preventDefault()
+                insertPastedText(pasted)
+              }}
               onChange={(e) => {
                 setEditorContent(e.target.value)
                 setTimeout(() => {
