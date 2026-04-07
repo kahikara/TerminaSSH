@@ -90,33 +90,6 @@ export default function Dashboard({
   return (
     <div className="flex-1 overflow-y-auto bg-[var(--bg-app)] text-[var(--text-main)] min-h-0">
       <div className="w-full max-w-5xl mx-auto px-6 py-6 flex flex-col gap-5">
-        <button
-          onClick={() =>
-            openTerminal({
-              id: "local",
-              isLocal: true,
-              name: "Local Terminal",
-              username: "local",
-              host: "localhost"
-            })
-          }
-          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] hover:bg-[var(--bg-hover)] transition-all px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-app)]"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] shrink-0">
-              <Terminal size={18} className="text-[var(--accent)]" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[13px] font-bold text-[var(--text-main)]">
-                {t("localTerminal", lang)}
-              </div>
-              <div className="text-xs text-[var(--text-muted)]">
-                localhost
-              </div>
-            </div>
-          </div>
-        </button>
-
         {showQuickConnect && (
           <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] overflow-hidden">
             <div className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border-subtle)]">
@@ -182,6 +155,39 @@ export default function Dashboard({
           </div>
         )}
 
+        <button
+          onClick={() =>
+            openTerminal({
+              id: "local",
+              isLocal: true,
+              name: "Local Terminal",
+              username: "local",
+              host: "localhost"
+            })
+          }
+          className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-sidebar)] hover:bg-[var(--bg-hover)] transition-all px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-app)]"
+        >
+          <div className="flex items-center justify-between gap-4 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] shrink-0">
+                <Terminal size={18} className="text-[var(--accent)]" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-bold text-[var(--text-main)]">
+                  {t("localTerminal", lang)}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  localhost
+                </div>
+              </div>
+            </div>
+
+            <div className="inline-flex items-center justify-center h-9 px-3 rounded-xl bg-[var(--bg-app)] border border-[var(--border-subtle)] text-[13px] font-semibold text-[var(--text-main)] shrink-0">
+              {lang === "de" ? "Öffnen" : "Open"}
+            </div>
+          </div>
+        </button>
+
         {hasBottomCards && (
           <div className={bottomGridClass}>
             {showActiveSessionsCard && (
@@ -196,16 +202,14 @@ export default function Dashboard({
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
-                    {lang === "de"
-                      ? `${activeCount} ${activeCount === 1 ? t("sessionSingular", lang) : t("sessionPlural", lang)}`
-                      : `${activeCount} ${activeCount === 1 ? t("sessionSingular", lang) : t("sessionPlural", lang)}`}
+                    {activeCount}
                   </div>
                 </div>
 
                 <div className="p-4 flex flex-col gap-2.5">
                   {activeCount === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-app)] p-5 text-center">
-                      <div className="flex justify-center mb-2.5">
+                    <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-app)] px-4 py-4 text-center">
+                      <div className="flex justify-center mb-2">
                         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--bg-sidebar)] border border-[var(--border-subtle)]">
                           <PlusCircle size={18} className="text-[var(--text-muted)]" />
                         </div>
@@ -257,9 +261,7 @@ export default function Dashboard({
                     </div>
                   </div>
                   <div className="text-sm font-semibold text-[var(--text-muted)] whitespace-nowrap">
-                    {lang === "de"
-                      ? `${recentCount} ${recentCount === 1 ? t("hostSingular", lang) : t("hostPlural", lang)}`
-                      : `${recentCount} ${recentCount === 1 ? t("hostSingular", lang) : t("hostPlural", lang)}`}
+                    {recentCount}
                   </div>
                 </div>
 
