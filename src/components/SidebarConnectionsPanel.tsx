@@ -121,7 +121,7 @@ export default function SidebarConnectionsPanel({
 
   return (
     <div>
-      <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-end'}`}>
+      <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
         <div className="flex gap-1">
           {!isSidebarCollapsed && (
             <button
