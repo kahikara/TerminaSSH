@@ -34,11 +34,11 @@ export default function LinuxTitlebar({
         onStartDrag()
       }}
     >
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
         <img
           src="/app-icon.svg"
           alt="logo"
-          className="w-[18px] h-[18px] object-contain shrink-0"
+          className="w-[20px] h-[20px] object-contain shrink-0"
           onError={(e) => { e.currentTarget.style.display = 'none' }}
         />
         <span className="text-[11px] font-semibold text-[var(--text-main)] truncate">
