@@ -121,8 +121,8 @@ export default function SidebarConnectionsPanel({
 
   return (
     <div>
-      <div className={`flex items-center px-2 py-1 mb-2 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
-        <div className="flex gap-1">
+      <div className={`flex items-center px-2 py-1 mb-1.5 rounded-xl ${isSidebarCollapsed ? 'justify-center' : 'justify-start'}`}>
+        <div className="flex gap-0.5 px-1 py-1 rounded-xl border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_82%,var(--bg-sidebar))]">
           {!isSidebarCollapsed && (
             <button
               onClick={onOpenLocalTerminalNewTab}
