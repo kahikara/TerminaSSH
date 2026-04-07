@@ -31,70 +31,61 @@ export default function TabContextMenu({
 }: TabContextMenuProps) {
   if (!isOpen) return null
 
+  const itemClass =
+    'w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors'
+
+  const dangerItemClass =
+    'w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors'
+
+  const dividerClass =
+    'h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]'
+
   return (
     <div className="fixed inset-0 z-[260]" onMouseDown={onClose} onContextMenu={(e) => e.preventDefault()}>
       <div
-        className="fixed w-[220px] rounded-2xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--bg-app)_94%,black)] shadow-2xl p-2 flex flex-col gap-1"
+        className="fixed w-[204px] rounded-lg border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-xl overflow-hidden"
         style={{
-          left: Math.max(8, Math.min(x, window.innerWidth - 228)),
-          top: Math.max(8, Math.min(y, window.innerHeight - (splitMode ? 212 : 176)))
+          left: Math.max(8, Math.min(x, window.innerWidth - 212)),
+          top: Math.max(8, Math.min(y, window.innerHeight - (splitMode ? 148 : 112)))
         }}
         onMouseDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
         {!splitMode ? (
           <>
-            <button
-              onClick={onDuplicateSession}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Plus size={14} />
+            <button onClick={onDuplicateSession} className={itemClass}>
+              <Plus size={13} />
               <span>{lang === 'de' ? 'Session duplizieren' : 'Duplicate session'}</span>
             </button>
 
-            <button
-              onClick={onOpenInSplit}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Folder size={14} />
+            <button onClick={onOpenInSplit} className={itemClass}>
+              <Folder size={13} />
               <span>{lang === 'de' ? 'Im Split öffnen' : 'Open in split'}</span>
             </button>
           </>
         ) : (
           <>
-            <button
-              onClick={onDuplicateLeftSession}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Plus size={14} />
+            <button onClick={onDuplicateLeftSession} className={itemClass}>
+              <Plus size={13} />
               <span>{lang === 'de' ? 'Linke Session duplizieren' : 'Duplicate left session'}</span>
             </button>
 
-            <button
-              onClick={onDuplicateRightSession}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <Plus size={14} />
+            <button onClick={onDuplicateRightSession} className={itemClass}>
+              <Plus size={13} />
               <span>{lang === 'de' ? 'Rechte Session duplizieren' : 'Duplicate right session'}</span>
             </button>
 
-            <button
-              onClick={onRemoveSplit}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-            >
-              <ChevronsLeft size={14} />
+            <button onClick={onRemoveSplit} className={itemClass}>
+              <ChevronsLeft size={13} />
               <span>{lang === 'de' ? 'Split aufheben' : 'Remove split'}</span>
             </button>
           </>
         )}
 
-        <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] my-1" />
+        <div className={dividerClass} />
 
-        <button
-          onClick={onCloseTab}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[var(--danger)] hover:text-white hover:bg-[var(--danger)] transition-colors"
-        >
-          <X size={14} />
+        <button onClick={onCloseTab} className={dangerItemClass}>
+          <X size={13} />
           <span>{lang === 'de' ? 'Tab schließen' : 'Close tab'}</span>
         </button>
       </div>
