@@ -258,21 +258,22 @@ const toolBtnStyle: CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   gap: 5,
-  height: 28,
+  height: 27,
   padding: "0 8px",
-  borderRadius: 8,
-  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-  background: "var(--bg-app, #111111)",
-  color: "var(--text-main, #e5e7eb)",
+  borderRadius: 9,
+  border: "1px solid color-mix(in srgb, var(--border-subtle, rgba(255,255,255,0.08)) 72%, transparent)",
+  background: "color-mix(in srgb, var(--bg-app) 84%, var(--bg-sidebar))",
+  color: "var(--text-muted, #94a3b8)",
   cursor: "pointer",
   fontSize: 11,
   whiteSpace: "nowrap",
+  boxShadow: "0 1px 0 rgba(255,255,255,0.015) inset",
   transition: "background 140ms ease, border-color 140ms ease, transform 120ms ease"
 }
 
 const iconOnlyBtnStyle: CSSProperties = {
   ...toolBtnStyle,
-  width: 28,
+  width: 27,
   padding: 0
 }
 
