@@ -39,7 +39,7 @@ export default function SettingsBackupCards({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    minHeight: 124,
+    minHeight: 96,
     opacity: busy ? 0.6 : 1
   }
 
@@ -60,11 +60,6 @@ export default function SettingsBackupCards({
         <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
           {lang === "de" ? "JSON Backup" : "JSON backup"}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
-          {lang === "de"
-            ? "Lesbare Datei ohne Passwort."
-            : "Readable file without password."}
-        </div>
       </button>
 
       <button
@@ -76,11 +71,6 @@ export default function SettingsBackupCards({
         <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
           {lang === "de" ? "Geschütztes Backup" : "Encrypted backup"}
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
-          {lang === "de"
-            ? "Mit Passwort geschützt."
-            : "Protected with a password."}
-        </div>
       </button>
 
       <button
@@ -91,11 +81,6 @@ export default function SettingsBackupCards({
         <DownloadIcon size={26} style={{ color: "var(--accent)" }} />
         <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", textAlign: "center" }}>
           {importLabel}
-        </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.35, textAlign: "center" }}>
-          {lang === "de"
-            ? "Backup Datei importieren."
-            : "Import a backup file."}
         </div>
       </button>
     </div>

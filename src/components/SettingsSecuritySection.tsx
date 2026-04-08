@@ -57,15 +57,15 @@ const compactRowStyle: CSSProperties = {
   borderRadius: 12,
   border: "1px solid var(--border-subtle)",
   background: "color-mix(in srgb, var(--bg-app) 86%, var(--bg-sidebar))",
-  padding: "12px 12px",
+  padding: "10px 12px",
   display: "grid",
   gridTemplateColumns: "minmax(0,1fr) auto",
   alignItems: "center",
-  gap: 12
+  gap: 10
 }
 
 const toolButtonStyle: CSSProperties = {
-  minWidth: 108
+  minWidth: 96
 }
 
 const subtleBadgeStyle: CSSProperties = {
@@ -555,30 +555,13 @@ export default function SettingsSecuritySection({
           style={{
             ...rowStyle,
             alignItems: "center",
-            justifyContent: "space-between"
+            justifyContent: "flex-end",
+            gap: 8
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div className="text-[13px] font-semibold text-[var(--text-main)]">
-              Security
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              justifyContent: "flex-end",
-              flexWrap: "wrap",
-              flex: "0 0 auto"
-            }}
-          >
-            <span style={neutralBadgeStyle}>{protectionLabel}</span>
-            {isProtected && <span style={statusToneStyle}>{lockLabel}</span>}
-          </div>
+          <span style={neutralBadgeStyle}>{protectionLabel}</span>
+          {isProtected && <span style={statusToneStyle}>{lockLabel}</span>}
         </div>
-
 
         {!isProtected ? (
           <div
@@ -620,7 +603,7 @@ export default function SettingsSecuritySection({
           </div>
         ) : null}
 
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           {!isProtected ? (
             <div style={compactRowStyle}>
               <div style={{ minWidth: 0 }}>
@@ -631,11 +614,6 @@ export default function SettingsSecuritySection({
                   <span style={subtleBadgeStyle}>
                     {lang === "de" ? "Optional" : "Optional"}
                   </span>
-                </div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                  {lang === "de"
-                    ? "Vault mit Passwort schützen."
-                    : "Protect the vault with a password."}
                 </div>
               </div>
 
@@ -654,11 +632,6 @@ export default function SettingsSecuritySection({
                 <div style={{ minWidth: 0 }}>
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
                     Vault
-                  </div>
-                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                    {lang === "de"
-                      ? "Entsperren oder sperren."
-                      : "Unlock or lock it."}
                   </div>
                 </div>
 
@@ -688,11 +661,6 @@ export default function SettingsSecuritySection({
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
                     {lang === "de" ? "Master Passwort" : "Master password"}
                   </div>
-                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                    {lang === "de"
-                      ? "Passwort ändern."
-                      : "Change the password."}
-                  </div>
                 </div>
 
                 <button
@@ -710,11 +678,6 @@ export default function SettingsSecuritySection({
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
                     {lang === "de" ? "Recovery Key" : "Recovery key"}
                   </div>
-                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                    {lang === "de"
-                      ? "Neuen Key erzeugen."
-                      : "Generate a new key."}
-                  </div>
                 </div>
 
                 <button
@@ -731,11 +694,6 @@ export default function SettingsSecuritySection({
                 <div style={{ minWidth: 0 }}>
                   <div className="text-[12px] font-semibold text-[var(--text-main)]">
                     {lang === "de" ? "Passwortschutz ausschalten" : "Turn off password protection"}
-                  </div>
-                  <div className="text-[12px] text-[var(--text-muted)] mt-1">
-                    {lang === "de"
-                      ? "Vault ohne Passwort nutzen."
-                      : "Use the vault without a password."}
                   </div>
                 </div>
 
