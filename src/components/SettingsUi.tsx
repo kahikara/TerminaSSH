@@ -18,7 +18,6 @@ const fieldRowStyle: React.CSSProperties = {
 
 export function SettingCard({
   title,
-  desc,
   children
 }: {
   title: string
@@ -37,7 +36,6 @@ export function SettingCard({
 
 export function FieldRow({
   label,
-  desc,
   children,
   first = false
 }: {
