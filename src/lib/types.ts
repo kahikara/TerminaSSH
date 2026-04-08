@@ -1,7 +1,6 @@
 export type ThemeName = "catppuccin" | "nord" | "pitch-black" | "light"
 export type CursorStyleName = "block" | "bar" | "underline"
 export type SftpSortName = "folders" | "name" | "size" | "type"
-export type TerminalRightClickMode = "clipboard" | "contextMenu"
 
 export type SettingsSectionId =
   | "general"
@@ -37,7 +36,6 @@ export type AppSettings = {
   cursorStyle: CursorStyleName
   cursorBlink: boolean
   scrollback: number
-  terminalRightClickMode: TerminalRightClickMode
   sftpHidden: boolean
   sftpSort: SftpSortName
   showSplit: boolean

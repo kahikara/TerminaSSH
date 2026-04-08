@@ -10,7 +10,6 @@ const defaultSettings: AppSettings = {
   cursorStyle: "bar",
   cursorBlink: true,
   scrollback: 10000,
-  terminalRightClickMode: "clipboard",
   sftpHidden: false,
   sftpSort: "folders",
   showSplit: true,
@@ -57,10 +56,6 @@ function normalizeSettings(parsed: any): AppSettings {
     ? parsed.cursorStyle
     : defaultSettings.cursorStyle
 
-  const normalizedTerminalRightClickMode = ["clipboard", "contextMenu"].includes(parsed?.terminalRightClickMode)
-    ? parsed.terminalRightClickMode
-    : defaultSettings.terminalRightClickMode
-
   return {
     ...defaultSettings,
     ...parsed,
@@ -69,7 +64,6 @@ function normalizeSettings(parsed: any): AppSettings {
     fontSize: clampNumber(parsed?.fontSize, 8, 48, defaultSettings.fontSize),
     cursorStyle: normalizedCursorStyle,
     cursorBlink: parsed?.cursorBlink !== false,
-    terminalRightClickMode: normalizedTerminalRightClickMode,
     scrollback: clampNumber(parsed?.scrollback, 100, 200000, defaultSettings.scrollback),
     sftpSort: normalizedSort,
     showSplit: parsed?.showSplit !== false,

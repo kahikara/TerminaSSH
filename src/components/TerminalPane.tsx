@@ -90,14 +90,6 @@ type TerminalPaneProps = {
   isActive?: boolean
 }
 
-type TerminalContextMenuAction = "copy" | "paste" | "selectAll"
-
-type TerminalContextMenuState = {
-  open: boolean
-  x: number
-  y: number
-}
-
 function TerminalInstance({
   server,
   sessionId,
@@ -110,80 +102,10 @@ function TerminalInstance({
 }: TerminalInstanceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const onCloseRef = useRef<(() => void) | undefined>(onClose)
-  const [contextMenu, setContextMenu] = useState<TerminalContextMenuState>({ open: false, x: 0, y: 0 })
-
-  const rightClickMode = settings?.terminalRightClickMode === "contextMenu"
-    ? "contextMenu"
-    : "clipboard"
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu((prev) => (prev.open ? { ...prev, open: false } : prev))
-  }, [])
-
-  const runContextMenuAction = useCallback(async (action: TerminalContextMenuAction) => {
-    closeContextMenu()
-
-    try {
-      onInteract?.()
-      onFocus?.()
-
-      const entry = terminalStore[sessionId]
-      const term = entry?.term
-      if (!term) return
-
-      term.focus()
-
-      if (action === "copy") {
-        if (!term.hasSelection()) return
-        await copyTerminalSelection(term, showToast, lang)
-        return
-      }
-
-      if (action === "paste") {
-        await pasteTerminalClipboard(sessionId, term, showToast, lang)
-        return
-      }
-
-      if (action === "selectAll") {
-        term.selectAll()
-        term.focus()
-      }
-    } catch {}
-  }, [closeContextMenu, lang, onFocus, onInteract, sessionId, showToast])
 
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
-
-  useEffect(() => {
-    if (rightClickMode === "contextMenu") return
-    closeContextMenu()
-  }, [rightClickMode, closeContextMenu])
-
-  useEffect(() => {
-    if (!contextMenu.open) return
-
-    const handleMouseDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.closest('[data-terminal-context-menu="true"]')) return
-      closeContextMenu()
-    }
-
-    const handleResize = () => closeContextMenu()
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeContextMenu()
-    }
-
-    window.addEventListener("mousedown", handleMouseDown, true)
-    window.addEventListener("resize", handleResize)
-    window.addEventListener("keydown", handleKeyDown, true)
-
-    return () => {
-      window.removeEventListener("mousedown", handleMouseDown, true)
-      window.removeEventListener("resize", handleResize)
-      window.removeEventListener("keydown", handleKeyDown, true)
-    }
-  }, [contextMenu.open, closeContextMenu])
 
   useEffect(() => {
     cancelDestroySession(sessionId)
@@ -264,8 +186,6 @@ function TerminalInstance({
     }
   }, [server, sessionId, settings?.fontSize, settings?.scrollback, settings?.cursorBlink, settings?.cursorStyle, settings?.theme])
 
-  const copyDisabled = !Boolean(terminalStore[sessionId]?.term?.hasSelection())
-
   return (
     <div
       style={{
@@ -276,8 +196,6 @@ function TerminalInstance({
         background: "var(--bg-app, #000)"
       }}
       onClick={() => {
-        closeContextMenu()
-
         try {
           onInteract?.()
           onFocus?.()
@@ -297,24 +215,11 @@ function TerminalInstance({
 
         try {
           onInteract?.()
-          onFocus?.()
-
           const entry = terminalStore[sessionId]
           const term = entry?.term
           if (!term) return
 
           term.focus()
-
-          if (rightClickMode === "contextMenu") {
-            const menuWidth = 160
-            const menuHeight = 110
-            setContextMenu({
-              open: true,
-              x: Math.max(8, Math.min(e.clientX, window.innerWidth - menuWidth - 8)),
-              y: Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8))
-            })
-            return
-          }
 
           if (term.hasSelection()) {
             await copyTerminalSelection(term, showToast, lang)
@@ -342,48 +247,6 @@ function TerminalInstance({
       }}
     >
       <div ref={containerRef} style={{ flex: 1, height: "100%" }} />
-
-      {contextMenu.open && rightClickMode === "contextMenu" && (
-        <div
-          data-terminal-context-menu="true"
-          className="fixed z-[320] w-[160px] rounded-lg border border-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)] bg-[color-mix(in_srgb,var(--bg-app)_92%,black)] shadow-xl overflow-hidden"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              void runContextMenuAction("copy")
-            }}
-            disabled={copyDisabled}
-            className="w-full px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {lang === "de" ? "Kopieren" : "Copy"}
-          </button>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              void runContextMenuAction("paste")
-            }}
-            className="w-full px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {lang === "de" ? "Einfügen" : "Paste"}
-          </button>
-
-          <div className="h-px bg-[color-mix(in_srgb,var(--border-subtle)_72%,transparent)]" />
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              void runContextMenuAction("selectAll")
-            }}
-            className="w-full px-3 py-2 text-left text-[12px] leading-[1.15] text-[var(--text-main)] hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            {lang === "de" ? "Alles auswählen" : "Select all"}
-          </button>
-        </div>
-      )}
     </div>
   )
 }
