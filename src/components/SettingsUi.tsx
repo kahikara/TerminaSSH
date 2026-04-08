@@ -24,11 +24,15 @@ export function SettingCard({
   desc?: string
   children: ReactNode
 }) {
+  const hasTitle = title.trim().length > 0
+
   return (
     <div style={cardStyle}>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>{title}</div>
-      </div>
+      {hasTitle ? (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>{title}</div>
+        </div>
+      ) : null}
       {children}
     </div>
   )

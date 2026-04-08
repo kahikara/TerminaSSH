@@ -47,7 +47,7 @@ export default function SettingsAboutSection({
   }, [])
 
   return (
-    <SettingCard title={ui.projectTitle} desc={ui.aboutDesc}>
+    <SettingCard title="">
       <SettingsAboutCard
         ui={ui}
         appVersion={appVersion}

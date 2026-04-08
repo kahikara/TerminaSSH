@@ -66,11 +66,8 @@ export default function SettingsGeneralSection({
         </FieldRow>
       </SettingCard>
 
-      <SettingCard title={ui.interface} desc={ui.interfaceDesc}>
+      <SettingCard title={ui.terminalToolsTitle}>
         <div style={{ marginTop: 2 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 8 }}>
-            {ui.toolsSection}
-          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {toolItems.map((tool) => (
@@ -96,10 +93,6 @@ export default function SettingsGeneralSection({
                 />
               </div>
             ))}
-          </div>
-
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>
-            {ui.terminalToolsDesc}
           </div>
         </div>
       </SettingCard>
