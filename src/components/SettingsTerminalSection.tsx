@@ -68,6 +68,22 @@ export default function SettingsTerminalSection({
           onChange={(next) => setSettings({ ...settings, cursorBlink: next })}
         />
       </FieldRow>
+
+      <FieldRow label={ui.terminalRightClickLabel} desc={ui.terminalRightClickDesc}>
+        <select
+          value={settings.terminalRightClickMode || "clipboard"}
+          onChange={(e) =>
+            setSettings({
+              ...settings,
+              terminalRightClickMode: e.target.value as AppSettings["terminalRightClickMode"]
+            })
+          }
+          style={uniformSelectStyle}
+        >
+          <option value="clipboard">{ui.terminalRightClickClipboard}</option>
+          <option value="contextMenu">{ui.terminalRightClickContextMenu}</option>
+        </select>
+      </FieldRow>
     </SettingCard>
   )
 }
