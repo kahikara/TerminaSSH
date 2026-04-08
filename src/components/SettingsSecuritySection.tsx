@@ -566,20 +566,17 @@ export default function SettingsSecuritySection({
         {!isProtected ? (
           <div
             style={{
-              marginTop: 12,
+              marginTop: 8,
               borderRadius: 12,
               border: "1px solid color-mix(in srgb, var(--warning) 24%, var(--border-subtle))",
               background: "color-mix(in srgb, var(--warning) 8%, var(--bg-app))",
-              padding: 12
+              padding: "10px 12px",
+              display: "flex",
+              alignItems: "center"
             }}
           >
             <div className="text-[12px] font-semibold text-[var(--text-main)]">
               {lang === "de" ? "Vault ohne Passwort" : "Vault without password"}
-            </div>
-            <div className="text-[12px] leading-[1.5] text-[var(--text-muted)] mt-1">
-              {lang === "de"
-                ? "Kein Passwortschutz."
-                : "No password protection."}
             </div>
           </div>
         ) : null}
@@ -587,11 +584,13 @@ export default function SettingsSecuritySection({
         {vaultStatus?.has_legacy_master_key ? (
           <div
             style={{
-              marginTop: 12,
+              marginTop: 8,
               borderRadius: 12,
               border: "1px solid color-mix(in srgb, var(--danger) 22%, var(--border-subtle))",
               background: "color-mix(in srgb, var(--danger) 8%, var(--bg-app))",
-              padding: 12
+              padding: "10px 12px",
+              display: "flex",
+              alignItems: "center"
             }}
           >
             <div className="text-[12px] font-semibold text-[var(--text-main)]">
