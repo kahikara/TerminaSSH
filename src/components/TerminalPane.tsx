@@ -120,18 +120,6 @@ function TerminalInstance({
     setContextMenu((prev) => (prev.open ? { ...prev, open: false } : prev))
   }, [])
 
-  const waitForFrame = useCallback(
-    () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
-    []
-  )
-
-  const settleTerminalAfterContextMenu = useCallback(async (term: any) => {
-    await waitForFrame()
-    try { term.clearSelection?.() } catch {}
-    try { term.focus() } catch {}
-    await waitForFrame()
-  }, [waitForFrame])
-
   const runContextMenuAction = useCallback(async (action: TerminalContextMenuAction) => {
     closeContextMenu()
 
@@ -152,9 +140,7 @@ function TerminalInstance({
       }
 
       if (action === "paste") {
-        await settleTerminalAfterContextMenu(term)
         await pasteTerminalClipboard(sessionId, term, showToast, lang)
-        await settleTerminalAfterContextMenu(term)
         return
       }
 
@@ -163,7 +149,7 @@ function TerminalInstance({
         term.focus()
       }
     } catch {}
-  }, [closeContextMenu, lang, onFocus, onInteract, sessionId, showToast, settleTerminalAfterContextMenu])
+  }, [closeContextMenu, lang, onFocus, onInteract, sessionId, showToast])
 
   useEffect(() => {
     onCloseRef.current = onClose
