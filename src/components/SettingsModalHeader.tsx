@@ -3,7 +3,6 @@ import { X } from "lucide-react"
 
 type Props = {
   title: string
-  subtitle: string
   onClose: () => void
   closeLabel: string
   iconButton: CSSProperties
@@ -11,7 +10,6 @@ type Props = {
 
 export default function SettingsModalHeader({
   title,
-  subtitle,
   onClose,
   closeLabel,
   iconButton
@@ -33,11 +31,6 @@ export default function SettingsModalHeader({
         <div style={{ fontSize: 14, lineHeight: 1.1, fontWeight: 700, color: "var(--text-main)" }}>
           {title}
         </div>
-        {subtitle.trim().length > 0 && (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-            {subtitle}
-          </div>
-        )}
       </div>
 
       <button onClick={onClose} style={iconButton} title={closeLabel}>

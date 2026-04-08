@@ -69,7 +69,6 @@ export default function SettingsModal({
       >
         <SettingsModalHeader
           title={ui.settingsTitle}
-          subtitle=""
           onClose={onClose}
           closeLabel={t("close", lang)}
           iconButton={iconButton}

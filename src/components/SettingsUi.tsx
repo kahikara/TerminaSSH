@@ -29,11 +29,6 @@ export function SettingCard({
     <div style={cardStyle}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 14, lineHeight: 1.2, fontWeight: 700, color: "var(--text-main)" }}>{title}</div>
-        {desc ? (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.4 }}>
-            {desc}
-          </div>
-        ) : null}
       </div>
       {children}
     </div>
@@ -55,9 +50,6 @@ export function FieldRow({
     <div style={{ ...fieldRowStyle, borderTop: first ? "none" : fieldRowStyle.borderTop }}>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13, lineHeight: 1.25, fontWeight: 600, color: "var(--text-main)" }}>{label}</div>
-        {desc ? (
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.4 }}>{desc}</div>
-        ) : null}
       </div>
       <div style={{ flexShrink: 0 }}>{children}</div>
     </div>
