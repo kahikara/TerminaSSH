@@ -1,5 +1,5 @@
 import { t } from "../lib/i18n"
-import type { AppSettings, ToolToggleKey } from "../lib/types"
+import type { AppSettings } from "../lib/types"
 import { SettingCard, FieldRow, Toggle } from "./SettingsUi"
 
 type Props = {
@@ -10,10 +10,6 @@ type Props = {
   uniformSelectStyle: React.CSSProperties
 }
 
-type ToolItem = {
-  key: ToolToggleKey
-  label: string
-}
 
 export default function SettingsGeneralSection({
   lang,
@@ -22,14 +18,6 @@ export default function SettingsGeneralSection({
   setSettings,
   uniformSelectStyle
 }: Props) {
-  const toolItems: ToolItem[] = [
-    { key: "showSplit", label: t("showSplit", lang) },
-    { key: "showSftp", label: t("showSftp", lang) },
-    { key: "showTunnels", label: "Tunnels" },
-    { key: "showSnippets", label: "Snippets" },
-    { key: "showSearch", label: lang === "de" ? "Suche" : "Search" },
-    { key: "showNotes", label: "Notes" }
-  ]
 
   return (
     <>
@@ -64,37 +52,6 @@ export default function SettingsGeneralSection({
             onChange={(next) => setSettings({ ...settings, closeToTray: next })}
           />
         </FieldRow>
-      </SettingCard>
-
-      <SettingCard title={ui.terminalToolsTitle}>
-        <div style={{ marginTop: 2 }}>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {toolItems.map((tool) => (
-              <div
-                key={tool.key}
-                style={{
-                  border: "1px solid var(--border-subtle)",
-                  borderRadius: 12,
-                  background: "color-mix(in srgb, var(--bg-app) 78%, var(--bg-sidebar))",
-                  padding: 10,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)" }}>
-                  {tool.label}
-                </div>
-                <Toggle
-                  checked={settings[tool.key] !== false}
-                  onChange={(next) => setSettings({ ...settings, [tool.key]: next })}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
       </SettingCard>
 
       <SettingCard title={ui.dashboardTitle} desc={ui.dashboardDesc}>
